@@ -1,10 +1,14 @@
+# General
+.DS_Store
+
+# Spreadsheets
+*.csv
+*.xlsx
+*.xls
+
+# Rust
 debug/
 target/
 *.pdb
 **/*.rs.bk
 Cargo.lock
-
-.DS_Store
-*.csv
-*.xlsx
-*.xls
