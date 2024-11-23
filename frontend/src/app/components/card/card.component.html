@@ -1,0 +1,51 @@
+<form>
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      <button mat-flat-button>Buscar</button>
+      <button mat-button>Limpar</button>
+
+      <br />
+      <h1>Raio</h1>
+      <mat-button-toggle-group name="fontStyle" aria-label="Font Style">
+        <mat-button-toggle value="bold">2 KM</mat-button-toggle>
+        <mat-button-toggle value="italic">5 KM</mat-button-toggle>
+        <mat-button-toggle value="underline">10 KM</mat-button-toggle>
+      </mat-button-toggle-group>
+      <br />
+
+      <mat-form-field>
+        <mat-label>Endereço ou CEP</mat-label>
+        <input matInput />
+      </mat-form-field>
+      <br />
+
+      <mat-form-field>
+        <mat-label>Início</mat-label>
+        <input matInput [matDatepicker]="picker" />
+        <mat-hint>DD/MM/YYYY</mat-hint>
+        <mat-datepicker-toggle
+          matIconSuffix
+          [for]="picker"
+        ></mat-datepicker-toggle>
+        <mat-datepicker #picker></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>Fim</mat-label>
+        <input matInput [matDatepicker]="picker2" />
+        <mat-hint>DD/MM/YYYY</mat-hint>
+        <mat-datepicker-toggle
+          matIconSuffix
+          [for]="picker2"
+        ></mat-datepicker-toggle>
+        <mat-datepicker #picker2></mat-datepicker>
+      </mat-form-field>
+
+      <mat-list>
+        <mat-list-item>Pepper</mat-list-item>
+        <mat-list-item>Salt</mat-list-item>
+        <mat-list-item>Paprika</mat-list-item>
+      </mat-list>
+    </mat-card-content>
+  </mat-card>
+</form>
