@@ -10,29 +10,41 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Open the Excel file
     let mut workbook: Xlsx<_> = open_workbook(excel_path)?;
 
-    // Get the first sheet name and clone it to avoid borrowing issues
-    if let Some(sheet_name) = workbook.sheet_names().first().cloned() {
-        // Get the worksheet range for the first sheet
-        if let Some(Ok(range)) = workbook.worksheet_range(&sheet_name) {
-            // Create a CSV writer
-            let mut wtr = csv::Writer::from_path(csv_path)?;
-
-            // Write each row from the Excel sheet to the CSV file
-            for row in range.rows() {
-                let row_vec: Vec<String> = row.iter()
-                                              .map(|cell| cell.to_string())
-                                              .collect();
-                wtr.write_record(&row_vec)?;
-            }
-
-            // Flush the writer to ensure all data is written
-            wtr.flush()?;
-        } else {
-            eprintln!("Failed to read the range for sheet: {}", sheet_name);
+    // Get the first sheet name
+    let sheet_name = match workbook.sheet_names().first() {
+        Some(name) => name.to_string(),
+        None => {
+            eprintln!("No sheets found in the workbook");
+            return Ok(());
         }
-    } else {
-        eprintln!("No sheets found in the workbook");
+    };
+
+    // Get the worksheet range for the first sheet
+    let range = match workbook.worksheet_range(&sheet_name) {
+        Some(Ok(r)) => r,
+        Some(Err(e)) => {
+            eprintln!("Failed to read the range for sheet {}: {}", sheet_name, e);
+            return Ok(());
+        }
+        None => {
+            eprintln!("Sheet {} not found", sheet_name);
+            return Ok(());
+        }
+    };
+
+    // Create a CSV writer
+    let mut wtr = csv::Writer::from_path(csv_path)?;
+
+    // Write each row from the Excel sheet to the CSV file
+    for row in range.rows() {
+        let row_vec: Vec<String> = row.iter()
+                                      .map(|cell| cell.to_string())
+                                      .collect();
+        wtr.write_record(&row_vec)?;
     }
+
+    // Flush the writer to ensure all data is written
+    wtr.flush()?;
 
     Ok(())
 }
