@@ -23,8 +23,11 @@ import { take } from 'rxjs';
 export class MapComponent implements AfterViewInit, OnDestroy {
   map: Map | undefined | null;
 
-  vectorSource: VectorSource | undefined;
-  vectorLayer: VectorLayer | undefined;
+  vectorSource: VectorSource = new VectorSource();
+  vectorLayer: VectorLayer = new VectorLayer({
+    source: this.vectorSource,
+  });
+  centerPin: Feature | undefined;
 
   private http = inject(HttpClient);
   addressLookup() {
@@ -47,39 +50,40 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   updateCenter(lat: number, lon: number) {
-    const coordinates = fromLonLat([lon, lat]);
+    const coordinates = [lon, lat];
     const feature = new Feature(new Point(coordinates));
+    this.vectorSource?.clear(); // Clear previous features
+    this.vectorSource?.addFeature(feature);
     this.map?.getView().setCenter(coordinates);
   }
 
   ngAfterViewInit() {
+    const defaultCoordinates = [-46.63394714, -23.5503953];
+
     useGeographic();
     const rasterLayer = new TileLayer({
       source: new OSM(),
     });
 
+    const iconStyle = new Style({
+      image: new Icon({
+        src: 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-2x-blue.png',
+        anchor: [0.5, 1],
+      }),
+    });
+
+    this.updateCenter(defaultCoordinates[1], defaultCoordinates[0]);
+
     setTimeout(() => {
       this.map = new Map({
         view: new View({
-          center: [-46.63394714, -23.5503953],
+          center: defaultCoordinates,
           zoom: 17,
           maxZoom: 19,
           projection: 'EPSG:3857',
         }),
-        layers: [rasterLayer],
+        layers: [rasterLayer, this.vectorLayer!],
         target: 'ol-map-tab',
-      });
-
-      this.vectorSource = new VectorSource();
-
-      this.vectorLayer = new VectorLayer({
-        source: this.vectorSource,
-        style: new Style({
-          image: new Icon({
-            src: 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-2x-blue.png',
-            anchor: [0.5, 1],
-          }),
-        }),
       });
     }, 500);
   }

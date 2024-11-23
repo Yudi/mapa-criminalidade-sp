@@ -25,4 +25,6 @@ import { MatListModule } from '@angular/material/list';
   styleUrl: './card.component.scss',
   providers: [provideDateFnsAdapter()],
 })
-export class CardComponent {}
+export class CardComponent {
+  addressDirty = false;
+}
