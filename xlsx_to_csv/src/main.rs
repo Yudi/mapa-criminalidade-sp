@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             d.checked_add_signed(chrono::Duration::days(days_integer_part))
                         }) {
                             if days_fractional_part == 0.0 {
-                                date.format("%d/%m/%Y").to_string()
+                                date.format("%Y-%m-%d").to_string()
                             } else {
                                 let total_seconds = (days_fractional_part * 86400.0).round() as u32;
                                 let hours = total_seconds / 3600;
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 let seconds = total_seconds % 60;
                                 format!(
                                     "{} {:02}:{:02}:{:02}",
-                                    date.format("%d/%m/%Y"),
+                                    date.format("%Y-%m-%d"),
                                     hours,
                                     minutes,
                                     seconds
