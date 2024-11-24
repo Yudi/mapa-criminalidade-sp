@@ -42,24 +42,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             .iter()
             .map(|cell| match cell {
                 DataType::DateTime(days) => {
-                    if *days < 1.0 {
+                    let days_integer_part = *days as i64;
+                    let days_fractional_part = *days - days_integer_part as f64;
+
+                    if days_integer_part == 0 && days_fractional_part > 0.0 {
                         // Handle time-only values
-                        let total_seconds = (*days * 86400.0).round() as u32;
+                        let total_seconds = (days_fractional_part * 86400.0).round() as u32;
                         let hours = total_seconds / 3600;
                         let minutes = (total_seconds % 3600) / 60;
                         let seconds = total_seconds % 60;
-                        format!(
-                            "{:02}:{:02}:{:02} {}",
-                            if hours % 12 == 0 { 12 } else { hours % 12 },
-                            minutes,
-                            seconds,
-                            if hours < 12 { "AM" } else { "PM" }
-                        )
+                        format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+                    } else if days_integer_part == 0 && days_fractional_part == 0.0 {
+                        // Special case for "12:00:00 AM" (0.0 days)
+                        "00:00:00".to_string()
                     } else {
                         // Handle date or datetime values
-                        let days_integer_part = *days as i64;
-                        let days_fractional_part = *days - days_integer_part as f64;
-
                         if let Some(date) = NaiveDate::from_ymd_opt(1899, 12, 30).and_then(|d| {
                             d.checked_add_signed(chrono::Duration::days(days_integer_part))
                         }) {
@@ -71,12 +68,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 let minutes = (total_seconds % 3600) / 60;
                                 let seconds = total_seconds % 60;
                                 format!(
-                                    "{} {:02}:{:02}:{:02} {}",
+                                    "{} {:02}:{:02}:{:02}",
                                     date.format("%d/%m/%Y"),
-                                    if hours % 12 == 0 { 12 } else { hours % 12 },
+                                    hours,
                                     minutes,
-                                    seconds,
-                                    if hours < 12 { "AM" } else { "PM" }
+                                    seconds
                                 )
                             }
                         } else {
