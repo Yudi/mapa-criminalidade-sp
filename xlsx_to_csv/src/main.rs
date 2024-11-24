@@ -34,56 +34,60 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Create a CSV writer
-    let mut wtr = csv::Writer::from_path(csv_path)?;
+    let mut wtr: csv::Writer<std::fs::File> = csv::Writer::from_path(csv_path)?;
 
-    // Write each row from the Excel sheet to the CSV file
-    for row in range.rows() {
-        let row_vec: Vec<String> = row
+    // Check if there are rows in the range
+    let mut rows: calamine::Rows<'_, DataType> = range.rows();
+    if let Some(headers) = rows.next() {
+        // Get the column names from the header row
+        let column_names: Vec<String> = headers
             .iter()
-            .map(|cell| match cell {
-                DataType::DateTime(days) => {
-                    let days_integer_part = *days as i64;
-                    let days_fractional_part = *days - days_integer_part as f64;
+            .map(|cell: &DataType| cell.to_string())
+            .collect();
 
-                    if days_integer_part == 0 && days_fractional_part > 0.0 {
-                        // Handle time-only values
-                        let total_seconds = (days_fractional_part * 86400.0).round() as u32;
-                        let hours = total_seconds / 3600;
-                        let minutes = (total_seconds % 3600) / 60;
-                        let seconds = total_seconds % 60;
-                        format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
-                    } else if days_integer_part == 0 && days_fractional_part == 0.0 {
-                        // Special case for "12:00:00 AM" (0.0 days)
-                        "00:00:00".to_string()
-                    } else {
-                        // Handle date or datetime values
-                        if let Some(date) = NaiveDate::from_ymd_opt(1899, 12, 30).and_then(|d| {
-                            d.checked_add_signed(chrono::Duration::days(days_integer_part))
-                        }) {
-                            if days_fractional_part == 0.0 {
+        // Write the header row to the CSV file
+        wtr.write_record(&column_names)?;
+
+        // Write each row from the Excel sheet to the CSV file
+        for row in rows {
+            let row_vec: Vec<String> = row
+                .iter()
+                .enumerate()
+                .map(|(i, cell)| match cell {
+                    DataType::DateTime(days) => {
+                        let days_integer_part: i64 = *days as i64;
+                        let days_fractional_part: f64 = *days - days_integer_part as f64;
+
+                        if column_names[i].to_lowercase().contains("data") {
+                            // Handle date values
+                            if let Some(date) =
+                                NaiveDate::from_ymd_opt(1899, 12, 30).and_then(|d| {
+                                    d.checked_add_signed(chrono::Duration::days(days_integer_part))
+                                })
+                            {
                                 date.format("%Y-%m-%d").to_string()
                             } else {
-                                let total_seconds = (days_fractional_part * 86400.0).round() as u32;
-                                let hours = total_seconds / 3600;
-                                let minutes = (total_seconds % 3600) / 60;
-                                let seconds = total_seconds % 60;
-                                format!(
-                                    "{} {:02}:{:02}:{:02}",
-                                    date.format("%Y-%m-%d"),
-                                    hours,
-                                    minutes,
-                                    seconds
-                                )
+                                cell.to_string()
                             }
+                        } else if column_names[i].to_lowercase().contains("hora") {
+                            // Handle time values
+                            let total_seconds: u32 =
+                                (days_fractional_part * 86400.0).round() as u32;
+                            let hours: u32 = total_seconds / 3600;
+                            let minutes: u32 = (total_seconds % 3600) / 60;
+                            let seconds: u32 = total_seconds % 60;
+                            format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
                         } else {
                             cell.to_string()
                         }
                     }
-                }
-                _ => cell.to_string(),
-            })
-            .collect();
-        wtr.write_record(&row_vec)?;
+                    _ => cell.to_string(),
+                })
+                .collect();
+            wtr.write_record(&row_vec)?;
+        }
+    } else {
+        eprintln!("No rows found in the worksheet");
     }
 
     // Flush the writer to ensure all data is written
