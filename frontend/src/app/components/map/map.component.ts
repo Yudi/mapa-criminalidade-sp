@@ -35,6 +35,8 @@ import Collection from 'ol/Collection';
 import BaseLayer from 'ol/layer/Base';
 import { ProgressBarService } from '../../shared/progressbar.service';
 import { MapMarkersService } from '../../shared/map-markers.service';
+import { DOCUMENT } from '@angular/common';
+import Overlay from 'ol/Overlay';
 
 @Component({
   selector: 'app-map',
@@ -61,10 +63,11 @@ export class MapComponent implements AfterViewInit, OnChanges {
   private progressBarService = inject(ProgressBarService);
   private markersService = inject(MapMarkersService);
 
+  private document = inject(DOCUMENT);
+
   map: Map | undefined | null;
-  vectorSource: VectorSource = new VectorSource({});
   vectorLayer: VectorLayer = new VectorLayer({
-    source: this.vectorSource,
+    source: new VectorSource({}),
   });
   centerPin: Feature | undefined;
 
@@ -91,8 +94,6 @@ export class MapComponent implements AfterViewInit, OnChanges {
     this.progressBarPercentage.set(0);
     const values = rubricasFormValues;
     const rubricas = Object.keys(values);
-
-    // For all false values, remove features
 
     this.response.pipe(take(1)).subscribe((responseData) => {
       this.progressBarPercentage.set(10);
@@ -142,12 +143,11 @@ export class MapComponent implements AfterViewInit, OnChanges {
       }
     });
 
-    console.log(layersByType);
-
     // If current rubrica layer does not exist, create it
     if (!layersByType[rubrica]) {
+      const vectorSource = new VectorSource(); // Create a new VectorSource
       layersByType[rubrica] = new VectorLayer({
-        source: this.vectorSource,
+        source: vectorSource,
         style: new Style({
           image: new Icon({
             anchor: [0.5, 1],
@@ -160,7 +160,6 @@ export class MapComponent implements AfterViewInit, OnChanges {
       });
       layersByType[rubrica].set('rubrica', rubrica); // Set the rubrica name as a property
       this.map?.addLayer(layersByType[rubrica]); // Add the new layer to the map
-      console.log(this.markersService.markerChooser(rubrica));
     }
 
     // Generate features for the rubrica
@@ -203,7 +202,7 @@ export class MapComponent implements AfterViewInit, OnChanges {
 
   updateCenter(lon: number, lat: number, radius: number) {
     const coordinates = [lon, lat];
-    this.vectorSource?.clear(); // Clear previous features
+    this.vectorLayer.getSource()?.clear(); // Clear previous features
     this.map?.getView().setCenter(coordinates);
 
     // If map zoom is less than 16, zoom in
@@ -227,6 +226,12 @@ export class MapComponent implements AfterViewInit, OnChanges {
       source: new OSM(),
     });
 
+    const popup = document.getElementById('popup');
+
+    if (!popup) {
+      return;
+    }
+
     setTimeout(() => {
       this.map = new Map({
         view: new View({
@@ -237,6 +242,45 @@ export class MapComponent implements AfterViewInit, OnChanges {
         }),
         layers: [rasterLayer, this.vectorLayer!],
         target: 'ol-map-tab',
+      });
+
+      const popupOverlay = new Overlay({
+        element: popup || undefined,
+        autoPan: true,
+      });
+
+      this.map.addOverlay(popupOverlay);
+
+      this.map.on('singleclick', (event) => {
+        this.map?.forEachFeatureAtPixel(
+          event.pixel,
+          (feature) => {
+            popup.innerHTML = `<span>${feature.get('name')}</span><br>${feature.get('description') || ''}`;
+            popup.hidden = false;
+
+            feature.get('maps')
+              ? `<br><a href="https://goo.gl/maps/${feature.get('maps')}" target="_blank">Mais informações</a>`
+              : '';
+
+            popupOverlay.setPosition(event.coordinate);
+          },
+          { hitTolerance: 6 },
+        );
+      });
+
+      this.map.on('movestart', () => {
+        popup.hidden = true;
+      });
+
+      this.map.on('pointermove', (e) => {
+        const pixel = this.map!.getEventPixel(e.originalEvent);
+        const hit = this.map!.hasFeatureAtPixel(pixel);
+        const target: any = this.map!.getTarget();
+        const element = this.document.getElementById(target);
+
+        if (element) {
+          element.style.cursor = hit ? 'pointer' : '';
+        }
       });
     }, 500);
   }
