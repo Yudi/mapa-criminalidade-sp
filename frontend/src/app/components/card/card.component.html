@@ -1,28 +1,37 @@
-<form>
-  <mat-card appearance="outlined">
-    <mat-card-content>
-      <br />
-      <h1>Raio</h1>
-      <mat-button-toggle-group name="fontStyle" aria-label="Font Style">
+<mat-card appearance="outlined">
+  <mat-card-content>
+    <form [formGroup]="dataForm">
+      <button mat-flat-button (click)="onSubmit()">Submit</button>
+      <h3>Raio</h3>
+      <mat-button-toggle-group
+        name="fontStyle"
+        aria-label="Font Style"
+        formControlName="radius"
+      >
         <mat-button-toggle value="2000">2 KM</mat-button-toggle>
         <mat-button-toggle value="5000">5 KM</mat-button-toggle>
         <mat-button-toggle value="10000">10 KM</mat-button-toggle>
-        <mat-button-toggle value="-1">Ilimitado</mat-button-toggle>
       </mat-button-toggle-group>
       <br />
-
+      <h3>Endereço</h3>
       <mat-form-field>
-        <mat-label>Endereço ou CEP</mat-label>
-        <input matInput />
+        <mat-label>Nome da via e número</mat-label>
+        <input matInput formControlName="street" />
       </mat-form-field>
-      <br />
-      <button mat-flat-button>Buscar endereço</button>
+      <mat-form-field>
+        <mat-label>Cidade</mat-label>
+        <input matInput formControlName="city" />
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Estado</mat-label>
+        <input matInput formControlName="state" />
+      </mat-form-field>
       <button mat-button>Limpar</button>
       <br />
-
+      <h3>Data</h3>
       <mat-form-field>
         <mat-label>Início</mat-label>
-        <input matInput [matDatepicker]="picker" />
+        <input matInput [matDatepicker]="picker" formControlName="afterDate" />
         <mat-hint>DD/MM/YYYY</mat-hint>
         <mat-datepicker-toggle
           matIconSuffix
@@ -33,7 +42,11 @@
 
       <mat-form-field>
         <mat-label>Fim</mat-label>
-        <input matInput [matDatepicker]="picker2" />
+        <input
+          matInput
+          [matDatepicker]="picker2"
+          formControlName="beforeDate"
+        />
         <mat-hint>DD/MM/YYYY</mat-hint>
         <mat-datepicker-toggle
           matIconSuffix
@@ -41,16 +54,22 @@
         ></mat-datepicker-toggle>
         <mat-datepicker #picker2></mat-datepicker>
       </mat-form-field>
-
       <br />
-      <button mat-flat-button>Atualizar datas</button>
-      <button mat-button>Limpar</button>
 
+      <button mat-button>Limpar</button>
+    </form>
+    @if (rubricas | async; as rubricas) {
+      <h3>Lista de ocorrências</h3>
       <mat-list>
-        <mat-list-item>Pepper</mat-list-item>
-        <mat-list-item>Salt</mat-list-item>
-        <mat-list-item>Paprika</mat-list-item>
+        <form [formGroup]="rubricasForm">
+          @for (rubrica of rubricas; track $index) {
+            <mat-list-item>
+              <mat-checkbox [formControlName]="rubrica.name"></mat-checkbox>
+              {{ rubrica.name }} ({{ rubrica.count }})
+            </mat-list-item>
+          }
+        </form>
       </mat-list>
-    </mat-card-content>
-  </mat-card>
-</form>
+    }
+  </mat-card-content>
+</mat-card>

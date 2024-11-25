@@ -1,4 +1,15 @@
 <mat-toolbar>
   <span>Mapa de criminalidade</span>
   <span class="example-spacer"></span>
+  <br />
 </mat-toolbar>
+@if (showIndeterminateProgressBar()) {
+  <mat-progress-bar mode="buffer"></mat-progress-bar>
+}
+
+@if (progressBarPercentage() !== -1) {
+  <mat-progress-bar
+    mode="determinate"
+    [value]="progressBarPercentage()"
+  ></mat-progress-bar>
+}
