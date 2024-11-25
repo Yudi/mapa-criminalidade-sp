@@ -1,4 +1,4 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BoletimOcorrencia } from 'src/boletim.entity';
 import { Repository } from 'typeorm';
@@ -9,6 +9,14 @@ export class BoletinsOcorrenciaService {
     @InjectRepository(BoletimOcorrencia)
     private boletinsRepository: Repository<BoletimOcorrencia>,
   ) {}
+
+  findFirstFive(): Promise<BoletimOcorrencia[]> {
+    // get with id 1
+
+    return this.boletinsRepository.find({
+      where: { id: 3 },
+    });
+  }
 
   async findInRange(
     centerLongitude: number,
@@ -42,9 +50,45 @@ export class BoletinsOcorrenciaService {
       query += ` AND data_registro >= ${afterDate}`;
     }
 
-    // query += ` LIMIT 10`;
+    return this.boletinsRepository.query(query, [
+      centerLongitude,
+      centerLatitude,
+      radius,
+    ]);
+  }
+
+  async getBoletinsByRubricaInRange(
+    centerLongitude: number,
+    centerLatitude: number,
+    radius: number,
+    beforeDate: string,
+    afterDate: string,
+    rubrica: string,
+  ) {
+    let query = `
+      SELECT * FROM boletins_ocorrencia
+      WHERE rubrica = $1
+      AND ST_DWithin(
+        location,
+        ST_MakePoint($2, $3)::geography,
+        $4
+      )
+    `;
+
+    if (beforeDate && beforeDate !== '') {
+      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
+      beforeDate = beforeDate.split('/').reverse().join('-');
+      query += ` AND data_registro <= ${beforeDate}`;
+    }
+
+    if (afterDate && afterDate !== '') {
+      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
+      afterDate = afterDate.split('/').reverse().join('-');
+      query += ` AND data_registro >= ${afterDate}`;
+    }
 
     return this.boletinsRepository.query(query, [
+      rubrica,
       centerLongitude,
       centerLatitude,
       radius,
@@ -58,7 +102,6 @@ export class BoletinsOcorrenciaService {
     beforeDate: string,
     afterDate: string,
   ) {
-    // Start building the query
     let query = `
       SELECT rubrica, COUNT(*) AS count
       FROM boletins_ocorrencia
@@ -69,58 +112,32 @@ export class BoletinsOcorrenciaService {
       )
     `;
 
-    // Add date filters if they are valid
-    if (validateDate(beforeDate) && beforeDate !== '') {
-      // Convert beforeDate from DD/MM/YYYY to YYYY-MM-DD
+    if (beforeDate && beforeDate !== '') {
+      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       beforeDate = beforeDate.split('/').reverse().join('-');
-      query += ` AND data_registro <= '${beforeDate}'`;
+      query += ` AND data_registro <= ${beforeDate}`;
     }
 
-    if (validateDate(afterDate) && afterDate !== '') {
-      // Convert afterDate from DD/MM/YYYY to YYYY-MM-DD
+    if (afterDate && afterDate !== '') {
+      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       afterDate = afterDate.split('/').reverse().join('-');
-      query += ` AND data_registro >= '${afterDate}'`;
+      query += ` AND data_registro >= ${afterDate}`;
     }
 
-    // Group by rubrica and order by rubrica (or any other criteria)
     query += ` GROUP BY rubrica`;
 
-    // Execute the query
-    const results = await this.boletinsRepository.query(query, [
+    const result = await this.boletinsRepository.query(query, [
       centerLongitude,
       centerLatitude,
       radius,
     ]);
 
-    // Format the results to match the requested structure
-    const formattedResults: RubricaCount[] = results.map((result: any) => ({
-      rubrica: result.rubrica,
-      count: result.count || 0, // Ensure count is 0 if no records are found
-    }));
+    const formattedResult = result
+      .map((row) => {
+        return { name: row.rubrica, count: parseInt(row.count) };
+      })
+      .sort((a, b) => b.count - a.count);
 
-    return formattedResults;
+    return formattedResult;
   }
-}
-
-function validateDate(date: string): boolean {
-  if (!date) {
-    throw new HttpException('Missing required query parameters', 400);
-  }
-
-  // Date is in DD/MM/YYYY format
-  const [day, month, year] = date.split('/').map((part) => parseInt(part));
-  if (isNaN(day) || isNaN(month) || isNaN(year)) {
-    throw new HttpException('Invalid date format', 400);
-  }
-
-  if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900) {
-    throw new HttpException('Invalid date', 400);
-  }
-
-  return true;
-}
-
-interface RubricaCount {
-  rubrica: string;
-  count: number;
 }

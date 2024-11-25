@@ -38,4 +38,31 @@ export class QueriesService {
         `/boletins-ocorrencia/query-point?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`,
     );
   }
+
+  listRubricas(
+    lat: number,
+    lon: number,
+    radius: number,
+    before: string,
+    after: string,
+  ) {
+    return this.http.get<{ name: string; count: number }[]>(
+      environment.apiUrl +
+        `/boletins-ocorrencia/query-rubricas-for-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`,
+    );
+  }
+
+  getBoletinsByRubricaInRange(
+    lat: number,
+    lon: number,
+    radius: number,
+    before: string,
+    after: string,
+    rubrica: string,
+  ) {
+    return this.http.get<BoletimOcorrencia[]>(
+      environment.apiUrl +
+        `/boletins-ocorrencia/query-rubrica-in-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}&rubrica=${rubrica}`,
+    );
+  }
 }
