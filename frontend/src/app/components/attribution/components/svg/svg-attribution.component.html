@@ -1,0 +1,8 @@
+<ul>
+  @for (item of svgList; track $index) {
+    <!-- display names and make text clickable -->
+    <li>
+      <a href="{{ item.url }}">{{ item.name }} - {{ item.license }}</a>
+    </li>
+  }
+</ul>

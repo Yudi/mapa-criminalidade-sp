@@ -12,3 +12,6 @@ target/
 *.pdb
 **/*.rs.bk
 Cargo.lock
+
+# JS/Node
+node_modules/

@@ -1,7 +1,20 @@
-<app-toolbar></app-toolbar>
-
+<app-toolbar
+  [progressBarPercentage]="progressBarPercentage"
+  [showIndeterminateProgressBar]="showIndeterminateProgressBar"
+></app-toolbar>
 @if (isBrowserOnly) {
-  <app-map></app-map>
+  <app-map
+    [response]="response"
+    [addressCenter]="addressCenter"
+    [progressBarPercentage]="progressBarPercentage"
+    [showIndeterminateProgressBar]="showIndeterminateProgressBar"
+    [rubricasFormValues]="rubricasFormValues"
+  ></app-map>
 }
 
-<app-card></app-card>
+<app-card
+  (submitEvent)="onSubmitEvent($event)"
+  (rubricasFormEvent)="onRubricasFormChange($event)"
+  [response]="response"
+  [rubricas]="rubricas"
+></app-card>

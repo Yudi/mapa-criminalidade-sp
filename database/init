@@ -1,0 +1,86 @@
+CREATE TABLE boletins_ocorrencia (
+  nome_departamento VARCHAR(255) NULL,
+  nome_seccional VARCHAR(255) NULL,
+  nome_delegacia VARCHAR(255) NULL,
+  cidade VARCHAR(255) NULL,
+  ano_bo INT NULL,
+  num_bo VARCHAR(20) NULL,
+  data_registro DATE NULL,
+  data_ocorrencia_bo DATE NULL,
+  hora_ocorrencia_bo TIME NULL,
+  descr_periodo VARCHAR(255) NULL,
+  descr_subtipolocal VARCHAR(255) NULL,
+  bairro VARCHAR(255) NULL,
+  logradouro VARCHAR(255) NULL,
+  numero_logradouro VARCHAR(20) NULL,
+  latitude FLOAT NULL,
+  longitude FLOAT NULL,
+  nome_delegacia_circunscricao VARCHAR(255) NULL,
+  nome_departamento_circunscricao VARCHAR(255) NULL,
+  nome_seccional_circunscricao VARCHAR(255) NULL,
+  nome_municipio_circunscricao VARCHAR(255) NULL,
+  rubrica VARCHAR(255) NULL,
+  descr_conduta VARCHAR(510) NULL,
+  natureza_apurada VARCHAR(255) NULL,
+  mes_estatistica INT NULL,
+  ano_estatistica INT NULL
+);
+
+-- Import data from CSV
+\COPY boletins_ocorrencia FROM '/tmp/example.csv' DELIMITER ',' CSV HEADER NULL AS 'NULL';
+
+-- Delete duplicate rows
+CREATE INDEX idx_boletins_ocorrencia_duplicates
+ON boletins_ocorrencia (num_bo, data_ocorrencia_bo, hora_ocorrencia_bo, latitude, longitude);
+
+DELETE FROM boletins_ocorrencia a
+WHERE a.ctid <> (SELECT min(b.ctid)
+                 FROM boletins_ocorrencia b
+                 WHERE a.num_bo = b.num_bo
+                   AND a.data_ocorrencia_bo = b.data_ocorrencia_bo
+                   AND a.hora_ocorrencia_bo = b.hora_ocorrencia_bo
+                   AND a.latitude = b.latitude
+                   AND a.longitude = b.longitude);
+
+-- Add a primary key
+ALTER TABLE boletins_ocorrencia
+ADD COLUMN id SERIAL PRIMARY KEY;
+
+
+ALTER TABLE boletins_ocorrencia
+ADD COLUMN location GEOMETRY(POINT, 4326) NULL;
+
+-- Remove rows with missing latitude or longitude
+-- DELETE FROM boletins_ocorrencia
+-- WHERE latitude = 0 
+--    OR latitude IS NULL 
+--    OR latitude = ''
+--    OR longitude = 0 
+--    OR longitude IS NULL 
+--    OR longitude = '';
+
+UPDATE boletins_ocorrencia
+SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326);
+
+-- Test the import
+SELECT * FROM boletins_ocorrencia LIMIT 5;
+
+
+
+-- -------------------------
+
+
+-- Create a new data table with jsonb to store all settings
+CREATE TABLE cache (
+    id SERIAL PRIMARY KEY,
+    rubricas JSONB
+);
+
+-- Insert all unique rubricas into cache table, don't insert duplicates
+INSERT INTO cache (rubricas)
+SELECT DISTINCT rubrica
+FROM boletins_ocorrencia
+WHERE rubrica IS NOT NULL
+  AND rubrica <> ''
+ON CONFLICT DO NOTHING;
+
