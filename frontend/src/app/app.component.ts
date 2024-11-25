@@ -74,10 +74,12 @@ export class AppComponent {
       .queryAddress(dataForm.street, dataForm.city, dataForm.state)
       .pipe(
         shareReplay(1), // Share the result for reuse without re-triggering the request
+        distinctUntilChanged(), // Only emit if the address changes
       );
 
     // Define the response observable that makes the database query after address resolution
     this.response = addressQuery$.pipe(
+      distinctUntilChanged(), // Only emit if the address changes
       tap((addressResult) => {
         this.addressCenter = {
           lon: addressResult[0].lon,

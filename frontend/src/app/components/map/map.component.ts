@@ -21,7 +21,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import Style from 'ol/style/Style';
 import Icon from 'ol/style/Icon';
-import { take } from 'rxjs';
+import { shareReplay, take } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { FormGroup } from '@angular/forms';
@@ -95,7 +95,7 @@ export class MapComponent implements AfterViewInit, OnChanges {
     const values = rubricasFormValues;
     const rubricas = Object.keys(values);
 
-    this.response.pipe(take(1)).subscribe((responseData) => {
+    this.response.pipe(take(1), shareReplay(1)).subscribe((responseData) => {
       this.progressBarPercentage.set(10);
       const mapLayers = this.map?.getLayers();
 
@@ -198,6 +198,16 @@ export class MapComponent implements AfterViewInit, OnChanges {
       this.addressCenter.lat!,
       this.addressCenter.radius!,
     );
+
+    this.map?.getLayers().forEach((layer) => {
+      if (layer instanceof VectorLayer) {
+        layer.getSource()?.clear(); // Clear all features from the layer
+      }
+    });
+
+    if (this.rubricasFormValues) {
+      this.onRubricasFormChange(this.rubricasFormValues);
+    }
   }
 
   updateCenter(lon: number, lat: number, radius: number) {

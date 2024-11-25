@@ -13,7 +13,7 @@ export class MapMarkersService {
       icon: 'uso_drogas.png',
     },
     {
-      keywords: ['lesão corporal'],
+      keywords: ['129'],
       icon: 'agressao.png',
     },
     {
@@ -42,7 +42,7 @@ export class MapMarkersService {
     },
     {
       keywords: ['tráfico drogas', 'tráfico de drogas'],
-      icon: 'trafico.png',
+      icon: 'trafico_drogas.png',
     },
   ];
 
