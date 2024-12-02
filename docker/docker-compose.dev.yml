@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: postgis_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgis_data:/var/lib/postgresql/data
+      - ./example.csv:/tmp/example.csv
+    networks:
+      - postgis_network
+    restart: unless-stopped
+
+networks:
+  postgis_network:
+    driver: bridge

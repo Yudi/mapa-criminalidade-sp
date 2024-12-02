@@ -5,6 +5,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { BoletimOcorrencia } from 'src/boletim.entity';
 import { BoletinsOcorrenciaModule } from './boletins-ocorrencia/boletins-ocorrencia.module';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { ValidatorsService } from './shared/validators/validators.service';
 
 @Module({
   imports: [
@@ -18,10 +20,16 @@ import { BoletinsOcorrenciaModule } from './boletins-ocorrencia/boletins-ocorren
       entities: [BoletimOcorrencia],
       synchronize: true,
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 5,
+      },
+    ]),
     BoletinsOcorrenciaModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, ValidatorsService],
 })
 export class AppModule {
   constructor(private dataSource: DataSource) {}

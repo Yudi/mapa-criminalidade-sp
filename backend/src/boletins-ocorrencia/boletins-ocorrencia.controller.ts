@@ -1,14 +1,15 @@
 import { Controller, Get, HttpException, Query } from '@nestjs/common';
 import { ApiQuery } from '@nestjs/swagger';
 import { BoletinsOcorrenciaService } from 'src/boletins-ocorrencia/boletins-ocorrencia.service';
+import { ValidatorsService } from 'src/shared/validators/validators.service';
 
 @Controller('boletins-ocorrencia')
 export class BoletinsOcorrenciaController {
   constructor(
     private readonly boletinsOcorrenciaService: BoletinsOcorrenciaService,
+    private validatoresService: ValidatorsService,
   ) {}
 
-  //         `/boletins-ocorrencia/query-rubrica-in-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}&rubrica=${rubrica}`,
   @Get('/query-rubrica-in-location')
   @ApiQuery({
     name: 'lon',
@@ -55,6 +56,15 @@ export class BoletinsOcorrenciaController {
     if (!parsedLon || !parsedLat || !parsedRadius) {
       throw new HttpException('Missing required query parameters', 400);
     }
+
+    if (!this.validatoresService.isRadiusValid(parsedRadius)) {
+      throw new HttpException('Invalid radius', 400);
+    }
+
+    if (!this.validatoresService.isCoordinatesValid(parsedLon, parsedLat)) {
+      throw new HttpException('Invalid coordinates', 400);
+    }
+
     return this.boletinsOcorrenciaService.getBoletinsByRubricaInRange(
       parsedLon,
       parsedLat,
@@ -105,6 +115,14 @@ export class BoletinsOcorrenciaController {
     if (!parsedLon || !parsedLat || !parsedRadius) {
       throw new HttpException('Missing required query parameters', 400);
     }
+    if (!this.validatoresService.isRadiusValid(parsedRadius)) {
+      throw new HttpException('Invalid radius', 400);
+    }
+
+    if (!this.validatoresService.isCoordinatesValid(parsedLon, parsedLat)) {
+      throw new HttpException('Invalid coordinates', 400);
+    }
+
     return this.boletinsOcorrenciaService.listRubricasInRange(
       parsedLon,
       parsedLat,
@@ -154,6 +172,15 @@ export class BoletinsOcorrenciaController {
     if (!parsedLon || !parsedLat || !parsedRadius) {
       throw new HttpException('Missing required query parameters', 400);
     }
+
+    if (!this.validatoresService.isRadiusValid(parsedRadius)) {
+      throw new HttpException('Invalid radius', 400);
+    }
+
+    if (!this.validatoresService.isCoordinatesValid(parsedLon, parsedLat)) {
+      throw new HttpException('Invalid coordinates', 400);
+    }
+
     return this.boletinsOcorrenciaService.findInRange(
       parsedLon,
       parsedLat,
