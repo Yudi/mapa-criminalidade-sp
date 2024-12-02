@@ -1,9 +1,9 @@
 import { Component } from '@angular/core';
-import { SvgAttributionComponent } from './components/svg/svg-attribution.component';
+import { LicensesComponent } from './components/licenses/licenses.component';
 
 @Component({
   selector: 'app-attribution',
-  imports: [SvgAttributionComponent],
+  imports: [LicensesComponent],
   templateUrl: './attribution.component.html',
   styleUrl: './attribution.component.scss',
 })

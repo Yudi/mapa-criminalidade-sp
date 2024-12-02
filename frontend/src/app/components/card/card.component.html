@@ -1,19 +1,20 @@
 <mat-card appearance="outlined">
   <mat-card-content>
     <form [formGroup]="dataForm">
-      <button mat-flat-button (click)="onSubmit()">Submit</button>
+      <button mat-flat-button (click)="onSubmit()">Atualizar pesquisa</button>
       <h3>Raio</h3>
       <mat-button-toggle-group
         name="fontStyle"
         aria-label="Font Style"
         formControlName="radius"
       >
-        <mat-button-toggle value="2000">2 KM</mat-button-toggle>
-        <mat-button-toggle value="5000">5 KM</mat-button-toggle>
-        <mat-button-toggle value="10000">10 KM</mat-button-toggle>
+        <mat-button-toggle [value]="2000">2 KM</mat-button-toggle>
+        <mat-button-toggle [value]="5000">5 KM</mat-button-toggle>
+        <mat-button-toggle [value]="10000">10 KM</mat-button-toggle>
       </mat-button-toggle-group>
       <br />
       <h3>Endereço</h3>
+
       <mat-form-field>
         <mat-label>Nome da via e número</mat-label>
         <input matInput formControlName="street" />
@@ -26,7 +27,9 @@
         <mat-label>Estado</mat-label>
         <input matInput formControlName="state" />
       </mat-form-field>
-      <button mat-button>Limpar</button>
+      <br />
+      <button mat-button (click)="cleanForm('address')">Limpar</button>
+
       <br />
       <h3>Data</h3>
       <mat-form-field>
@@ -55,8 +58,7 @@
         <mat-datepicker #picker2></mat-datepicker>
       </mat-form-field>
       <br />
-
-      <button mat-button>Limpar</button>
+      <button mat-button (click)="cleanForm('date')">Limpar</button>
     </form>
     @if (rubricas | async; as rubricas) {
       <h3>Lista de ocorrências</h3>

@@ -1,5 +1,19 @@
+@use "@angular/material" as mat;
 /* Map */
 @import "ol/ol.css"; /* You can add global styles to this file, and also import other style files */
+
+html {
+  color-scheme: light dark;
+  @include mat.theme(
+    (
+      color: mat.$azure-palette,
+      typography: Roboto,
+      density: 0,
+    )
+  );
+  font-family: Roboto, "Helvetica Neue", Helvetica, "Segoe UI", system-ui,
+    sans-serif;
+}
 
 html,
 body {
@@ -7,5 +21,4 @@ body {
 }
 body {
   margin: 0;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
 }

@@ -101,31 +101,16 @@ export class AppComponent {
       }),
     );
 
-    this.rubricas = this.response.pipe(
-      take(1), // Only take the first value from the response
-      map((response) => response?.map((bo) => bo.rubrica)), // Extract rubrica from each item
-      filter((rubricas) => rubricas != null), // Filter out any null or undefined rubricas
-      map((rubricas) => {
-        // Count occurrences first
-        const rubricaCountMap = rubricas.reduce(
-          (acc, name) => {
-            if (name != null) {
-              acc[name] = (acc[name] || 0) + 1; // Increment count for each rubrica
-            }
-            return acc;
-          },
-          {} as Record<string, number>,
+    this.rubricas = addressQuery$.pipe(
+      switchMap((addressResult) => {
+        return this.queriesService.listRubricas(
+          addressResult[0].lat,
+          addressResult[0].lon,
+          dataForm.radius,
+          dataForm.beforeDate,
+          dataForm.afterDate,
         );
-
-        // Convert map to an array of objects in the desired format and sort by count
-        return Object.entries(rubricaCountMap)
-          .map(([name, count]) => ({
-            name,
-            count,
-          }))
-          .sort((a, b) => b.count - a.count); // Sort by count in descending order
       }),
-      shareReplay(1),
     );
   }
 }

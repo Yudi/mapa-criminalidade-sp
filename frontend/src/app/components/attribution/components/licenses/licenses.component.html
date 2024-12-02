@@ -1,0 +1,14 @@
+<h2>Licenças</h2>
+<p>Copyright (C) 2024 Renan Yudi</p>
+<app-agpl />
+<h3>Attributions</h3>
+<p>The following software may be included in this product:</p>
+@if (licenses | async; as licensesText) {
+  <div>{{ licensesText }}</div>
+} @else {
+  @if (error()) {
+    <p>Não foi possível obter a lista de licenças</p>
+  } @else {}
+}
+<h4>SVG Icons</h4>
+<app-svg-attribution />

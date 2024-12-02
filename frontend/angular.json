@@ -40,7 +40,8 @@
             "prerender": true,
             "ssr": {
               "entry": "src/server.ts"
-            }
+            },
+            "extractLicenses": true
           },
           "configurations": {
             "production": {

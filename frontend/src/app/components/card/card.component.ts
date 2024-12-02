@@ -135,6 +135,20 @@ export class CardComponent implements OnChanges, OnInit {
     });
   }
 
+  cleanForm(sectionName: string) {
+    switch (sectionName) {
+      case 'address':
+        this.dataForm.controls.street.setValue('');
+        this.dataForm.controls.city.setValue('');
+        break;
+      case 'date':
+        this.dataForm.controls.beforeDate.setValue('');
+        this.dataForm.controls.afterDate.setValue('');
+        break;
+      default:
+    }
+  }
+
   onSubmit() {
     const formValues = this.dataForm.getRawValue() as DataFormValues;
     this.submitEvent.emit(formValues);

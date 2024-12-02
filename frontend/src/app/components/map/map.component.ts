@@ -21,7 +21,7 @@ import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import Style from 'ol/style/Style';
 import Icon from 'ol/style/Icon';
-import { shareReplay, take } from 'rxjs';
+import { catchError, from, map, shareReplay, switchMap, take, tap } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { FormGroup } from '@angular/forms';
@@ -37,6 +37,7 @@ import { ProgressBarService } from '../../shared/progressbar.service';
 import { MapMarkersService } from '../../shared/map-markers.service';
 import { DOCUMENT } from '@angular/common';
 import Overlay from 'ol/Overlay';
+import { QueriesService } from '../../shared/queries.service';
 
 @Component({
   selector: 'app-map',
@@ -62,6 +63,7 @@ export class MapComponent implements AfterViewInit, OnChanges {
   private objectHandlingService = inject(ObjectHandlingService);
   private progressBarService = inject(ProgressBarService);
   private markersService = inject(MapMarkersService);
+  private queriesService = inject(QueriesService);
 
   private document = inject(DOCUMENT);
 
@@ -162,32 +164,60 @@ export class MapComponent implements AfterViewInit, OnChanges {
       this.map?.addLayer(layersByType[rubrica]); // Add the new layer to the map
     }
 
-    // Generate features for the rubrica
-    const features = responseData
-      .filter((bo) => bo.rubrica === rubrica)
-      .map((bo) => {
-        if (!bo || !bo.rubrica || !bo.longitude || !bo.latitude) {
-          return;
-        }
-
-        if (bo.longitude !== null && bo.latitude !== null) {
-          const coordinates = [bo.longitude, bo.latitude];
-
-          const feature = new Feature({
-            geometry: new Point(coordinates),
+    this.queriesService
+      .getBoletinsByRubricaInRange(
+        this.addressCenter.lat!,
+        this.addressCenter.lon!,
+        this.addressCenter.radius!,
+        this.addressCenter.before!,
+        this.addressCenter.after!,
+        rubrica,
+      )
+      .pipe(
+        // Use map to transform boletins into features
+        map((boletins) => {
+          return boletins
+            .filter(
+              (bo) =>
+                bo &&
+                bo.rubrica &&
+                bo.longitude !== null &&
+                bo.latitude !== null,
+            ) // Filter invalid boletins
+            .map((bo) => {
+              if (!bo || !bo.longitude || !bo.latitude) {
+                return null;
+              }
+              const coordinates = [bo.longitude, bo.latitude];
+              return new Feature({
+                geometry: new Point(coordinates),
+              });
+            });
+        }),
+        // Tap for any side-effects like updating progress bar
+        tap((features) => {
+          features.forEach(() => {
+            this.progressBarService.addToProgressBar(
+              1,
+              this.progressBarPercentage,
+            );
           });
-          this.progressBarService.addToProgressBar(
-            1,
-            this.progressBarPercentage,
-          );
-
-          return feature;
-        }
-        return;
-      });
-
-    // Add features to the layer
-    layersByType[rubrica].getSource()?.addFeatures(features);
+        }),
+        // Handle the final features and add them to the layer
+        switchMap((features) => {
+          const layer = layersByType[rubrica];
+          if (layer && layer.getSource()) {
+            layer.getSource()?.addFeatures(features);
+          }
+          return from(features); // Return the features for any further downstream logic if needed
+        }),
+        catchError((error) => {
+          // Handle error gracefully
+          console.error('Error fetching boletins:', error);
+          return []; // Return an empty array or handle it as needed
+        }),
+      )
+      .subscribe();
   }
 
   handleFormSubmit() {
