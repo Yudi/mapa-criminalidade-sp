@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BoletimOcorrencia } from 'src/boletim.entity';
+import { ValidatorsService } from 'src/shared/validators/validators.service';
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class BoletinsOcorrenciaService {
   constructor(
     @InjectRepository(BoletimOcorrencia)
     private boletinsRepository: Repository<BoletimOcorrencia>,
+    private validatorsService: ValidatorsService,
   ) {}
 
   findFirstFive(): Promise<BoletimOcorrencia[]> {
@@ -39,12 +41,18 @@ export class BoletinsOcorrenciaService {
       )
     `;
     if (beforeDate && beforeDate !== '') {
+      if (!this.validatorsService.isDateValid(beforeDate)) {
+        throw new Error('Invalid before date');
+      }
       // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       beforeDate = beforeDate.split('/').reverse().join('-');
       query += ` AND data_registro <= ${beforeDate}`;
     }
 
     if (afterDate && afterDate !== '') {
+      if (!this.validatorsService.isDateValid(afterDate)) {
+        throw new Error('Invalid after date');
+      }
       // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       afterDate = afterDate.split('/').reverse().join('-');
       query += ` AND data_registro >= ${afterDate}`;
@@ -76,12 +84,18 @@ export class BoletinsOcorrenciaService {
     `;
 
     if (beforeDate && beforeDate !== '') {
+      if (!this.validatorsService.isDateValid(beforeDate)) {
+        throw new Error('Invalid before date');
+      }
       // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       beforeDate = beforeDate.split('/').reverse().join('-');
       query += ` AND data_registro <= ${beforeDate}`;
     }
 
     if (afterDate && afterDate !== '') {
+      if (!this.validatorsService.isDateValid(afterDate)) {
+        throw new Error('Invalid after date');
+      }
       // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       afterDate = afterDate.split('/').reverse().join('-');
       query += ` AND data_registro >= ${afterDate}`;
@@ -113,12 +127,19 @@ export class BoletinsOcorrenciaService {
     `;
 
     if (beforeDate && beforeDate !== '') {
+      if (!this.validatorsService.isDateValid(beforeDate)) {
+        throw new Error('Invalid before date');
+      }
+
       // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       beforeDate = beforeDate.split('/').reverse().join('-');
       query += ` AND data_registro <= ${beforeDate}`;
     }
 
     if (afterDate && afterDate !== '') {
+      if (!this.validatorsService.isDateValid(afterDate)) {
+        throw new Error('Invalid after date');
+      }
       // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
       afterDate = afterDate.split('/').reverse().join('-');
       query += ` AND data_registro >= ${afterDate}`;
