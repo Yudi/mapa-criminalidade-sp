@@ -1,27 +1,29 @@
+// converter.rs
 use calamine::{open_workbook, DataType, Reader, Xlsx};
 use chrono::NaiveDate;
 use std::error::Error;
 use std::path::Path;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Define the path to the input Excel file and output CSV file
-    let excel_path: &Path = Path::new("example.xlsx");
-    let csv_path: &Path = Path::new("example.csv");
-
+pub fn convert_excel_to_csv(
+    excel_path: &Path,
+    csv_path: &Path,
+    sheet_name: Option<String>,
+) -> Result<(), Box<dyn Error>> {
     // Open the Excel file
     let mut workbook: Xlsx<_> = open_workbook(excel_path)?;
 
-    // Get the first sheet name
-    let sheet_name: String = match workbook.sheet_names().first() {
+    // Use sheet name from command line arguments
+    // If not provided, use first sheet name
+    let sheet_name: String = sheet_name.unwrap_or_else(|| match workbook.sheet_names().first() {
         Some(name) => name.to_string(),
         None => {
             eprintln!("No sheets found in the workbook");
-            return Ok(());
+            std::process::exit(1);
         }
-    };
+    });
 
     // Get the worksheet range for the first sheet
-    let range = match workbook.worksheet_range(&sheet_name) {
+    let range: calamine::Range<DataType> = match workbook.worksheet_range(&sheet_name) {
         Some(Ok(r)) => r,
         Some(Err(e)) => {
             eprintln!("Failed to read the range for sheet {}: {}", sheet_name, e);
@@ -29,6 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         None => {
             eprintln!("Sheet {} not found", sheet_name);
+            eprintln!("Available sheets: {:?}", workbook.sheet_names());
             return Ok(());
         }
     };
@@ -61,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         if column_names[i].to_lowercase().contains("data") {
                             // Handle date values
                             if let Some(date) =
-                                NaiveDate::from_ymd_opt(1899, 12, 30).and_then(|d| {
+                                NaiveDate::from_ymd_opt(1899, 12, 30).and_then(|d: NaiveDate| {
                                     d.checked_add_signed(chrono::Duration::days(days_integer_part))
                                 })
                             {
