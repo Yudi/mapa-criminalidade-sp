@@ -165,7 +165,7 @@ export class MapComponent implements AfterViewInit, OnChanges {
     }
 
     this.queriesService
-      .getBoletinsByRubricaInRange(
+      .getBoletinsByRubricaForPoint(
         this.addressCenter.lat!,
         this.addressCenter.lon!,
         this.addressCenter.radius!,
@@ -185,16 +185,13 @@ export class MapComponent implements AfterViewInit, OnChanges {
                 bo.latitude !== null,
             ) // Filter invalid boletins
             .map((bo) => {
-              if (!bo || !bo.longitude || !bo.latitude) {
-                return null;
-              }
               const coordinates = [bo.longitude, bo.latitude];
               return new Feature({
                 geometry: new Point(coordinates),
               });
             });
         }),
-        // Tap for any side-effects like updating progress bar
+        // Tap to update progress bar
         tap((features) => {
           features.forEach(() => {
             this.progressBarService.addToProgressBar(

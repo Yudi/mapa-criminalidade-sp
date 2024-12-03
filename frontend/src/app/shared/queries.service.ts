@@ -10,7 +10,7 @@ import Observable from 'ol/Observable';
 })
 export class QueriesService {
   private http = inject(HttpClient);
-  queryAddress(street: string, city: string, state: string) {
+  getAddressData(street: string, city: string, state: string) {
     return this.http
       .get<
         {
@@ -39,20 +39,20 @@ export class QueriesService {
     );
   }
 
-  listRubricas(
+  listRubricasForPoint(
     lat: number,
     lon: number,
     radius: number,
     before: string,
     after: string,
   ) {
-    return this.http.get<{ name: string; count: number }[]>(
+    return this.http.get<ListRubricasForPointResponse[]>(
       environment.apiUrl +
         `/boletins-ocorrencia/query-rubricas-for-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`,
     );
   }
 
-  getBoletinsByRubricaInRange(
+  getBoletinsByRubricaForPoint(
     lat: number,
     lon: number,
     radius: number,
@@ -60,9 +60,20 @@ export class QueriesService {
     after: string,
     rubrica: string,
   ) {
-    return this.http.get<BoletimOcorrencia[]>(
+    return this.http.get<GetBoletinsByRubricaForPointResponse[]>(
       environment.apiUrl +
         `/boletins-ocorrencia/query-rubrica-in-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}&rubrica=${rubrica}`,
     );
   }
+}
+
+export interface ListRubricasForPointResponse {
+  name: string;
+  count: number;
+}
+
+export interface GetBoletinsByRubricaForPointResponse {
+  rubrica: string;
+  latitude: number;
+  longitude: number;
 }

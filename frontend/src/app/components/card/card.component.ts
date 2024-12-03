@@ -129,7 +129,6 @@ export class CardComponent implements OnChanges, OnInit {
   ngOnInit(): void {
     this.rubricasForm.valueChanges.subscribe(() => {
       if (this.shouldEmitRubricasForm) {
-        console.log('rubricasForm emitted', this.shouldEmitRubricasForm);
         this.rubricasFormEvent.emit(this.rubricasForm.getRawValue());
       }
     });

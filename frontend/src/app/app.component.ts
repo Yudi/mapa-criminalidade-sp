@@ -71,7 +71,7 @@ export class AppComponent {
 
     // Define the observable for querying the address
     const addressQuery$ = this.queriesService
-      .queryAddress(dataForm.street, dataForm.city, dataForm.state)
+      .getAddressData(dataForm.street, dataForm.city, dataForm.state)
       .pipe(
         shareReplay(1), // Share the result for reuse without re-triggering the request
         distinctUntilChanged(), // Only emit if the address changes
@@ -103,7 +103,7 @@ export class AppComponent {
 
     this.rubricas = addressQuery$.pipe(
       switchMap((addressResult) => {
-        return this.queriesService.listRubricas(
+        return this.queriesService.listRubricasForPoint(
           addressResult[0].lat,
           addressResult[0].lon,
           dataForm.radius,
