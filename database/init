@@ -1,4 +1,4 @@
-CREATE TABLE boletins_ocorrencia (
+CREATE TABLE bos_2024 (
   nome_departamento VARCHAR(255) NULL,
   nome_seccional VARCHAR(255) NULL,
   nome_delegacia VARCHAR(255) NULL,

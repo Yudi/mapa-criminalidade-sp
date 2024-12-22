@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { from, map } from 'rxjs';
 import { BoletimOcorrencia } from 'src/boletim.entity';
 import { ValidatorsService } from 'src/shared/validators/validators.service';
 import { Repository } from 'typeorm';
@@ -11,14 +12,6 @@ export class BoletinsOcorrenciaService {
     private boletinsRepository: Repository<BoletimOcorrencia>,
     private validatorsService: ValidatorsService,
   ) {}
-
-  findFirstFive(): Promise<BoletimOcorrencia[]> {
-    // get with id 1
-
-    return this.boletinsRepository.find({
-      where: { id: 3 },
-    });
-  }
 
   async findInRange(
     centerLongitude: number,
@@ -65,7 +58,7 @@ export class BoletinsOcorrenciaService {
     ]);
   }
 
-  async getBoletinsByRubricaInRange(
+  async getBoletinsByRubricaForPoint(
     centerLongitude: number,
     centerLatitude: number,
     radius: number,
@@ -101,15 +94,25 @@ export class BoletinsOcorrenciaService {
       query += ` AND data_registro >= ${afterDate}`;
     }
 
-    return this.boletinsRepository.query(query, [
+    const result = (await this.boletinsRepository.query(query, [
       rubrica,
       centerLongitude,
       centerLatitude,
       radius,
-    ]);
+    ])) as BoletimOcorrencia[];
+
+    const parseResult = result.map((boletim) => {
+      return {
+        latitude: boletim.latitude,
+        longitude: boletim.longitude,
+        rubrica: boletim.rubrica,
+        id: boletim.id,
+      };
+    });
+    return parseResult;
   }
 
-  async listRubricasInRange(
+  async listRubricasForPointInRange(
     centerLongitude: number,
     centerLatitude: number,
     radius: number,

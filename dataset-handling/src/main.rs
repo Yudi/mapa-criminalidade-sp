@@ -3,6 +3,7 @@ use std::error::Error;
 use std::path::Path;
 
 mod converter;
+mod headers;
 mod merger;
 mod sampler;
 

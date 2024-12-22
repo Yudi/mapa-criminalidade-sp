@@ -65,7 +65,7 @@ export class BoletinsOcorrenciaController {
       throw new HttpException('Invalid coordinates', 400);
     }
 
-    return this.boletinsOcorrenciaService.getBoletinsByRubricaInRange(
+    return this.boletinsOcorrenciaService.getBoletinsByRubricaForPoint(
       parsedLon,
       parsedLat,
       parsedRadius,
@@ -123,7 +123,7 @@ export class BoletinsOcorrenciaController {
       throw new HttpException('Invalid coordinates', 400);
     }
 
-    return this.boletinsOcorrenciaService.listRubricasInRange(
+    return this.boletinsOcorrenciaService.listRubricasForPointInRange(
       parsedLon,
       parsedLat,
       parsedRadius,
