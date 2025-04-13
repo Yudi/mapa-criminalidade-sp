@@ -107,7 +107,6 @@ export class QueriesService {
     after: string,
     rubrica: string,
   ) {
-    console.debug('1');
     if (!lat || !lon || !radius) {
       console.error(
         `Invalid parameters: lat=${lat}, lon=${lon}, radius=${radius}`,
@@ -115,15 +114,12 @@ export class QueriesService {
       return of(null);
     }
 
-    console.debug('2');
-
     const cacheKey = `getBoletinsByRubricaForPoint-${lat}-${lon}-${radius}-${before}-${after}-${rubrica}`;
 
     if (this.checkCache(cacheKey)) {
       return this.requestCache.get(cacheKey)!;
     }
 
-    console.debug('3');
     const request = this.http
       .get<
         BoletimOcorrencia[]

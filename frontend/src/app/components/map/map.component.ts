@@ -127,39 +127,34 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     this.formChange$.next();
-    console.debug('onRubricasFormChange called with:', rubricasFormValues);
+
     this.progressBarPercentage().set(0);
     const values = rubricasFormValues;
     const selectedRubricas = Object.keys(values).filter(
       (rubrica) => values[rubrica],
     );
-    console.debug('Selected rubricas:', selectedRubricas);
+
     const totalRubricas = selectedRubricas.length;
     const mapLayers = this.map.getLayers();
 
     // Remove unchecked rubricas
     Object.keys(values).forEach((rubrica) => {
       if (!values[rubrica]) {
-        console.debug(`Removing features for unchecked rubrica: ${rubrica}`);
         this.removeRubricaLayerFeatures(rubrica, mapLayers);
       }
     });
 
     if (totalRubricas === 0) {
-      console.debug('No rubricas selected, exiting.');
       return;
     }
 
     const baseRubricaProgress = 100 / totalRubricas;
-    console.debug('Base progress per rubrica:', baseRubricaProgress);
 
     from(selectedRubricas)
       .pipe(
         takeUntil(this.formChange$),
         takeUntil(this.destroy$),
         mergeMap((rubrica) => {
-          console.debug(`Fetching boletins for rubrica: ${rubrica}`);
-
           return this.queriesService
             .getBoletinsByRubricaForPoint(
               this.addressCenter().lat!,
@@ -177,11 +172,6 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       )
       .subscribe({
         next: ({ rubrica, boletins }) => {
-          console.debug(
-            `Fetched boletins for rubrica: ${rubrica}, count: ${
-              boletins?.length || 0
-            }`,
-          );
           this.generateFeaturesLayerForRubrica(
             rubrica,
             boletins,
@@ -219,11 +209,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       return;
     }
 
-    console.debug(
-      `generateFeaturesLayerForRubrica called for rubrica: ${rubrica}`,
-    );
     if (!responseData) {
-      console.debug(`No response data for rubrica: ${rubrica}, exiting.`);
       return;
     }
 
@@ -237,7 +223,6 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     });
 
     if (!layersByType[rubrica]) {
-      console.debug(`Creating new layer for rubrica: ${rubrica}`);
       const vectorSource = new VectorSource();
       layersByType[rubrica] = new VectorLayer({
         source: vectorSource,
@@ -257,15 +242,10 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
       this.map.addLayer(layersByType[rubrica]);
     } else {
-      console.debug(`Using existing layer for rubrica: ${rubrica}`);
     }
 
     const validBoletins = responseData.filter(
       (bo) => bo && bo.rubrica && bo.longitude !== null && bo.latitude !== null,
-    );
-
-    console.debug(
-      `Valid boletins count for rubrica ${rubrica}: ${validBoletins.length}`,
     );
 
     const totalFeatures = validBoletins.length;
@@ -273,10 +253,6 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       totalFeatures > 0
         ? baseRubricaProgress / totalFeatures
         : baseRubricaProgress;
-
-    console.debug(
-      `Progress per feature for rubrica ${rubrica}: ${progressPerFeature}`,
-    );
 
     const features = validBoletins.map((bo) => {
       this.progressBarService.addToProgressBar(
@@ -288,11 +264,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       });
     });
 
-    console.debug(
-      `Adding ${features.length} features to layer for rubrica: ${rubrica}`,
-    );
     layersByType[rubrica].getSource()?.addFeatures(features);
-    console.debug(`Logic complete. Progress: ${this.progressBarPercentage()}`);
   }
 
   handleFormSubmit() {

@@ -50,8 +50,6 @@ export class MapMarkersService {
       });
     });
 
-    console.debug(`Icon found for rubrica "${rubrica}":`, icon);
-
     return `markers/${icon?.icon || 'default.png'}`;
   }
 }
