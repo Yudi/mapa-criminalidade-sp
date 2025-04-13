@@ -181,6 +181,28 @@ export class QueriesService {
 
     return request;
   }
+
+  getBoletimById(id: number): Observable<BoletimOcorrencia | null> {
+    const cacheKey = `getBoletimById-${id}`;
+
+    if (this.checkCache(cacheKey)) {
+      return this.requestCache.get(cacheKey)!;
+    }
+
+    const request = this.http
+      .get<BoletimOcorrencia>(environment.apiUrl + `/boletins-ocorrencia/${id}`)
+      .pipe(
+        take(1),
+        shareReplay(1),
+        catchError(() => {
+          console.error(`Error fetching boletim with ID ${id}`);
+          return of(null);
+        }),
+      );
+
+    this.requestCache.set(cacheKey, request);
+    return request;
+  }
 }
 
 export interface ListRubricasForPointResponse {

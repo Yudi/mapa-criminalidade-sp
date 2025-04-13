@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import Map from 'ol/Map';
@@ -6,11 +6,14 @@ import Overlay from 'ol/Overlay';
 import { fromLonLat } from 'ol/proj';
 import { OSM } from 'ol/source';
 import View from 'ol/View';
+import { QueriesService } from '../../../shared/queries.service';
+import { take, tap } from 'rxjs';
 
 @Injectable({
   providedIn: 'root',
 })
 export class MapSetupService {
+  private queriesService = inject(QueriesService);
   setupMap(
     map: Map | undefined | null,
     vectorLayer: VectorLayer,
@@ -51,16 +54,31 @@ export class MapSetupService {
       map?.forEachFeatureAtPixel(
         event.pixel,
         (feature) => {
-          popup.innerHTML = `<span>${feature.get('name')}</span><br>${feature.get('description') || ''}`;
-          popup.hidden = false;
-
-          feature.get('maps')
-            ? `<br><a href="https://goo.gl/maps/${feature.get('maps')}" target="_blank">Mais informações</a>`
-            : '';
+          this.queriesService
+            .getBoletimById(feature.get('id'))
+            .pipe(
+              take(1),
+              tap((boletim) => {
+                if (boletim) {
+                  popup.innerHTML = `
+                  <div class="popup-content">
+                  <h3>${boletim.natureza_apurada}</h3>
+                  <p><strong>Endereço:</strong> ${boletim.logradouro}, ${boletim.numero_logradouro}, ${boletim.bairro}, ${boletim.cidade}</p>
+                  <p><strong>Local:</strong> ${boletim.descr_subtipolocal}</p>
+                  <p><strong>Conduta:</strong> ${boletim.descr_conduta}</p>
+                  <p><strong>Data ocorrência:</strong> ${boletim.data_ocorrencia_bo} ${boletim.hora_ocorrencia_bo}</p>
+                  <p><strong>Data registro:</strong> ${boletim.data_registro}</p>
+                  </div>
+                  `;
+                }
+                popup.hidden = false;
+              }),
+            )
+            .subscribe();
 
           popupOverlay.setPosition(event.coordinate);
         },
-        { hitTolerance: 6 },
+        { hitTolerance: 2 },
       );
     });
 

@@ -177,4 +177,15 @@ export class BoletinsOcorrenciaService {
     );
     return result[0].last_date as string;
   }
+
+  async getBoletim(id: number) {
+    const result = await this.boletinsRepository.findOne({
+      where: { id },
+    });
+
+    if (!result) {
+      throw new Error('Boletim not found');
+    }
+    return result;
+  }
 }

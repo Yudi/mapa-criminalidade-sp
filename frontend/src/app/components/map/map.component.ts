@@ -259,9 +259,13 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
         progressPerFeature,
         this.progressBarPercentage(),
       );
-      return new Feature({
+      const feature = new Feature({
         geometry: new Point(fromLonLat([bo.longitude!, bo.latitude!])),
       });
+
+      feature.set('id', bo.id);
+
+      return feature;
     });
 
     layersByType[rubrica].getSource()?.addFeatures(features);

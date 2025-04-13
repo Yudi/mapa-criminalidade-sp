@@ -1,5 +1,6 @@
-import { Controller, Get, HttpException, Query } from '@nestjs/common';
+import { Controller, Get, HttpException, Param, Query } from '@nestjs/common';
 import { ApiQuery } from '@nestjs/swagger';
+import { BoletimOcorrencia } from 'src/boletim.entity';
 import { BoletinsOcorrenciaService } from 'src/boletins-ocorrencia/boletins-ocorrencia.service';
 import { ValidatorsService } from 'src/shared/validators/validators.service';
 
@@ -198,5 +199,15 @@ export class BoletinsOcorrenciaController {
       before,
       after,
     );
+  }
+  @Get(':id')
+  getBoletim(@Param('id') id: string): Promise<BoletimOcorrencia> {
+    if (!id) {
+      throw new HttpException('Missing required query parameters', 400);
+    }
+
+    const parsedId = parseInt(id);
+
+    return this.boletinsOcorrenciaService.getBoletim(parsedId);
   }
 }
