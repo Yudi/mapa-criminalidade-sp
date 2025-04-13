@@ -1,28 +1,21 @@
 import {
   AfterViewInit,
   Component,
-  Inject,
-  Input,
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  ViewChild,
+  ViewContainerRef,
   WritableSignal,
   inject,
   input,
 } from '@angular/core';
 import Map from 'ol/Map';
-import View from 'ol/View';
-import TileLayer from 'ol/layer/Tile';
-import OSM from 'ol/source/OSM';
-import {
-  fromLonLat,
-  getPointResolution,
-  transform,
-  useGeographic,
-} from 'ol/proj';
+
+import { fromLonLat } from 'ol/proj';
 
 import Feature from 'ol/Feature';
-import { Circle as OlCircle, Point } from 'ol/geom';
+import { Point } from 'ol/geom';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import Style from 'ol/style/Style';
@@ -42,11 +35,6 @@ import {
 } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { FormGroup } from '@angular/forms';
-import DataFormValues from '../../shared/dataForm.interface';
-import Stroke from 'ol/style/Stroke';
-import Fill from 'ol/style/Fill';
-import { Observable } from 'rxjs';
 import { ObjectHandlingService } from '../../shared/object-handling.service';
 import { BoletimOcorrencia } from '../../shared/schema.interface';
 import Collection from 'ol/Collection';
@@ -54,7 +42,6 @@ import BaseLayer from 'ol/layer/Base';
 import { ProgressBarService } from '../../shared/progressbar.service';
 import { MapMarkersService } from '../../shared/map-markers.service';
 import { DOCUMENT } from '@angular/common';
-import Overlay from 'ol/Overlay';
 import { QueriesService } from '../../shared/queries.service';
 import { MapSetupService } from './services/map-setup.service';
 import { MapToolsService } from '../../shared/map-tools.service';
@@ -65,6 +52,9 @@ import { MapToolsService } from '../../shared/map-tools.service';
   styleUrls: ['./map.component.scss'],
 })
 export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @ViewChild('popupContainer', { read: ViewContainerRef, static: true })
+  popupContainer!: ViewContainerRef;
+
   addressCenter = input.required<{
     lon: number | null;
     lat: number | null;
@@ -289,14 +279,15 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
   }
 
-  generateFeatures() {}
-
   ngAfterViewInit() {
-    this.map = this.mapSetupService.setupMap(
-      this.map,
-      this.vectorLayer,
-      this.document,
-    );
+    setTimeout(() => {
+      this.map = this.mapSetupService.setupMap(
+        this.map,
+        this.vectorLayer,
+        this.document,
+        this.popupContainer,
+      );
+    }, 500);
   }
 
   ngOnDestroy() {

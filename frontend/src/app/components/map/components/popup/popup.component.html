@@ -1,0 +1,20 @@
+@if (boletim) {
+  <div class="popup">
+    <h3>{{ boletim.natureza_apurada }}</h3>
+    <p>
+      <strong>Endereço:</strong> {{ boletim.logradouro }},
+      {{ boletim.numero_logradouro }}, {{ boletim.bairro }},
+      {{ boletim.cidade }}
+    </p>
+    <p><strong>Local:</strong> {{ boletim.descr_subtipolocal }}</p>
+    @if (boletim.descr_conduta) {
+      <p><strong>Conduta:</strong> {{ boletim.descr_conduta }}</p>
+    }
+    <p>
+      <strong>Data ocorrência:</strong> {{ boletim.data_ocorrencia_bo }}
+      {{ boletim.hora_ocorrencia_bo }}
+    </p>
+    <p><strong>Data registro:</strong> {{ boletim.data_registro }}</p>
+    <p (click)="close.emit()">Fechar</p>
+  </div>
+}
