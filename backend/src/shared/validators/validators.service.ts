@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { compareAsc } from 'date-fns';
 
 @Injectable()
 export class ValidatorsService {
@@ -32,5 +33,12 @@ export class ValidatorsService {
   isDateValid(date: string): boolean {
     const dateRegex = /^\d{4}\-\d{2}\-\d{2}$/;
     return dateRegex.test(date);
+  }
+
+  isBeforeAfterValid(beforeDate: string, afterDate: string): boolean {
+    if (compareAsc(new Date(beforeDate), new Date(afterDate)) === -1) {
+      return false;
+    }
+    return true;
   }
 }

@@ -33,7 +33,13 @@
       <h3>Data</h3>
       <mat-form-field>
         <mat-label>Início</mat-label>
-        <input matInput [matDatepicker]="picker" formControlName="afterDate" />
+        <input
+          matInput
+          [matDatepicker]="picker"
+          formControlName="afterDate"
+          [min]="minDate"
+          [max]="maxDate"
+        />
         <mat-hint>DD/MM/YYYY</mat-hint>
         <mat-datepicker-toggle
           matIconSuffix
@@ -48,6 +54,8 @@
           matInput
           [matDatepicker]="picker2"
           formControlName="beforeDate"
+          [min]="minDate"
+          [max]="maxDate"
         />
         <mat-hint>DD/MM/YYYY</mat-hint>
         <mat-datepicker-toggle
@@ -60,7 +68,9 @@
       <button mat-button (click)="cleanForm('date')">Limpar</button>
       <br />
       <br />
-      <button mat-flat-button (click)="onSubmit()">Atualizar pesquisa</button>
+      <button mat-flat-button (click)="onSubmit()" [disabled]="!dataForm.valid">
+        Atualizar pesquisa
+      </button>
     </form>
     @if (rubricas | async; as rubricas) {
       <h3>Lista de ocorrências</h3>

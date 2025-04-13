@@ -10,6 +10,11 @@ export class BoletinsOcorrenciaController {
     private validatoresService: ValidatorsService,
   ) {}
 
+  @Get('/first-date')
+  getFirstDate() {
+    return this.boletinsOcorrenciaService.getFirstDate();
+  }
+
   @Get('/last-date')
   getLastDate() {
     return this.boletinsOcorrenciaService.getLastDate();

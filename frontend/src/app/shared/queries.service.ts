@@ -19,6 +19,25 @@ export class QueriesService {
   }
   ////
 
+  getFirstDate() {
+    const request = this.http
+      .get<string>(environment.apiUrl + '/boletins-ocorrencia/first-date')
+      .pipe(
+        take(1),
+        tap((response) => {
+          if (response) {
+            this.requestCache.set('getFirstDate', of(response));
+          }
+        }),
+        catchError(() => {
+          console.error('Error fetching first date');
+          return of(null);
+        }),
+      );
+
+    return request;
+  }
+
   getLastDate() {
     const request = this.http
       .get<string>(environment.apiUrl + '/boletins-ocorrencia/last-date')

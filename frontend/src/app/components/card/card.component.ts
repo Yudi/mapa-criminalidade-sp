@@ -48,6 +48,7 @@ import { BoletimOcorrencia } from '../../shared/schema.interface';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ObjectHandlingService } from '../../shared/object-handling.service';
 import { QueriesService } from '../../shared/queries.service';
+import { DateService } from '../../shared/date.service';
 
 @Component({
   selector: 'app-card',
@@ -77,28 +78,41 @@ export class CardComponent implements OnChanges, OnInit {
     [key: string]: boolean;
   }>();
 
+  private objectHandling = inject(ObjectHandlingService);
+  private queriesService = inject(QueriesService);
+  private dateService = inject(DateService);
+
   private formBuilder = inject(FormBuilder);
   addressDirty = false;
-  dataForm = new FormGroup({
-    beforeDate: new FormControl(''),
-    afterDate: new FormControl(''),
-    radius: new FormControl(2000, Validators.required),
-    street: new FormControl(''),
-    city: new FormControl('', Validators.required),
+  dataForm = new FormGroup(
+    {
+      beforeDate: new FormControl(''),
+      afterDate: new FormControl(''),
+      radius: new FormControl(2000, Validators.required),
+      street: new FormControl(''),
+      city: new FormControl('', Validators.required),
 
-    state: new FormControl(
-      { value: 'São Paulo', disabled: true },
-      Validators.required,
-    ),
-  });
+      state: new FormControl(
+        { value: 'São Paulo', disabled: true },
+        Validators.required,
+      ),
+    },
+    {
+      validators: this.dateService.beforeAfterFormValidator(
+        'beforeDate',
+        'afterDate',
+      ),
+    },
+  );
 
   shouldEmitRubricasForm = true;
 
   rubricasForm = this.formBuilder.group({});
   private rubricasSubscription: Subscription | null = null;
   private previousRubricas: { name: string; count: number }[] | null = null;
-  private objectHandling = inject(ObjectHandlingService);
-  private queriesService = inject(QueriesService);
+
+  public minDate: string | null = null;
+  public maxDate: string | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['rubricas'] && this.rubricas) {
@@ -156,6 +170,20 @@ export class CardComponent implements OnChanges, OnInit {
             date.setMonth(date.getMonth() - 3);
             const formattedDate = date.toISOString().split('T')[0];
             this.dataForm.controls.afterDate.setValue(formattedDate);
+
+            this.maxDate = response;
+          }
+        }),
+      )
+      .subscribe();
+
+    this.queriesService
+      .getFirstDate()
+      .pipe(
+        take(1),
+        tap((response) => {
+          if (response) {
+            this.minDate = response;
           }
         }),
       )

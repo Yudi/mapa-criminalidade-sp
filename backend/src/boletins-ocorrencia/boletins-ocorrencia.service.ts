@@ -46,6 +46,10 @@ export class BoletinsOcorrenciaService {
       query += ` AND data_registro >= '${afterDate}'`;
     }
 
+    if (!this.validatorsService.isBeforeAfterValid(beforeDate, afterDate)) {
+      throw new Error('Invalid before and after date');
+    }
+
     return this.boletinsRepository.query(query, [
       centerLongitude,
       centerLatitude,
@@ -83,6 +87,10 @@ export class BoletinsOcorrenciaService {
         throw new Error('Invalid after date');
       }
       query += ` AND data_registro >= '${afterDate}'`;
+    }
+
+    if (!this.validatorsService.isBeforeAfterValid(beforeDate, afterDate)) {
+      throw new Error('Invalid before and after date');
     }
 
     const result = (await this.boletinsRepository.query(query, [
@@ -135,6 +143,10 @@ export class BoletinsOcorrenciaService {
       query += ` AND data_registro >= '${afterDate}'`;
     }
 
+    if (!this.validatorsService.isBeforeAfterValid(beforeDate, afterDate)) {
+      throw new Error('Invalid before and after date');
+    }
+
     query += ` GROUP BY rubrica`;
 
     const result = await this.boletinsRepository.query(query, [
@@ -150,6 +162,13 @@ export class BoletinsOcorrenciaService {
       .sort((a, b) => b.count - a.count);
 
     return formattedResult;
+  }
+
+  async getFirstDate() {
+    const result = await this.boletinsRepository.query(
+      'SELECT MIN(data_registro) AS min_date FROM boletins_ocorrencia',
+    );
+    return result[0].min_date as string;
   }
 
   async getLastDate() {
