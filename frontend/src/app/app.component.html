@@ -1,7 +1,10 @@
-<app-toolbar
-  [progressBarPercentage]="progressBarPercentage"
-  [showIndeterminateProgressBar]="showIndeterminateProgressBar"
-></app-toolbar>
+<header>
+  <app-toolbar
+    [progressBarPercentage]="progressBarPercentage"
+    [showIndeterminateProgressBar]="showIndeterminateProgressBar"
+  ></app-toolbar>
+</header>
+
 @if (isBrowserOnly) {
   <app-map
     [addressCenter]="addressCenter"
@@ -11,8 +14,10 @@
   ></app-map>
 }
 
-<app-card
-  (submitEvent)="onSubmitEvent($event)"
-  (rubricasFormEvent)="onRubricasFormChange($event)"
-  [rubricas]="rubricas"
-></app-card>
+<section class="card-section">
+  <app-card
+    (submitEvent)="onSubmitEvent($event)"
+    (rubricasFormEvent)="onRubricasFormChange($event)"
+    [rubricas]="rubricas"
+  ></app-card>
+</section>
