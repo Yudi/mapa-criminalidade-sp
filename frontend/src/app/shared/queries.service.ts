@@ -1,17 +1,28 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { of, take, tap } from 'rxjs';
+import { of, shareReplay, take, tap, Observable, catchError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { BoletimOcorrencia } from './schema.interface';
-import Observable from 'ol/Observable';
 
 @Injectable({
   providedIn: 'root',
 })
 export class QueriesService {
   private http = inject(HttpClient);
+  private requestCache = new Map<string, Observable<any>>();
+
+  checkCache(cacheKey: string) {
+    return this.requestCache.has(cacheKey);
+  }
+
   getAddressData(street: string, city: string, state: string) {
-    return this.http
+    const cacheKey = `getAddressData-${street}-${city}-${state}`;
+
+    if (this.checkCache(cacheKey)) {
+      return this.requestCache.get(cacheKey)!;
+    }
+
+    const request = this.http
       .get<
         {
           lat: number;
@@ -20,7 +31,20 @@ export class QueriesService {
       >(
         `https://nominatim.openstreetmap.org/search?format=json&street=${street}&city=${city}&state=${state}&country=Brazil`,
       )
-      .pipe(take(1));
+      .pipe(
+        take(1),
+        shareReplay(1),
+        catchError(() => {
+          console.error(
+            `Error fetching address data for ${street}, ${city}, ${state}`,
+          );
+          return of(null);
+        }),
+      );
+
+    this.requestCache.set(cacheKey, request);
+
+    return request;
   }
 
   queryDatabase(
@@ -33,10 +57,21 @@ export class QueriesService {
     if (!lat || !lon || !radius) {
       return of(null);
     }
-    return this.http.get<BoletimOcorrencia[]>(
-      environment.apiUrl +
-        `/boletins-ocorrencia/query-point?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`,
-    );
+    const cacheKey = `queryDatabase-${lat}-${lon}-${radius}-${before}-${after}`;
+
+    if (this.checkCache(cacheKey)) {
+      return this.requestCache.get(cacheKey)!;
+    }
+
+    const request = this.http
+      .get<
+        BoletimOcorrencia[]
+      >(environment.apiUrl + `/boletins-ocorrencia/query?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`)
+      .pipe(take(1), shareReplay(1));
+
+    this.requestCache.set(cacheKey, request);
+
+    return request;
   }
 
   listRubricasForPoint(
@@ -46,10 +81,22 @@ export class QueriesService {
     before: string,
     after: string,
   ) {
-    return this.http.get<ListRubricasForPointResponse[]>(
-      environment.apiUrl +
-        `/boletins-ocorrencia/query-rubricas-for-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`,
-    );
+    if (!lat || !lon || !radius) {
+      return of(null);
+    }
+    const cacheKey = `listRubricasForPoint-${lat}-${lon}-${radius}-${before}-${after}`;
+
+    if (this.checkCache(cacheKey)) {
+      return this.requestCache.get(cacheKey)!;
+    }
+
+    const request = this.http
+      .get<
+        ListRubricasForPointResponse[]
+      >(environment.apiUrl + `/boletins-ocorrencia/query-rubricas-for-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`)
+      .pipe(take(1), shareReplay(1));
+    this.requestCache.set(cacheKey, request);
+    return request;
   }
 
   getBoletinsByRubricaForPoint(
@@ -60,10 +107,32 @@ export class QueriesService {
     after: string,
     rubrica: string,
   ) {
-    return this.http.get<GetBoletinsByRubricaForPointResponse[]>(
-      environment.apiUrl +
-        `/boletins-ocorrencia/query-rubrica-in-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}&rubrica=${rubrica}`,
-    );
+    console.debug('1');
+    if (!lat || !lon || !radius) {
+      console.error(
+        `Invalid parameters: lat=${lat}, lon=${lon}, radius=${radius}`,
+      );
+      return of(null);
+    }
+
+    console.debug('2');
+
+    const cacheKey = `getBoletinsByRubricaForPoint-${lat}-${lon}-${radius}-${before}-${after}-${rubrica}`;
+
+    if (this.checkCache(cacheKey)) {
+      return this.requestCache.get(cacheKey)!;
+    }
+
+    console.debug('3');
+    const request = this.http
+      .get<
+        BoletimOcorrencia[]
+      >(environment.apiUrl + `/boletins-ocorrencia/query-rubrica-in-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}&rubrica=${rubrica}`)
+      .pipe(take(1), shareReplay(1));
+
+    this.requestCache.set(cacheKey, request);
+
+    return request;
   }
 }
 

@@ -16,11 +16,11 @@ struct Args {
 
 #[derive(Subcommand, Debug, Clone)]
 enum Commands {
-    /// Convert a single CSV file to CSV
+    /// Convert a single Excel file to CSV
     Convert(ConvertArgs),
     /// Merge multiple CSV files into one CSV. Headers must match.
     Merge(MergeArgs),
-    /// Sample the first 5 rows of a CSV file
+    /// Create a new CSV file with the first 5 rows of another CSV file
     Sample(SampleArgs),
 }
 
@@ -57,6 +57,7 @@ struct SampleArgs {
     input: String,
 
     /// Output CSV file path (optional)
+    /// Default is `<input_file>-sample.csv` in the same directory
     #[arg(short, long)]
     output: Option<String>,
 }

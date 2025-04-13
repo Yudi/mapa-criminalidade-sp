@@ -4,7 +4,6 @@
 ></app-toolbar>
 @if (isBrowserOnly) {
   <app-map
-    [response]="response"
     [addressCenter]="addressCenter"
     [progressBarPercentage]="progressBarPercentage"
     [showIndeterminateProgressBar]="showIndeterminateProgressBar"
@@ -15,6 +14,5 @@
 <app-card
   (submitEvent)="onSubmitEvent($event)"
   (rubricasFormEvent)="onRubricasFormChange($event)"
-  [response]="response"
   [rubricas]="rubricas"
 ></app-card>

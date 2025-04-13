@@ -93,6 +93,11 @@ pub fn convert_excel_to_csv(
         eprintln!("No rows found in the worksheet");
     }
 
+    println!(
+        "Converted {} to {}",
+        excel_path.display(),
+        csv_path.display()
+    );
     // Flush the writer to ensure all data is written
     wtr.flush()?;
 

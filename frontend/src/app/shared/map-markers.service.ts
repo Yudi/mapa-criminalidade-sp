@@ -4,9 +4,6 @@ import { Injectable } from '@angular/core';
   providedIn: 'root',
 })
 export class MapMarkersService {
-  /*
-  frontend/publicuso_drogas.png frontend/publicagressao.png frontend/publicarmas.png frontend/publicatropelamento_morte.png frontend/publicatropelamento.png frontend/publicfurto.png frontend/publichomicidio.png frontend/publicroubo.png frontend/publictrafico.png
-  */
   markerList = [
     {
       keywords: ['consumo pessoal'],
@@ -47,14 +44,13 @@ export class MapMarkersService {
   ];
 
   markerChooser(rubrica: string) {
-    // Consider rubrica as "Posse ou porte ilegal de arma de fogo de uso restrito"
-
-    // Find the icon that matches the rubrica
     const icon = this.markerList.find((marker) => {
       return marker.keywords.some((keyword) => {
         return normalizeString(rubrica).includes(normalizeString(keyword));
       });
     });
+
+    console.debug(`Icon found for rubrica "${rubrica}":`, icon);
 
     return `markers/${icon?.icon || 'default.png'}`;
   }

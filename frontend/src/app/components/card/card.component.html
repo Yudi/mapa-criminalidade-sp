@@ -62,6 +62,7 @@
     </form>
     @if (rubricas | async; as rubricas) {
       <h3>Lista de ocorrências</h3>
+      <p>O mapa é atualizado automaticamente na seleção</p>
       <mat-list>
         <form [formGroup]="rubricasForm">
           @for (rubrica of rubricas; track $index) {

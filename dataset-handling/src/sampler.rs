@@ -20,6 +20,12 @@ pub fn sample_csv(input_path: &Path, output_path: &Path) -> Result<(), Box<dyn E
         writer.write_record(&record)?;
     }
 
+    println!(
+        "Sampled 5 rows from {} to {}",
+        input_path.display(),
+        output_path.display()
+    );
+
     writer.flush()?;
     Ok(())
 }

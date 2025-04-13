@@ -4,24 +4,42 @@ import {
   Inject,
   Input,
   OnChanges,
+  OnDestroy,
   SimpleChanges,
   WritableSignal,
   inject,
+  input,
 } from '@angular/core';
 import Map from 'ol/Map';
 import View from 'ol/View';
 import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
-import { getPointResolution, transform, useGeographic } from 'ol/proj';
+import {
+  fromLonLat,
+  getPointResolution,
+  transform,
+  useGeographic,
+} from 'ol/proj';
 
 import Feature from 'ol/Feature';
 import { Circle as OlCircle, Point } from 'ol/geom';
-import { HttpClient } from '@angular/common/http';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import Style from 'ol/style/Style';
 import Icon from 'ol/style/Icon';
-import { catchError, from, map, shareReplay, switchMap, take, tap } from 'rxjs';
+import {
+  catchError,
+  from,
+  map,
+  mergeMap,
+  of,
+  shareReplay,
+  Subject,
+  switchMap,
+  take,
+  takeUntil,
+  tap,
+} from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { FormGroup } from '@angular/forms';
@@ -38,32 +56,42 @@ import { MapMarkersService } from '../../shared/map-markers.service';
 import { DOCUMENT } from '@angular/common';
 import Overlay from 'ol/Overlay';
 import { QueriesService } from '../../shared/queries.service';
+import { MapSetupService } from './services/map-setup.service';
+import { MapToolsService } from '../../shared/map-tools.service';
 
 @Component({
   selector: 'app-map',
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.scss'],
 })
-export class MapComponent implements AfterViewInit, OnChanges {
-  @Input({ required: true }) response!: Observable<BoletimOcorrencia[] | null>;
-  @Input({ required: true }) addressCenter!: {
+export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
+  addressCenter = input.required<{
     lon: number | null;
     lat: number | null;
     radius: number | null;
     before: string | null;
     after: string | null;
-  };
-  @Input({ required: true }) rubricasFormValues:
-    | { [key: string]: boolean }
-    | undefined;
-  @Input({ required: true })
-  showIndeterminateProgressBar!: WritableSignal<boolean>;
-  @Input({ required: true }) progressBarPercentage!: WritableSignal<number>;
+  }>();
+
+  rubricasFormValues = input.required<
+    | {
+        [key: string]: boolean;
+      }
+    | undefined
+  >();
+
+  showIndeterminateProgressBar = input.required<WritableSignal<boolean>>();
+  progressBarPercentage = input.required<WritableSignal<number>>();
 
   private objectHandlingService = inject(ObjectHandlingService);
   private progressBarService = inject(ProgressBarService);
   private markersService = inject(MapMarkersService);
   private queriesService = inject(QueriesService);
+  private mapSetupService = inject(MapSetupService);
+  private mapToolsService = inject(MapToolsService);
+
+  private formChange$ = new Subject<void>();
+  private destroy$ = new Subject<void>();
 
   private document = inject(DOCUMENT);
 
@@ -86,31 +114,84 @@ export class MapComponent implements AfterViewInit, OnChanges {
     }
 
     if (changes['rubricasFormValues']) {
-      if (this.rubricasFormValues) {
-        this.onRubricasFormChange(this.rubricasFormValues);
+      if (this.rubricasFormValues()) {
+        this.onRubricasFormChange(this.rubricasFormValues()!);
       }
     }
   }
 
   onRubricasFormChange(rubricasFormValues: { [key: string]: boolean }) {
-    this.progressBarPercentage.set(0);
+    if (!this.map) {
+      console.warn('Map not initialized yet!');
+      return;
+    }
+
+    this.formChange$.next();
+    console.debug('onRubricasFormChange called with:', rubricasFormValues);
+    this.progressBarPercentage().set(0);
     const values = rubricasFormValues;
-    const rubricas = Object.keys(values);
+    const selectedRubricas = Object.keys(values).filter(
+      (rubrica) => values[rubrica],
+    );
+    console.debug('Selected rubricas:', selectedRubricas);
+    const totalRubricas = selectedRubricas.length;
+    const mapLayers = this.map.getLayers();
 
-    this.response.pipe(take(1), shareReplay(1)).subscribe((responseData) => {
-      this.progressBarPercentage.set(10);
-      const mapLayers = this.map?.getLayers();
-
-      rubricas.forEach((rubrica) => {
-        // For all true values, generate features
-        if (values[rubrica]) {
-          this.generateFeaturesLayerForRubrica(rubrica, responseData);
-        } else {
-          this.removeRubricaLayerFeatures(rubrica, mapLayers);
-        }
-      });
-      this.progressBarPercentage.set(-1);
+    // Remove unchecked rubricas
+    Object.keys(values).forEach((rubrica) => {
+      if (!values[rubrica]) {
+        console.debug(`Removing features for unchecked rubrica: ${rubrica}`);
+        this.removeRubricaLayerFeatures(rubrica, mapLayers);
+      }
     });
+
+    if (totalRubricas === 0) {
+      console.debug('No rubricas selected, exiting.');
+      return;
+    }
+
+    const baseRubricaProgress = 100 / totalRubricas;
+    console.debug('Base progress per rubrica:', baseRubricaProgress);
+
+    from(selectedRubricas)
+      .pipe(
+        takeUntil(this.formChange$),
+        takeUntil(this.destroy$),
+        mergeMap((rubrica) => {
+          console.debug(`Fetching boletins for rubrica: ${rubrica}`);
+
+          return this.queriesService
+            .getBoletinsByRubricaForPoint(
+              this.addressCenter().lat!,
+              this.addressCenter().lon!,
+              this.addressCenter().radius!,
+              this.addressCenter().before!,
+              this.addressCenter().after!,
+              rubrica,
+            )
+            .pipe(
+              takeUntil(this.formChange$),
+              map((boletins: BoletimOcorrencia[]) => ({ rubrica, boletins })),
+            );
+        }),
+      )
+      .subscribe({
+        next: ({ rubrica, boletins }) => {
+          console.debug(
+            `Fetched boletins for rubrica: ${rubrica}, count: ${
+              boletins?.length || 0
+            }`,
+          );
+          this.generateFeaturesLayerForRubrica(
+            rubrica,
+            boletins,
+            baseRubricaProgress,
+          );
+        },
+        complete: () => {
+          this.progressBarPercentage().set(-1);
+        },
+      });
   }
 
   removeRubricaLayerFeatures(
@@ -131,23 +212,33 @@ export class MapComponent implements AfterViewInit, OnChanges {
   generateFeaturesLayerForRubrica(
     rubrica: string,
     responseData: BoletimOcorrencia[] | null,
+    baseRubricaProgress: number,
   ) {
-    if (!responseData) {
+    if (!this.map) {
+      console.warn('Map not initialized yet!');
       return;
     }
 
-    // Get all existing layers by rubrica
+    console.debug(
+      `generateFeaturesLayerForRubrica called for rubrica: ${rubrica}`,
+    );
+    if (!responseData) {
+      console.debug(`No response data for rubrica: ${rubrica}, exiting.`);
+      return;
+    }
+
     const layersByType: { [key: string]: VectorLayer } = {};
 
-    this.map?.getLayers().forEach((layer) => {
+    // Check if the layer already exists
+    this.map.getLayers().forEach((layer) => {
       if (layer instanceof VectorLayer) {
         layersByType[layer.get('rubrica')] = layer;
       }
     });
 
-    // If current rubrica layer does not exist, create it
     if (!layersByType[rubrica]) {
-      const vectorSource = new VectorSource(); // Create a new VectorSource
+      console.debug(`Creating new layer for rubrica: ${rubrica}`);
+      const vectorSource = new VectorSource();
       layersByType[rubrica] = new VectorLayer({
         source: vectorSource,
         style: new Style({
@@ -160,165 +251,80 @@ export class MapComponent implements AfterViewInit, OnChanges {
           }),
         }),
       });
-      layersByType[rubrica].set('rubrica', rubrica); // Set the rubrica name as a property
-      this.map?.addLayer(layersByType[rubrica]); // Add the new layer to the map
+
+      // Set the rubrica as a property of the layer
+      layersByType[rubrica].set('rubrica', rubrica);
+
+      this.map.addLayer(layersByType[rubrica]);
+    } else {
+      console.debug(`Using existing layer for rubrica: ${rubrica}`);
     }
 
-    this.queriesService
-      .getBoletinsByRubricaForPoint(
-        this.addressCenter.lat!,
-        this.addressCenter.lon!,
-        this.addressCenter.radius!,
-        this.addressCenter.before!,
-        this.addressCenter.after!,
-        rubrica,
-      )
-      .pipe(
-        // Use map to transform boletins into features
-        map((boletins) => {
-          return boletins
-            .filter(
-              (bo) =>
-                bo &&
-                bo.rubrica &&
-                bo.longitude !== null &&
-                bo.latitude !== null,
-            ) // Filter invalid boletins
-            .map((bo) => {
-              const coordinates = [bo.longitude, bo.latitude];
-              return new Feature({
-                geometry: new Point(coordinates),
-              });
-            });
-        }),
-        // Tap to update progress bar
-        tap((features) => {
-          features.forEach(() => {
-            this.progressBarService.addToProgressBar(
-              1,
-              this.progressBarPercentage,
-            );
-          });
-        }),
-        // Handle the final features and add them to the layer
-        switchMap((features) => {
-          const layer = layersByType[rubrica];
-          if (layer && layer.getSource()) {
-            layer.getSource()?.addFeatures(features);
-          }
-          return from(features); // Return the features for any further downstream logic if needed
-        }),
-        catchError((error) => {
-          // Handle error gracefully
-          console.error('Error fetching boletins:', error);
-          return []; // Return an empty array or handle it as needed
-        }),
-      )
-      .subscribe();
+    const validBoletins = responseData.filter(
+      (bo) => bo && bo.rubrica && bo.longitude !== null && bo.latitude !== null,
+    );
+
+    console.debug(
+      `Valid boletins count for rubrica ${rubrica}: ${validBoletins.length}`,
+    );
+
+    const totalFeatures = validBoletins.length;
+    const progressPerFeature =
+      totalFeatures > 0
+        ? baseRubricaProgress / totalFeatures
+        : baseRubricaProgress;
+
+    console.debug(
+      `Progress per feature for rubrica ${rubrica}: ${progressPerFeature}`,
+    );
+
+    const features = validBoletins.map((bo) => {
+      this.progressBarService.addToProgressBar(
+        progressPerFeature,
+        this.progressBarPercentage(),
+      );
+      return new Feature({
+        geometry: new Point(fromLonLat([bo.longitude!, bo.latitude!])),
+      });
+    });
+
+    console.debug(
+      `Adding ${features.length} features to layer for rubrica: ${rubrica}`,
+    );
+    layersByType[rubrica].getSource()?.addFeatures(features);
+    console.debug(`Logic complete. Progress: ${this.progressBarPercentage()}`);
   }
 
   handleFormSubmit() {
-    this.showIndeterminateProgressBar.set(false);
+    this.showIndeterminateProgressBar().set(false);
 
-    this.updateCenter(
-      this.addressCenter.lon!,
-      this.addressCenter.lat!,
-      this.addressCenter.radius!,
+    this.mapToolsService.updateCenter(
+      this.addressCenter().lon!,
+      this.addressCenter().lat!,
+      this.addressCenter().radius!,
+      this.map,
+      this.vectorLayer,
     );
 
-    this.map?.getLayers().forEach((layer) => {
-      if (layer instanceof VectorLayer) {
-        layer.getSource()?.clear(); // Clear all features from the layer
-      }
-    });
+    this.mapToolsService.clearFeatures(this.map, this.vectorLayer);
 
-    if (this.rubricasFormValues) {
-      this.onRubricasFormChange(this.rubricasFormValues);
-    }
-  }
-
-  updateCenter(lon: number, lat: number, radius: number) {
-    const coordinates = [lon, lat];
-    this.vectorLayer.getSource()?.clear(); // Clear previous features
-    this.map?.getView().setCenter(coordinates);
-
-    // If map zoom is less than 16, zoom in
-    if (this.map?.getView().getZoom()! < 10) {
-      this.map?.getView().setZoom(16);
-    }
-
-    // if radius, draw circle to represent the radius
-    if (radius && radius !== -1) {
+    if (this.rubricasFormValues()) {
+      this.onRubricasFormChange(this.rubricasFormValues()!);
     }
   }
 
   generateFeatures() {}
 
   ngAfterViewInit() {
-    // Marco Zero, Praça da Sé, São Paulo
-    const defaultCoordinates = [-46.63394714, -23.5503953];
+    this.map = this.mapSetupService.setupMap(
+      this.map,
+      this.vectorLayer,
+      this.document,
+    );
+  }
 
-    useGeographic();
-    const rasterLayer = new TileLayer({
-      source: new OSM(),
-    });
-
-    const popup = document.getElementById('popup');
-
-    if (!popup) {
-      return;
-    }
-
-    setTimeout(() => {
-      this.map = new Map({
-        view: new View({
-          center: defaultCoordinates,
-          zoom: 16,
-          maxZoom: 19,
-          projection: 'EPSG:3857',
-        }),
-        layers: [rasterLayer, this.vectorLayer!],
-        target: 'ol-map-tab',
-      });
-
-      const popupOverlay = new Overlay({
-        element: popup || undefined,
-        autoPan: true,
-      });
-
-      this.map.addOverlay(popupOverlay);
-
-      this.map.on('singleclick', (event) => {
-        this.map?.forEachFeatureAtPixel(
-          event.pixel,
-          (feature) => {
-            popup.innerHTML = `<span>${feature.get('name')}</span><br>${feature.get('description') || ''}`;
-            popup.hidden = false;
-
-            feature.get('maps')
-              ? `<br><a href="https://goo.gl/maps/${feature.get('maps')}" target="_blank">Mais informações</a>`
-              : '';
-
-            popupOverlay.setPosition(event.coordinate);
-          },
-          { hitTolerance: 6 },
-        );
-      });
-
-      this.map.on('movestart', () => {
-        popup.hidden = true;
-      });
-
-      this.map.on('pointermove', (e) => {
-        const pixel = this.map!.getEventPixel(e.originalEvent);
-        const hit = this.map!.hasFeatureAtPixel(pixel);
-        const target: any = this.map!.getTarget();
-        const element = this.document.getElementById(target);
-
-        if (element) {
-          element.style.cursor = hit ? 'pointer' : '';
-        }
-      });
-    }, 500);
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 }

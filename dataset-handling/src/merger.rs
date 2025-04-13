@@ -30,6 +30,8 @@ pub fn merge_csv_files(input_paths: Vec<&Path>, output_path: &Path) -> Result<()
         }
     }
 
+    println!("Files merged successfully into {}", output_path.display());
+
     writer.flush()?;
     Ok(())
 }

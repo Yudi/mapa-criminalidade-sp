@@ -6,6 +6,7 @@ import {
   Input,
   OnChanges,
   OnInit,
+  output,
   Output,
   signal,
   SimpleChanges,
@@ -58,12 +59,12 @@ import { ObjectHandlingService } from '../../shared/object-handling.service';
   styleUrl: './card.component.scss',
 })
 export class CardComponent implements OnChanges, OnInit {
-  @Input({ required: true }) response!: Observable<BoletimOcorrencia[] | null>;
   @Input({ required: true }) rubricas!: Observable<
     { name: string; count: number }[]
   >;
-  @Output('submitEvent') submitEvent = new EventEmitter<DataFormValues>();
-  @Output('rubricasFormEvent') rubricasFormEvent = new EventEmitter<{
+
+  submitEvent = output<DataFormValues>();
+  rubricasFormEvent = output<{
     [key: string]: boolean;
   }>();
 

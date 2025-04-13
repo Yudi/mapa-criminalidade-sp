@@ -75,31 +75,16 @@ export class AppComponent {
       .pipe(
         shareReplay(1), // Share the result for reuse without re-triggering the request
         distinctUntilChanged(), // Only emit if the address changes
+        tap((addressResult) => {
+          this.addressCenter = {
+            lon: addressResult[0].lon,
+            lat: addressResult[0].lat,
+            radius: dataForm.radius,
+            before: dataForm.beforeDate,
+            after: dataForm.afterDate,
+          };
+        }),
       );
-
-    // Define the response observable that makes the database query after address resolution
-    this.response = addressQuery$.pipe(
-      distinctUntilChanged(), // Only emit if the address changes
-      tap((addressResult) => {
-        this.addressCenter = {
-          lon: addressResult[0].lon,
-          lat: addressResult[0].lat,
-          radius: dataForm.radius,
-          before: dataForm.beforeDate,
-          after: dataForm.afterDate,
-        };
-      }),
-      switchMap((addressResult) => {
-        // After updating state with address, make the database query
-        return this.queriesService.queryDatabase(
-          addressResult[0].lat,
-          addressResult[0].lon,
-          dataForm.radius,
-          dataForm.beforeDate,
-          dataForm.afterDate,
-        );
-      }),
-    );
 
     this.rubricas = addressQuery$.pipe(
       switchMap((addressResult) => {
