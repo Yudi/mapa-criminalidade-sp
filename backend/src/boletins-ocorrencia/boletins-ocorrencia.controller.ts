@@ -10,6 +10,11 @@ export class BoletinsOcorrenciaController {
     private validatoresService: ValidatorsService,
   ) {}
 
+  @Get('/last-date')
+  getLastDate() {
+    return this.boletinsOcorrenciaService.getLastDate();
+  }
+
   @Get('/query-rubrica-in-location')
   @ApiQuery({
     name: 'lon',

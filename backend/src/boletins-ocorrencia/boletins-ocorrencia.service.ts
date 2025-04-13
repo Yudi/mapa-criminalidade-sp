@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { from, map } from 'rxjs';
 import { BoletimOcorrencia } from 'src/boletim.entity';
 import { ValidatorsService } from 'src/shared/validators/validators.service';
 import { Repository } from 'typeorm';
@@ -37,18 +36,14 @@ export class BoletinsOcorrenciaService {
       if (!this.validatorsService.isDateValid(beforeDate)) {
         throw new Error('Invalid before date');
       }
-      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
-      beforeDate = beforeDate.split('/').reverse().join('-');
-      query += ` AND data_registro <= ${beforeDate}`;
+      query += ` AND data_registro <= '${beforeDate}'`;
     }
 
     if (afterDate && afterDate !== '') {
       if (!this.validatorsService.isDateValid(afterDate)) {
         throw new Error('Invalid after date');
       }
-      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
-      afterDate = afterDate.split('/').reverse().join('-');
-      query += ` AND data_registro >= ${afterDate}`;
+      query += ` AND data_registro >= '${afterDate}'`;
     }
 
     return this.boletinsRepository.query(query, [
@@ -80,18 +75,14 @@ export class BoletinsOcorrenciaService {
       if (!this.validatorsService.isDateValid(beforeDate)) {
         throw new Error('Invalid before date');
       }
-      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
-      beforeDate = beforeDate.split('/').reverse().join('-');
-      query += ` AND data_registro <= ${beforeDate}`;
+      query += ` AND data_registro <= '${beforeDate}'`;
     }
 
     if (afterDate && afterDate !== '') {
       if (!this.validatorsService.isDateValid(afterDate)) {
         throw new Error('Invalid after date');
       }
-      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
-      afterDate = afterDate.split('/').reverse().join('-');
-      query += ` AND data_registro >= ${afterDate}`;
+      query += ` AND data_registro >= '${afterDate}'`;
     }
 
     const result = (await this.boletinsRepository.query(query, [
@@ -134,18 +125,14 @@ export class BoletinsOcorrenciaService {
         throw new Error('Invalid before date');
       }
 
-      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
-      beforeDate = beforeDate.split('/').reverse().join('-');
-      query += ` AND data_registro <= ${beforeDate}`;
+      query += ` AND data_registro <= '${beforeDate}'`;
     }
 
     if (afterDate && afterDate !== '') {
       if (!this.validatorsService.isDateValid(afterDate)) {
         throw new Error('Invalid after date');
       }
-      // Date is in DD/MM/YYYY format, convert to YYYY-MM-DD
-      afterDate = afterDate.split('/').reverse().join('-');
-      query += ` AND data_registro >= ${afterDate}`;
+      query += ` AND data_registro >= '${afterDate}'`;
     }
 
     query += ` GROUP BY rubrica`;
@@ -163,5 +150,12 @@ export class BoletinsOcorrenciaService {
       .sort((a, b) => b.count - a.count);
 
     return formattedResult;
+  }
+
+  async getLastDate() {
+    const result = await this.boletinsRepository.query(
+      'SELECT MAX(data_registro) AS last_date FROM boletins_ocorrencia',
+    );
+    return result[0].last_date as string;
   }
 }

@@ -1,7 +1,6 @@
 <mat-card appearance="outlined">
   <mat-card-content>
     <form [formGroup]="dataForm">
-      <button mat-flat-button (click)="onSubmit()">Atualizar pesquisa</button>
       <h3>Raio</h3>
       <mat-button-toggle-group
         name="fontStyle"
@@ -59,6 +58,9 @@
       </mat-form-field>
       <br />
       <button mat-button (click)="cleanForm('date')">Limpar</button>
+      <br />
+      <br />
+      <button mat-flat-button (click)="onSubmit()">Atualizar pesquisa</button>
     </form>
     @if (rubricas | async; as rubricas) {
       <h3>Lista de ocorrências</h3>

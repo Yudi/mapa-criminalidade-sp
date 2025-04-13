@@ -34,11 +34,20 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import DataFormValues from '../../shared/dataForm.interface';
 import { HttpClient } from '@angular/common/http';
-import { distinct, filter, map, Observable, Subscription, take } from 'rxjs';
+import {
+  distinct,
+  filter,
+  map,
+  Observable,
+  Subscription,
+  take,
+  tap,
+} from 'rxjs';
 import { AsyncPipe, JsonPipe } from '@angular/common';
 import { BoletimOcorrencia } from '../../shared/schema.interface';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ObjectHandlingService } from '../../shared/object-handling.service';
+import { QueriesService } from '../../shared/queries.service';
 
 @Component({
   selector: 'app-card',
@@ -89,6 +98,7 @@ export class CardComponent implements OnChanges, OnInit {
   private rubricasSubscription: Subscription | null = null;
   private previousRubricas: { name: string; count: number }[] | null = null;
   private objectHandling = inject(ObjectHandlingService);
+  private queriesService = inject(QueriesService);
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['rubricas'] && this.rubricas) {
@@ -133,6 +143,23 @@ export class CardComponent implements OnChanges, OnInit {
         this.rubricasFormEvent.emit(this.rubricasForm.getRawValue());
       }
     });
+
+    this.queriesService
+      .getLastDate()
+      .pipe(
+        take(1),
+        tap((response) => {
+          if (response) {
+            this.dataForm.controls.beforeDate.setValue(response);
+
+            const date = new Date(response);
+            date.setMonth(date.getMonth() - 3);
+            const formattedDate = date.toISOString().split('T')[0];
+            this.dataForm.controls.afterDate.setValue(formattedDate);
+          }
+        }),
+      )
+      .subscribe();
   }
 
   cleanForm(sectionName: string) {

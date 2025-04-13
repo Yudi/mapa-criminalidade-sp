@@ -3,16 +3,39 @@ import { inject, Injectable } from '@angular/core';
 import { of, shareReplay, take, tap, Observable, catchError } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { BoletimOcorrencia } from './schema.interface';
+import { DateService } from './date.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class QueriesService {
   private http = inject(HttpClient);
-  private requestCache = new Map<string, Observable<any>>();
+  private dateService = inject(DateService);
 
-  checkCache(cacheKey: string) {
+  // Cache to store the results of HTTP requests
+  private requestCache = new Map<string, Observable<any>>();
+  private checkCache(cacheKey: string) {
     return this.requestCache.has(cacheKey);
+  }
+  ////
+
+  getLastDate() {
+    const request = this.http
+      .get<string>(environment.apiUrl + '/boletins-ocorrencia/last-date')
+      .pipe(
+        take(1),
+        tap((response) => {
+          if (response) {
+            this.requestCache.set('getLastDate', of(response));
+          }
+        }),
+        catchError(() => {
+          console.error('Error fetching last date');
+          return of(null);
+        }),
+      );
+
+    return request;
   }
 
   getAddressData(street: string, city: string, state: string) {
@@ -57,7 +80,10 @@ export class QueriesService {
     if (!lat || !lon || !radius) {
       return of(null);
     }
-    const cacheKey = `queryDatabase-${lat}-${lon}-${radius}-${before}-${after}`;
+    const formattedBefore = this.dateService.formatYYYYMMDD(before);
+    const formattedAfter = this.dateService.formatYYYYMMDD(after);
+
+    const cacheKey = `queryDatabase-${lat}-${lon}-${radius}-${formattedBefore}-${formattedAfter}`;
 
     if (this.checkCache(cacheKey)) {
       return this.requestCache.get(cacheKey)!;
@@ -66,7 +92,7 @@ export class QueriesService {
     const request = this.http
       .get<
         BoletimOcorrencia[]
-      >(environment.apiUrl + `/boletins-ocorrencia/query?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`)
+      >(environment.apiUrl + `/boletins-ocorrencia/query?lat=${lat}&lon=${lon}&radius=${radius}&before=${formattedBefore}&after=${formattedAfter}`)
       .pipe(take(1), shareReplay(1));
 
     this.requestCache.set(cacheKey, request);
@@ -84,7 +110,10 @@ export class QueriesService {
     if (!lat || !lon || !radius) {
       return of(null);
     }
-    const cacheKey = `listRubricasForPoint-${lat}-${lon}-${radius}-${before}-${after}`;
+    const formattedBefore = this.dateService.formatYYYYMMDD(before);
+    const formattedAfter = this.dateService.formatYYYYMMDD(after);
+
+    const cacheKey = `listRubricasForPoint-${lat}-${lon}-${radius}-${formattedBefore}-${formattedAfter}`;
 
     if (this.checkCache(cacheKey)) {
       return this.requestCache.get(cacheKey)!;
@@ -93,7 +122,7 @@ export class QueriesService {
     const request = this.http
       .get<
         ListRubricasForPointResponse[]
-      >(environment.apiUrl + `/boletins-ocorrencia/query-rubricas-for-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}`)
+      >(environment.apiUrl + `/boletins-ocorrencia/query-rubricas-for-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${formattedBefore}&after=${formattedAfter}`)
       .pipe(take(1), shareReplay(1));
     this.requestCache.set(cacheKey, request);
     return request;
@@ -114,7 +143,10 @@ export class QueriesService {
       return of(null);
     }
 
-    const cacheKey = `getBoletinsByRubricaForPoint-${lat}-${lon}-${radius}-${before}-${after}-${rubrica}`;
+    const formattedBefore = this.dateService.formatYYYYMMDD(before);
+    const formattedAfter = this.dateService.formatYYYYMMDD(after);
+
+    const cacheKey = `getBoletinsByRubricaForPoint-${lat}-${lon}-${radius}-${formattedBefore}-${formattedAfter}-${rubrica}`;
 
     if (this.checkCache(cacheKey)) {
       return this.requestCache.get(cacheKey)!;
@@ -123,7 +155,7 @@ export class QueriesService {
     const request = this.http
       .get<
         BoletimOcorrencia[]
-      >(environment.apiUrl + `/boletins-ocorrencia/query-rubrica-in-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${before}&after=${after}&rubrica=${rubrica}`)
+      >(environment.apiUrl + `/boletins-ocorrencia/query-rubrica-in-location?lat=${lat}&lon=${lon}&radius=${radius}&before=${formattedBefore}&after=${formattedAfter}&rubrica=${rubrica}`)
       .pipe(take(1), shareReplay(1));
 
     this.requestCache.set(cacheKey, request);
