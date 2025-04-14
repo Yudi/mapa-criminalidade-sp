@@ -27,4 +27,18 @@ export class PopupComponent {
       this.index--;
     }
   }
+
+  formatAddress(boletim: BoletimOcorrencia) {
+    const addressParts = [
+      boletim.logradouro,
+      boletim.numero_logradouro,
+      boletim.bairro,
+      boletim.cidade,
+    ];
+
+    const formattedAddress = addressParts
+      .filter((part) => part && part.trim() !== '')
+      .join(', ');
+    return formattedAddress ? formattedAddress : 'Endereço não disponível';
+  }
 }

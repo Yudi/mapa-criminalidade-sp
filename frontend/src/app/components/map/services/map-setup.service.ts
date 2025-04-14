@@ -62,8 +62,24 @@ export class MapSetupService {
       map.forEachFeatureAtPixel(
         event.pixel,
         (feature) => {
-          const clustered = feature.get('features') || [feature];
-          const ids = clustered.map((f: any) => f.get('id'));
+          const features = feature.get('features') || [feature]; // cluster or single
+
+          // If it's a cluster (more than 1 feature) and zoom is not max, zoom in
+          const view = map.getView();
+          const currentZoom = view.getZoom() ?? 0;
+          const maxZoom = view.getMaxZoom() ?? 19;
+
+          if (features.length > 1 && currentZoom < maxZoom) {
+            view.animate({
+              center: event.coordinate,
+              zoom: currentZoom + 2 > maxZoom ? maxZoom : currentZoom + 2,
+              duration: 300,
+            });
+            return;
+          }
+
+          // If it's a single feature or already max zoom, show popup(s)
+          const ids = features.map((f: any) => f.get('id'));
 
           if (ids.length === 1) {
             this.queriesService
@@ -77,18 +93,16 @@ export class MapSetupService {
                 popupComponentRef.changeDetectorRef.detectChanges();
               });
           } else {
-            // Make one request per ID
             forkJoin<BoletimOcorrencia[]>(
               ids.map((id: number) =>
                 this.queriesService.getBoletimById(id).pipe(take(1)),
               ),
             )
-              .pipe(
-                rxjsMap((boletins) => boletins.filter(Boolean)), // remove null/undefined
-              )
+              .pipe(rxjsMap((boletins) => boletins.filter(Boolean)))
               .subscribe((boletins) => {
                 if (!boletins.length) return;
                 popupComponentRef.instance.boletins = boletins;
+
                 popupOverlay.setPosition(event.coordinate);
                 popupElement.style.display = 'block';
                 popupComponentRef.changeDetectorRef.detectChanges();
