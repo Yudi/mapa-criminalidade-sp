@@ -6,7 +6,7 @@ import { Injectable } from '@angular/core';
 export class MapMarkersService {
   markerList = [
     {
-      keywords: ['consumo pessoal'],
+      keywords: ['consumo pessoal', 'ilícito extrapenal (tema 506 STF)'],
       icon: 'uso_drogas.png',
     },
     {

@@ -280,14 +280,12 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngAfterViewInit() {
-    setTimeout(() => {
-      this.map = this.mapSetupService.setupMap(
-        this.map,
-        this.vectorLayer,
-        this.document,
-        this.popupContainer,
-      );
-    }, 500);
+    this.map = this.mapSetupService.setupMap(
+      this.map,
+      this.vectorLayer,
+      this.document,
+      this.popupContainer,
+    );
   }
 
   ngOnDestroy() {
