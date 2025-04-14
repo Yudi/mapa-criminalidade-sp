@@ -15,6 +15,17 @@
       {{ boletim.hora_ocorrencia_bo }}
     </p>
     <p><strong>Data registro:</strong> {{ boletim.data_registro }}</p>
-    <p (click)="close.emit()">Fechar</p>
+
+    @if (boletins.length > 1) {
+      <div class="nav-buttons">
+        <button (click)="prev()" [disabled]="index === 0">Anterior</button>
+        <span>{{ index + 1 }} / {{ boletins.length }}</span>
+        <button (click)="next()" [disabled]="index === boletins.length - 1">
+          Próximo
+        </button>
+      </div>
+    }
+
+    <p class="close" (click)="close.emit()">Fechar</p>
   </div>
 }

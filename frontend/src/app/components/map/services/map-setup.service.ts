@@ -7,8 +7,9 @@ import { fromLonLat } from 'ol/proj';
 import { OSM } from 'ol/source';
 import View from 'ol/View';
 import { QueriesService } from '../../../shared/queries.service';
-import { take, tap } from 'rxjs';
+import { forkJoin, take, tap, map as rxjsMap } from 'rxjs';
 import { PopupComponent } from '../components/popup/popup.component';
+import { BoletimOcorrencia } from '../../../shared/schema.interface';
 
 @Injectable({
   providedIn: 'root',
@@ -61,26 +62,38 @@ export class MapSetupService {
       map.forEachFeatureAtPixel(
         event.pixel,
         (feature) => {
-          const clusteredFeatures = feature.get('features');
+          const clustered = feature.get('features') || [feature];
+          const ids = clustered.map((f: any) => f.get('id'));
 
-          if (clusteredFeatures?.length > 1) {
-            // Optional: expand or zoom
-            return;
+          if (ids.length === 1) {
+            this.queriesService
+              .getBoletimById(ids[0])
+              .pipe(take(1))
+              .subscribe((boletim) => {
+                if (!boletim) return;
+                popupComponentRef.instance.boletins = [boletim];
+                popupOverlay.setPosition(event.coordinate);
+                popupElement.style.display = 'block';
+                popupComponentRef.changeDetectorRef.detectChanges();
+              });
+          } else {
+            // Make one request per ID
+            forkJoin<BoletimOcorrencia[]>(
+              ids.map((id: number) =>
+                this.queriesService.getBoletimById(id).pipe(take(1)),
+              ),
+            )
+              .pipe(
+                rxjsMap((boletins) => boletins.filter(Boolean)), // remove null/undefined
+              )
+              .subscribe((boletins) => {
+                if (!boletins.length) return;
+                popupComponentRef.instance.boletins = boletins;
+                popupOverlay.setPosition(event.coordinate);
+                popupElement.style.display = 'block';
+                popupComponentRef.changeDetectorRef.detectChanges();
+              });
           }
-
-          const originalFeature = clusteredFeatures?.[0];
-          if (!originalFeature) return;
-
-          this.queriesService
-            .getBoletimById(originalFeature.get('id'))
-            .pipe(take(1))
-            .subscribe((boletim) => {
-              if (!boletim) return;
-              popupComponentRef.instance.boletim = boletim;
-              popupOverlay.setPosition(event.coordinate);
-              popupElement.style.display = 'block';
-              popupComponentRef.changeDetectorRef.detectChanges();
-            });
         },
         { hitTolerance: 2 },
       );
