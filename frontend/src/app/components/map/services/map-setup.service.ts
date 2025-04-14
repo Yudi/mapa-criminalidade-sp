@@ -61,17 +61,23 @@ export class MapSetupService {
       map.forEachFeatureAtPixel(
         event.pixel,
         (feature) => {
+          const clusteredFeatures = feature.get('features');
+
+          if (clusteredFeatures?.length > 1) {
+            // Optional: expand or zoom
+            return;
+          }
+
+          const originalFeature = clusteredFeatures?.[0];
+          if (!originalFeature) return;
+
           this.queriesService
-            .getBoletimById(feature.get('id'))
+            .getBoletimById(originalFeature.get('id'))
             .pipe(take(1))
             .subscribe((boletim) => {
-              console.debug('Boletim:', boletim);
-              if (!boletim) {
-                return;
-              }
+              if (!boletim) return;
               popupComponentRef.instance.boletim = boletim;
               popupOverlay.setPosition(event.coordinate);
-              console.log('Overlay Position:', event.coordinate);
               popupElement.style.display = 'block';
               popupComponentRef.changeDetectorRef.detectChanges();
             });

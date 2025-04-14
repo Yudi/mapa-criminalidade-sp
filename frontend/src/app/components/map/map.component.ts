@@ -11,15 +11,15 @@ import {
   input,
 } from '@angular/core';
 import Map from 'ol/Map';
-
 import { fromLonLat } from 'ol/proj';
-
 import Feature from 'ol/Feature';
 import { Point } from 'ol/geom';
 import VectorSource from 'ol/source/Vector';
+import Cluster from 'ol/source/Cluster';
 import VectorLayer from 'ol/layer/Vector';
 import Style from 'ol/style/Style';
 import Icon from 'ol/style/Icon';
+import { Circle as CircleStyle, Fill, Stroke, Text } from 'ol/style';
 import {
   catchError,
   from,
@@ -63,13 +63,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     after: string | null;
   }>();
 
-  rubricasFormValues = input.required<
-    | {
-        [key: string]: boolean;
-      }
-    | undefined
-  >();
-
+  rubricasFormValues = input.required<{ [key: string]: boolean } | undefined>();
   showIndeterminateProgressBar = input.required<WritableSignal<boolean>>();
   progressBarPercentage = input.required<WritableSignal<number>>();
 
@@ -79,23 +73,20 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
   private queriesService = inject(QueriesService);
   private mapSetupService = inject(MapSetupService);
   private mapToolsService = inject(MapToolsService);
+  private document = inject(DOCUMENT);
 
   private formChange$ = new Subject<void>();
   private destroy$ = new Subject<void>();
-
-  private document = inject(DOCUMENT);
 
   map: Map | undefined | null;
   vectorLayer: VectorLayer = new VectorLayer({
     source: new VectorSource({}),
   });
-  centerPin: Feature | undefined;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['addressCenter']) {
       const prevValue = changes['addressCenter'].previousValue;
       const currentValue = changes['addressCenter'].currentValue;
-      // Perform a deep comparison if it's an object
       if (
         !this.objectHandlingService.areObjectsEqual(prevValue, currentValue)
       ) {
@@ -103,10 +94,8 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       }
     }
 
-    if (changes['rubricasFormValues']) {
-      if (this.rubricasFormValues()) {
-        this.onRubricasFormChange(this.rubricasFormValues()!);
-      }
+    if (changes['rubricasFormValues'] && this.rubricasFormValues()) {
+      this.onRubricasFormChange(this.rubricasFormValues()!);
     }
   }
 
@@ -117,26 +106,22 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     this.formChange$.next();
-
     this.progressBarPercentage().set(0);
-    const values = rubricasFormValues;
-    const selectedRubricas = Object.keys(values).filter(
-      (rubrica) => values[rubrica],
+
+    const selectedRubricas = Object.keys(rubricasFormValues).filter(
+      (rubrica) => rubricasFormValues[rubrica],
     );
 
     const totalRubricas = selectedRubricas.length;
     const mapLayers = this.map.getLayers();
 
-    // Remove unchecked rubricas
-    Object.keys(values).forEach((rubrica) => {
-      if (!values[rubrica]) {
+    Object.keys(rubricasFormValues).forEach((rubrica) => {
+      if (!rubricasFormValues[rubrica]) {
         this.removeRubricaLayerFeatures(rubrica, mapLayers);
       }
     });
 
-    if (totalRubricas === 0) {
-      return;
-    }
+    if (totalRubricas === 0) return;
 
     const baseRubricaProgress = 100 / totalRubricas;
 
@@ -144,8 +129,8 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       .pipe(
         takeUntil(this.formChange$),
         takeUntil(this.destroy$),
-        mergeMap((rubrica) => {
-          return this.queriesService
+        mergeMap((rubrica) =>
+          this.queriesService
             .getBoletinsByRubricaForPoint(
               this.addressCenter().lat!,
               this.addressCenter().lon!,
@@ -154,11 +139,8 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
               this.addressCenter().after!,
               rubrica,
             )
-            .pipe(
-              takeUntil(this.formChange$),
-              map((boletins: BoletimOcorrencia[]) => ({ rubrica, boletins })),
-            );
-        }),
+            .pipe(map((boletins) => ({ rubrica, boletins }))),
+        ),
       )
       .subscribe({
         next: ({ rubrica, boletins }) => {
@@ -178,13 +160,10 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     rubrica: string,
     mapLayers: Collection<BaseLayer> | undefined,
   ) {
-    if (!mapLayers) {
-      return;
-    }
-
-    mapLayers.forEach((layer) => {
+    mapLayers?.forEach((layer) => {
       if (layer instanceof VectorLayer && layer.get('rubrica') === rubrica) {
         layer.getSource()?.clear();
+        this.map?.removeLayer(layer);
       }
     });
   }
@@ -194,45 +173,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     responseData: BoletimOcorrencia[] | null,
     baseRubricaProgress: number,
   ) {
-    if (!this.map) {
-      console.warn('Map not initialized yet!');
-      return;
-    }
-
-    if (!responseData) {
-      return;
-    }
-
-    const layersByType: { [key: string]: VectorLayer } = {};
-
-    // Check if the layer already exists
-    this.map.getLayers().forEach((layer) => {
-      if (layer instanceof VectorLayer) {
-        layersByType[layer.get('rubrica')] = layer;
-      }
-    });
-
-    if (!layersByType[rubrica]) {
-      const vectorSource = new VectorSource();
-      layersByType[rubrica] = new VectorLayer({
-        source: vectorSource,
-        style: new Style({
-          image: new Icon({
-            anchor: [0.5, 1],
-            scale: 0.2,
-            anchorXUnits: 'fraction',
-            anchorYUnits: 'fraction',
-            src: `${environment.baseUrl}/${this.markersService.markerChooser(rubrica)}`,
-          }),
-        }),
-      });
-
-      // Set the rubrica as a property of the layer
-      layersByType[rubrica].set('rubrica', rubrica);
-
-      this.map.addLayer(layersByType[rubrica]);
-    } else {
-    }
+    if (!this.map || !responseData) return;
 
     const validBoletins = responseData.filter(
       (bo) => bo && bo.rubrica && bo.longitude !== null && bo.latitude !== null,
@@ -252,13 +193,62 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       const feature = new Feature({
         geometry: new Point(fromLonLat([bo.longitude!, bo.latitude!])),
       });
-
       feature.set('id', bo.id);
-
       return feature;
     });
 
-    layersByType[rubrica].getSource()?.addFeatures(features);
+    const vectorSource = new VectorSource({ features });
+
+    const clusterSource = new Cluster({
+      distance: 40,
+      source: vectorSource,
+    });
+
+    const clusterLayer = new VectorLayer({
+      source: clusterSource,
+      style: (feature) => {
+        const features = feature.get('features');
+        const size = features?.length || 0;
+
+        // Define color based on size
+        let fillColor = '#E2E7BC'; // default (least)
+        if (size > 50) fillColor = '#8C143E';
+        else if (size > 35) fillColor = '#B9534D';
+        else if (size > 20) fillColor = '#D88558';
+        else if (size > 10) fillColor = '#EEAA65';
+        else if (size > 5) fillColor = '#F9C874';
+        else if (size > 2) fillColor = '#F2DE80';
+
+        if (size === 1) {
+          return new Style({
+            image: new Icon({
+              anchor: [0.5, 1],
+              scale: 0.2,
+              anchorXUnits: 'fraction',
+              anchorYUnits: 'fraction',
+              src: `${environment.baseUrl}/${this.markersService.markerChooser(rubrica)}`,
+            }),
+          });
+        } else {
+          return new Style({
+            image: new CircleStyle({
+              radius: 16,
+              fill: new Fill({ color: fillColor }),
+              stroke: new Stroke({ color: '#fff', width: 2 }),
+            }),
+            text: new Text({
+              text: size.toString(),
+              fill: new Fill({ color: '#000' }),
+              stroke: new Stroke({ color: '#fff', width: 3 }),
+              font: '12px sans-serif',
+            }),
+          });
+        }
+      },
+    });
+
+    clusterLayer.set('rubrica', rubrica);
+    this.map.addLayer(clusterLayer);
   }
 
   handleFormSubmit() {
