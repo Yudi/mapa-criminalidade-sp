@@ -38,11 +38,5 @@ export class MapToolsService {
     }
 
     vectorLayer.getSource()?.clear(); // Clear previous features
-
-    // this.map?.getLayers().forEach((layer) => {
-    //   if (layer instanceof VectorLayer) {
-    //     layer.getSource()?.clear(); // Clear all features from the layer
-    //   }
-    // });
   }
 }
