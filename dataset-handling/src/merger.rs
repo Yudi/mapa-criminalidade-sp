@@ -14,7 +14,7 @@ pub fn merge_csv_files(input_paths: Vec<&Path>, output_path: &Path) -> Result<()
     // Read headers from first file to use as reference
     let reference_headers: Vec<String> = headers::get_headers(input_paths[0])?;
 
-    // Verify all files have same headers
+    // Verify if files have the same headers
     headers::verify_matching_headers(&input_paths[1..])?;
 
     // Create output file and write headers
