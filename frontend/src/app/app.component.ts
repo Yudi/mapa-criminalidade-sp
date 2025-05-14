@@ -76,6 +76,11 @@ export class AppComponent {
         shareReplay(1), // Share the result for reuse without re-triggering the request
         distinctUntilChanged(), // Only emit if the address changes
         tap((addressResult) => {
+          // No address found
+          if (!addressResult || addressResult.length === 0) {
+            this.showIndeterminateProgressBar.set(false);
+            return;
+          }
           this.addressCenter = {
             lon: addressResult[0].lon,
             lat: addressResult[0].lat,

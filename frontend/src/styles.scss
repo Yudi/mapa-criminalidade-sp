@@ -4,6 +4,8 @@
 
 html {
   color-scheme: light dark;
+  font-family: Roboto, "Helvetica Neue", Helvetica, "Segoe UI", system-ui,
+    sans-serif;
   @include mat.theme(
     (
       color: mat.$azure-palette,
@@ -11,8 +13,6 @@ html {
       density: 0,
     )
   );
-  font-family: Roboto, "Helvetica Neue", Helvetica, "Segoe UI", system-ui,
-    sans-serif;
 }
 
 html,

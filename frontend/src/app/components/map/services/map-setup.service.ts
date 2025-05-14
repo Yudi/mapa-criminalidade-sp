@@ -87,6 +87,7 @@ export class MapSetupService {
               .pipe(take(1))
               .subscribe((boletim) => {
                 if (!boletim) return;
+                popupComponentRef.instance.index = 0;
                 popupComponentRef.instance.boletins = [boletim];
                 popupOverlay.setPosition(event.coordinate);
                 popupElement.style.display = 'block';

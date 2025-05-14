@@ -13,7 +13,7 @@ import {
 import Map from 'ol/Map';
 import { fromLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
-import { Point } from 'ol/geom';
+import { Point as OlPoint, Circle as OlCircle } from 'ol/geom';
 import VectorSource from 'ol/source/Vector';
 import Cluster from 'ol/source/Cluster';
 import VectorLayer from 'ol/layer/Vector';
@@ -81,6 +81,10 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
   map: Map | undefined | null;
   vectorLayer: VectorLayer = new VectorLayer({
     source: new VectorSource({}),
+  });
+
+  radiusLayer = new VectorLayer({
+    source: new VectorSource(),
   });
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -191,7 +195,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
         this.progressBarPercentage(),
       );
       const feature = new Feature({
-        geometry: new Point(fromLonLat([bo.longitude!, bo.latitude!])),
+        geometry: new OlPoint(fromLonLat([bo.longitude!, bo.latitude!])),
       });
       feature.set('id', bo.id);
       return feature;
@@ -264,6 +268,33 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     this.mapToolsService.clearFeatures(this.map, this.vectorLayer);
 
+    // Clear old radius
+    this.radiusLayer.getSource()?.clear();
+
+    const center = fromLonLat([
+      this.addressCenter().lon!,
+      this.addressCenter().lat!,
+    ]);
+
+    const radiusInMeters = this.addressCenter().radius!;
+
+    // Create circle geometry in projected units (meters)
+    const circleFeature = new Feature({
+      geometry: new OlCircle(center, radiusInMeters),
+    });
+
+    circleFeature.setStyle(
+      new Style({
+        stroke: new Stroke({
+          color: 'rgba(0, 0, 255, 0.5)',
+          width: 2,
+        }),
+      }),
+    );
+
+    // Add to radius layer
+    this.radiusLayer.getSource()?.addFeature(circleFeature);
+
     if (this.rubricasFormValues()) {
       this.onRubricasFormChange(this.rubricasFormValues()!);
     }
@@ -276,6 +307,8 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.document,
       this.popupContainer,
     );
+
+    this.map.addLayer(this.radiusLayer);
   }
 
   ngOnDestroy() {
