@@ -13,11 +13,10 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "baseUrl": ".",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@mapa-criminalidade/shared-types": ["shared-types/src/index.ts"]
+      "@mapa-criminalidade/shared-types": ["./shared-types/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
