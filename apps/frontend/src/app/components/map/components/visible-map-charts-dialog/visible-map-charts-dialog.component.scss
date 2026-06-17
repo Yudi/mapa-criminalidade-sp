@@ -1,0 +1,143 @@
+:host {
+  display: block;
+}
+
+.dialog-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem 1rem;
+}
+
+.dialog-header__copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+h2[mat-dialog-title] {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-headline-small);
+  margin: 0;
+  padding: 0;
+}
+
+.dialog-header p {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+  max-width: 44rem;
+}
+
+mat-dialog-content {
+  background: var(--mat-sys-surface);
+  max-height: min(76dvh, 52rem);
+  min-width: min(72rem, 92vw);
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+.summary-strip {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-end: 1rem;
+}
+
+.summary-strip__item {
+  align-items: center;
+  background: var(--mat-sys-surface-container);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.875rem;
+}
+
+.summary-strip__item mat-icon {
+  color: var(--mat-sys-primary);
+  flex: 0 0 auto;
+}
+
+.summary-strip__item span {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.summary-strip__item strong {
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-title-large);
+}
+
+.summary-strip__item small {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  overflow-wrap: anywhere;
+}
+
+.scope-note {
+  align-items: center;
+  background: color-mix(
+    in srgb,
+    var(--mat-sys-tertiary-container) 58%,
+    transparent
+  );
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  color: var(--mat-sys-on-surface);
+  display: flex;
+  gap: 0.625rem;
+  margin-block-end: 1rem;
+  padding: 0.75rem 0.875rem;
+}
+
+.scope-note mat-icon {
+  color: var(--mat-sys-tertiary);
+}
+
+.charts-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.state-panel {
+  align-items: center;
+  color: var(--mat-sys-on-surface-variant);
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  min-height: 18rem;
+  text-align: center;
+}
+
+.state-panel mat-icon {
+  color: var(--mat-sys-primary);
+  font-size: 2.5rem;
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
+.state-panel--error mat-icon {
+  color: var(--mat-sys-error);
+}
+
+mat-dialog-actions {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  padding: 0.75rem 1.5rem;
+}
+
+@media (max-width: 840px) {
+  mat-dialog-content {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .summary-strip,
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}

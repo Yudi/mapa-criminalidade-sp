@@ -1,0 +1,22 @@
+<mat-toolbar>
+  <span>Mapa de criminalidade de São Paulo</span>
+  <span class="toolbar-spacer"></span>
+  <button
+    mat-icon-button
+    (click)="displayInfoModal()"
+    aria-label="Informações do projeto"
+  >
+    <mat-icon>info</mat-icon>
+  </button>
+  <br />
+</mat-toolbar>
+
+<mat-progress-bar
+  mode="buffer"
+  [class.visibility-hidden]="!showIndeterminateProgressBar()"
+></mat-progress-bar>
+<mat-progress-bar
+  mode="determinate"
+  [value]="progressBarPercentage()"
+  [class.visibility-hidden]="progressBarPercentage() === -1"
+></mat-progress-bar>

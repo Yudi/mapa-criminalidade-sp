@@ -1,0 +1,235 @@
+.dialog-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.dialog-heading {
+  color: var(--mat-sys-on-surface);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.bo-number {
+  font-size: 14px;
+  color: var(--mat-sys-on-surface-variant);
+  font-weight: 500;
+  background: var(--mat-sys-surface-variant);
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 16px;
+
+  p {
+    color: var(--mat-sys-on-surface-variant);
+    margin: 0;
+  }
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: var(--mat-sys-error);
+  }
+}
+
+.overview-section {
+  padding: 16px 0;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+
+  &.full-width {
+    grid-column: 1 / -1;
+  }
+
+  mat-icon {
+    color: var(--mat-sys-primary);
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    font-size: 24px;
+    line-height: 24px;
+    margin-top: 2px;
+    overflow: visible;
+  }
+
+  .info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    .label {
+      font-size: 11px;
+      color: var(--mat-sys-on-surface-variant);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+
+    .value {
+      font-size: 14px;
+      color: var(--mat-sys-on-surface);
+      line-height: 1.4;
+    }
+  }
+}
+
+.rubricas-section {
+  margin-top: 20px;
+
+  .section-label {
+    font-size: 12px;
+    color: var(--mat-sys-on-surface-variant);
+    font-weight: 500;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  mat-chip-set {
+    mat-chip {
+      font-size: 12px;
+    }
+  }
+}
+
+.records-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px 0 0;
+}
+
+.record-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.record-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mat-sys-on-surface);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  margin: 0;
+
+  mat-icon {
+    color: var(--mat-sys-primary);
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    font-size: 24px;
+    line-height: 24px;
+    overflow: visible;
+  }
+}
+
+.record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.record-card {
+  mat-card-header {
+    mat-icon[mat-card-avatar] {
+      background: var(--mat-sys-primary-container);
+      color: var(--mat-sys-on-primary-container);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      line-height: 40px;
+      overflow: visible;
+    }
+  }
+
+  mat-card-content {
+    padding-top: 12px;
+  }
+}
+
+.record-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+
+  .detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    &.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .label {
+      font-size: 11px;
+      color: var(--mat-sys-on-surface-variant);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .value {
+      font-size: 13px;
+      color: var(--mat-sys-on-surface);
+
+      &.plate {
+        font-family: 'Roboto Mono', monospace;
+        font-weight: 600;
+        background: var(--mat-sys-surface-variant);
+        padding: 4px 8px;
+        border-radius: 4px;
+        display: inline-block;
+      }
+    }
+  }
+}
+
+:host {
+  display: block;
+
+  ::ng-deep .mat-mdc-dialog-container {
+    max-width: 90vw;
+    max-height: 90vh;
+  }
+}
+
+mat-dialog-content {
+  min-width: 500px;
+  max-width: 700px;
+
+  @media (max-width: 600px) {
+    min-width: unset;
+    width: 100%;
+  }
+}

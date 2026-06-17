@@ -1,0 +1,27 @@
+listen_addresses: '0.0.0.0:3000'
+route_prefix: /api/tiles
+base_path: /api/tiles
+preferred_encoding: brotli
+
+cache:
+  size_mb: 64
+  tile_size_mb: 64
+  minzoom: 10
+  maxzoom: 22
+  tile_expiry: 24h
+
+cors:
+  origin:
+    - '*'
+  max_age: 3600
+
+postgres:
+  connection_string: 'postgresql://postgres:postgres@db:5432/postgres?options=-c%20statement_timeout%3D30000%20-c%20plan_cache_mode%3Dforce_custom_plan%20-c%20work_mem%3D32MB'
+  default_srid: 4326
+  pool_size: 2
+  auto_bounds: skip
+  auto_publish: false
+  functions:
+    occurrences:
+      schema: public
+      function: occurrences

@@ -1,0 +1,69 @@
+<header class="dialog-header">
+  <div class="dialog-header__copy">
+    <h2 mat-dialog-title>Gráficos do recorte atual</h2>
+    <p>
+      Os gráficos respeitam a área exibida, o zoom e todos os filtros ativos no
+      mapa.
+    </p>
+  </div>
+
+  <button
+    mat-icon-button
+    type="button"
+    (click)="close()"
+    aria-label="Fechar gráficos"
+  >
+    <mat-icon>close</mat-icon>
+  </button>
+</header>
+
+<mat-dialog-content>
+  @if (loading()) {
+  <div class="state-panel">
+    <mat-spinner diameter="44"></mat-spinner>
+    <span>Preparando gráficos...</span>
+  </div>
+  } @else if (error()) {
+  <div class="state-panel state-panel--error">
+    <mat-icon>error</mat-icon>
+    <span>{{ error() }}</span>
+  </div>
+  } @else if (charts(); as chartData) {
+  <section class="summary-strip" aria-label="Resumo dos dados visíveis">
+    @for (stat of titleStats(); track stat.label) {
+    <div class="summary-strip__item">
+      <mat-icon>{{ stat.icon }}</mat-icon>
+      <span>
+        <strong>{{ stat.value }}</strong>
+        <small>{{ stat.label }}</small>
+      </span>
+    </div>
+    }
+  </section>
+
+  <section class="scope-note">
+    <mat-icon>filter_alt</mat-icon>
+    <span>
+      @if (hasActiveFilters()) { Recorte com filtros ativos e limites atuais do
+      mapa. } @else { Recorte limitado somente pela área atualmente visível no
+      mapa. }
+    </span>
+  </section>
+
+  @if (chartData.totalFeatures > 0 && chartCards().length > 0) {
+  <section class="charts-grid" aria-label="Gráficos do mapa">
+    @for (card of chartCards(); track card.title) {
+    <app-chart-card [config]="card"></app-chart-card>
+    }
+  </section>
+  } @else {
+  <div class="state-panel">
+    <mat-icon>travel_explore</mat-icon>
+    <span>Não há dados visíveis no mapa para este recorte.</span>
+  </div>
+  } }
+</mat-dialog-content>
+
+<!-- <mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Fechar</button>
+</mat-dialog-actions> -->

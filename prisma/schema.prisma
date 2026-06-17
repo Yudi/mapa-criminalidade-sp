@@ -1,0 +1,122 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../apps/backend/src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model FileMetadata {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  category        String
+  year            Int
+  file_url        String
+  file_hash       String
+  file_size       BigInt?
+  last_downloaded DateTime  @default(now()) @db.Timestamptz(6)
+  last_imported   DateTime? @db.Timestamptz(6)
+  record_count    Int       @default(0)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([category, year])
+  @@index([category, year], map: "idx_file_metadata_category_year")
+  @@index([file_hash], map: "idx_file_metadata_hash")
+  @@map("file_metadata")
+}
+
+model ImlFileMetadata {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  category        String
+  year            Int
+  month           Int
+  file_url        String
+  file_hash       String
+  file_size       BigInt?
+  last_downloaded DateTime  @default(now()) @db.Timestamptz(6)
+  last_imported   DateTime? @db.Timestamptz(6)
+  record_count    Int       @default(0)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([category, year, month])
+  @@index([category, year], map: "idx_iml_file_metadata_category_year")
+  @@index([file_hash], map: "idx_iml_file_metadata_hash")
+  @@map("iml_file_metadata")
+}
+
+model DynamicTableMetadata {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  table_name        String   @unique
+  schema_name       String   @default("raw")
+  columns_json      Json?    @db.JsonB
+  needs_geom_update Boolean  @default(true)
+  created_at        DateTime @default(now()) @db.Timestamp(6)
+  updated_at        DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@map("dynamic_table_metadata")
+}
+
+model MapFeaturesDateRange {
+  id                 Int       @id @default(1)
+  earliest_date      DateTime? @db.Date
+  latest_date        DateTime? @db.Date
+  default_after_date DateTime? @db.Date
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@map("map_features_date_range")
+}
+
+model MapFeature {
+  id                  String                               @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  num_bo              String
+  ano_bo              Int
+  delegacia           String?
+  latitude            Decimal                              @db.Decimal(10, 6)
+  longitude           Decimal                              @db.Decimal(10, 6)
+  location_hash       String
+  geom                Unsupported("geometry(Point, 4326)")
+  geom_3857           Unsupported("geometry(Point, 3857)")?
+  category            String
+  rubrica_for_styling String
+  data_ocorrencia     DateTime?                            @db.Date
+  source_tables       String[]                             @default([])
+  feature_data        Json                                 @default("{}") @db.JsonB
+  periodo_normalized  String?
+  hora_ocorrencia     Int?
+  all_rubricas        String[]                             @default([])
+  search_categories   String[]                             @ignore
+  total_records       Int                                  @default(0)
+  created_at          DateTime                             @default(now()) @db.Timestamp(6)
+  updated_at          DateTime                             @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@index([geom], type: Gist, map: "idx_map_features_geom")
+  @@index([data_ocorrencia], map: "idx_map_features_date")
+  @@index([category], map: "idx_map_features_category")
+  @@index([data_ocorrencia, category], map: "idx_map_features_date_category")
+  @@index([periodo_normalized], map: "idx_map_features_period")
+  @@index([hora_ocorrencia], map: "idx_map_features_hour")
+  @@index([data_ocorrencia, periodo_normalized], map: "idx_map_features_date_period")
+  @@index([data_ocorrencia, hora_ocorrencia], map: "idx_map_features_date_hour")
+  @@index([source_tables], type: Gin, map: "idx_map_features_source_tables_gin")
+  @@index([ano_bo], map: "idx_map_features_ano")
+  @@index([delegacia], map: "idx_map_features_delegacia")
+  @@index([num_bo, ano_bo, delegacia], map: "idx_map_features_num_bo_delegacia")
+  @@map("map_features")
+}
+
+model MapFeaturesEtlStatus {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  source_table   String    @unique
+  last_etl_at    DateTime? @db.Timestamp(6)
+  rows_processed Int       @default(0)
+  status         String    @default("pending")
+  error_message  String?
+  created_at     DateTime  @default(now()) @db.Timestamp(6)
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@map("map_features_etl_status")
+}

@@ -1,9 +1,0 @@
-[package]
-name = "xlsx_to_csv"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-calamine = "0.20"
-csv = "1.1"
-chrono = "0.4"

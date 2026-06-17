@@ -1,0 +1,20 @@
+<section class="chart-card">
+  <header class="chart-card__header">
+    <span class="chart-card__icon" aria-hidden="true">
+      <mat-icon>{{ config().icon }}</mat-icon>
+    </span>
+    <span class="chart-card__title-group">
+      <span class="chart-card__title">{{ config().title }}</span>
+      <span class="chart-card__subtitle">{{ config().subtitle }}</span>
+    </span>
+  </header>
+
+  @if (hasData()) {
+  <div #chartHost class="chart-card__chart"></div>
+  } @else {
+  <div class="chart-card__empty">
+    <mat-icon>bar_chart_off</mat-icon>
+    <span>{{ config().emptyText ?? 'Sem dados para este recorte' }}</span>
+  </div>
+  }
+</section>

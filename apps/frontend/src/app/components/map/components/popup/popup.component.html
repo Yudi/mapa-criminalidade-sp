@@ -1,0 +1,99 @@
+@if (currentGroup(); as group) {
+<div class="popup">
+  <button class="close-btn" (click)="closed.emit()" aria-label="Fechar">
+    <span class="material-symbols-outlined" aria-hidden="true">close</span>
+  </button>
+  <div class="popup-header">
+    <span class="category-badge">{{ group.primaryCategory }}</span>
+    <span class="num-bo">BO {{ group.numBo }}/{{ group.anoBo }}</span>
+  </div>
+
+  @if (currentOccurrence(); as occurrence) {
+  <div class="popup-content">
+    @if (occurrence.naturezaApurada) {
+    <h3>{{ occurrence.naturezaApurada }}</h3>
+    }
+    <div class="info-section">
+      <div class="info-item">
+        <span class="info-icon material-symbols-outlined" aria-hidden="true"
+          >location_on</span
+        >
+        <span class="info-text">{{ formatAddress(occurrence) }}</span>
+      </div>
+
+      @if (occurrence.localTipo) {
+      <div class="info-item">
+        <span class="info-icon material-symbols-outlined" aria-hidden="true"
+          >apartment</span
+        >
+        <span class="info-text">{{ occurrence.localTipo }}</span>
+      </div>
+      }
+    </div>
+    <div class="info-section date-section">
+      <div class="info-item">
+        <span class="info-icon material-symbols-outlined" aria-hidden="true"
+          >calendar_month</span
+        >
+        <span class="info-label">Ocorrência:</span>
+        <span class="info-text"
+          >{{ formatDate(occurrence.dataOcorrencia) }}
+          {{ formatTime(occurrence.horaOcorrencia) }}</span
+        >
+      </div>
+
+      @if (occurrence.dataRegistro) {
+      <div class="info-item">
+        <span class="info-icon material-symbols-outlined" aria-hidden="true"
+          >edit_note</span
+        >
+        <span class="info-label">Registro:</span>
+        <span class="info-text">{{ formatDate(occurrence.dataRegistro) }}</span>
+      </div>
+      }
+    </div>
+    @if (occurrence.conduta) {
+    <div class="info-section">
+      <div class="info-item">
+        <span class="info-icon material-symbols-outlined" aria-hidden="true"
+          >gavel</span
+        >
+        <span class="info-text">{{ occurrence.conduta }}</span>
+      </div>
+    </div>
+    }
+  </div>
+  @if (totalOccurrencesInGroup() > 1) {
+  <div class="nav-buttons occurrence-nav">
+    <span class="nav-label">Registro</span>
+    <button (click)="prevOccurrence()" [disabled]="occurrenceIndex() === 0">
+      ◂
+    </button>
+    <span class="nav-counter"
+      >{{ occurrenceIndex() + 1 }} / {{ totalOccurrencesInGroup() }}</span
+    >
+    <button
+      (click)="nextOccurrence()"
+      [disabled]="occurrenceIndex() === totalOccurrencesInGroup() - 1"
+    >
+      ▸
+    </button>
+  </div>
+  } }
+  @if (totalGroups() > 1) {
+  <div class="nav-buttons group-nav">
+    <span class="nav-label">Boletim</span>
+    <button (click)="prevGroup()" [disabled]="groupIndex() === 0">◂</button>
+    <span class="nav-counter"
+      >{{ groupIndex() + 1 }} / {{ totalGroups() }}</span
+    >
+    <button
+      (click)="nextGroup()"
+      [disabled]="groupIndex() === totalGroups() - 1"
+    >
+      ▸
+    </button>
+  </div>
+  }
+</div>
+}

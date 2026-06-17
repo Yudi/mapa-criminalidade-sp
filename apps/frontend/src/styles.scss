@@ -1,0 +1,51 @@
+@use '@angular/material' as mat;
+
+@import 'ol/ol.css';
+@import '@fontsource-variable/inter/index.css';
+@import '@fontsource/material-symbols-outlined/index.css';
+
+html {
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: 'Inter Variable',
+      density: 0,
+    )
+  );
+}
+
+body {
+  color-scheme: light dark;
+
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+body {
+  font-family: 'Inter Variable', sans-serif;
+}

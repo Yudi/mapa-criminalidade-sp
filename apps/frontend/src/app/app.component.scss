@@ -1,0 +1,76 @@
+.example-spacer {
+  flex: 1 1 auto;
+}
+
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+header {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+.app-layout {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-areas:
+    'map'
+    'filters';
+  min-height: 0;
+}
+
+.map-section {
+  grid-area: map;
+  min-height: 75dvh;
+  min-width: 0;
+}
+
+.map-placeholder {
+  align-items: center;
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface-variant);
+  display: flex;
+  font: var(--mat-sys-body-large);
+  height: 100%;
+  justify-content: center;
+  min-height: 75dvh;
+}
+
+.card-section {
+  grid-area: filters;
+  min-width: 0;
+  padding-block-end: 1rem;
+}
+
+@media (min-width: 960px) {
+  :host {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-layout {
+    grid-template-areas: 'filters map';
+    grid-template-columns: clamp(22rem, 27vw, 28rem) minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .map-section {
+    min-height: 0;
+  }
+
+  .map-placeholder {
+    min-height: 0;
+  }
+
+  .card-section {
+    background: var(--mat-sys-surface-container-low);
+    border-inline-end: 1px solid var(--mat-sys-outline-variant);
+    min-height: 0;
+    overflow-y: auto;
+    padding-block-end: 0;
+  }
+}

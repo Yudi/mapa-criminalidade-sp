@@ -1,19 +1,136 @@
+name: mapa-criminalidade
+
+x-logging: &default-logging
+  driver: 'json-file'
+  options:
+    max-size: '500k'
+
+x-database-logging: &database-logging
+  driver: 'json-file'
+  options:
+    max-size: '10m'
+    max-file: '3'
+
 services:
   db:
-    image: postgis/postgis:17-3.5
-    container_name: postgis_db
+    image: postgis/postgis:18-3.6-alpine
+    platform: linux/x86_64
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
+    command:
+      [
+        'postgres',
+        '-c',
+        'log_statement=all',
+        '-c',
+        'shared_buffers=256MB',
+        '-c',
+        'effective_cache_size=1GB',
+        '-c',
+        'work_mem=4MB',
+        '-c',
+        'maintenance_work_mem=128MB',
+        '-c',
+        'autovacuum_work_mem=64MB',
+        '-c',
+        'min_wal_size=256MB',
+        '-c',
+        'max_wal_size=1GB',
+        '-c',
+        'random_page_cost=1.1',
+        '-c',
+        'effective_io_concurrency=32',
+        '-c',
+        'max_parallel_workers_per_gather=1',
+        '-c',
+        'track_io_timing=on',
+        '-c',
+        'session_preload_libraries=auto_explain',
+        '-c',
+        'auto_explain.log_min_duration=5000',
+        '-c',
+        'auto_explain.log_analyze=on',
+        '-c',
+        'auto_explain.log_buffers=on',
+        '-c',
+        'auto_explain.log_nested_statements=on',
+        '-c',
+        'auto_explain.log_timing=off',
+        '-c',
+        'auto_explain.sample_rate=0.1',
+        '-c',
+        'log_temp_files=0',
+        '-c',
+        'log_lock_waits=on',
+        '-c',
+        'jit=off',
+      ]
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
-      - ./postgis_data:/var/lib/postgresql/data
+      - /Users/renanyudi/Documents/mapa-criminalidade/db:/var/lib/postgresql
+      - ../temp:/tmp/shared_import # Shared directory for COPY operations
       - ./example.csv:/tmp/example.csv
     networks:
       - postgis_network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U postgres -d postgres -h localhost || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *database-logging
     restart: unless-stopped
+    shm_size: '512mb'
+
+  redis:
+    image: redis:7-alpine
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--maxmemory',
+        '128mb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - postgis_network
+    logging: *default-logging
+    restart: unless-stopped
+
+  martin:
+    image: ghcr.io/maplibre/martin:1.10.1
+    command: ['--config', '/config/config.yaml']
+    ports:
+      - '3001:3000'
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      PGPASSWORD: postgres
+    volumes:
+      - ./martin_config:/config
+    networks:
+      - postgis_network
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *default-logging
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
 
 networks:
   postgis_network:

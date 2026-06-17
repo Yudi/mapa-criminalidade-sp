@@ -1,0 +1,125 @@
+:host {
+  display: block;
+}
+
+mat-card {
+  margin: 1rem;
+}
+
+mat-form-field {
+  display: block;
+  width: 100%;
+}
+
+.address-lookup__submit {
+  display: flex;
+  justify-content: center;
+  margin-block-end: 0.5rem;
+  width: 100%;
+}
+
+.filter-explanation {
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.4;
+  margin-block: 0 0.75rem;
+}
+
+.map-charts-action {
+  margin: 2rem 0;
+}
+
+.map-charts-action__button {
+  justify-content: center;
+  width: 100%;
+}
+
+.hour-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+}
+
+.hour-form__fields {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+}
+
+.rubricas-list {
+  margin-block-start: 0.5rem;
+}
+
+.rubricas-actions {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+}
+
+.rubricas-form {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.rubricas-list__item {
+  min-height: 3rem;
+}
+
+.rubrica-checkbox {
+  width: 100%;
+}
+
+.rubrica-option {
+  display: inline-grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2.75rem;
+  padding-block: 0.25rem;
+  width: 100%;
+}
+
+.rubrica-option__icon {
+  width: 1.5rem;
+  height: 2.125rem;
+  object-fit: contain;
+}
+
+.rubrica-option__text {
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.rubrica-option__count {
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+:host ::ng-deep .rubrica-checkbox .mdc-form-field {
+  align-items: center;
+  width: 100%;
+}
+
+:host ::ng-deep .rubrica-checkbox .mdc-label {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (min-width: 960px) {
+  :host {
+    min-height: 100%;
+  }
+
+  mat-card {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+    min-height: 100%;
+  }
+
+  mat-card-content {
+    padding: 1rem;
+  }
+}

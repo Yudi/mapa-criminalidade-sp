@@ -1,0 +1,35 @@
+<header>
+  <app-toolbar
+    [progressBarPercentage]="progressBarPercentage"
+    [showIndeterminateProgressBar]="isProgressBarVisible"
+  ></app-toolbar>
+</header>
+
+<main class="app-layout">
+  @if (isBrowserOnly) {
+  <section class="map-section" aria-label="Mapa de ocorrências">
+    <ng-container #mapOutlet></ng-container>
+
+    @if (!isMapComponentLoaded()) {
+    <div class="map-placeholder" aria-busy="true">
+      <span>Carregando mapa...</span>
+    </div>
+    }
+  </section>
+  }
+
+  <section class="card-section" aria-label="Filtros de pesquisa">
+    <app-card
+      (submitEvent)="onSubmitEvent($event)"
+      (rubricasFormEvent)="onRubricasFormChange($event)"
+      (periodFilterEvent)="onPeriodFilterChange($event)"
+      (hourFilterEvent)="onHourFilterChange($event)"
+      (visibleChartsEvent)="onVisibleChartsClick()"
+      [canOpenVisibleCharts]="canOpenVisibleCharts"
+      [dateRange]="dateRange"
+      [periods]="periods"
+      [rubricas]="categories"
+      [viewportStatsLoading]="viewportStatsLoading()"
+    ></app-card>
+  </section>
+</main>

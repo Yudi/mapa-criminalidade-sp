@@ -1,0 +1,526 @@
+<h2 mat-dialog-title>
+  <div class="dialog-title">
+    <span class="dialog-heading">Detalhes da ocorrência</span>
+    <span class="bo-number">BO {{ data.numBo }}/{{ data.anoBo }}</span>
+  </div>
+</h2>
+
+<mat-dialog-content>
+  @if (loading()) {
+  <div class="loading-container">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Carregando dados...</p>
+  </div>
+  } @else if (error()) {
+  <div class="error-container">
+    <mat-icon>error</mat-icon>
+    <p>{{ error() }}</p>
+  </div>
+  } @else if (feature(); as f) {
+  <section class="overview-section">
+    <div class="info-grid">
+      <div class="info-item">
+        <mat-icon>location_on</mat-icon>
+        <div class="info-content">
+          <span class="label">Endereço</span>
+          <span class="value">{{ formatAddress() }}</span>
+        </div>
+      </div>
+
+      @if (f.featureData.location.tipo_local) {
+      <div class="info-item">
+        <mat-icon>place</mat-icon>
+        <div class="info-content">
+          <span class="label">Tipo de Local</span>
+          <span class="value">{{ f.featureData.location.tipo_local }}</span>
+        </div>
+      </div>
+      }
+
+      <div class="info-item">
+        <mat-icon>event</mat-icon>
+        <div class="info-content">
+          <span class="label">Data da Ocorrência</span>
+          <span class="value">
+            {{ formatDate(f.dataOcorrencia) }}
+            @if (formatOccurrenceTime(f.featureData.occurrence.hora_ocorrencia); as hora) {
+            {{ getOccurrenceTimeLabel(f.featureData.occurrence.hora_ocorrencia) }}
+            {{ hora }}
+            }
+          </span>
+        </div>
+      </div>
+
+      @if (f.featureData.occurrence.delegacia_circunscricao) {
+      <div class="info-item">
+        <mat-icon>local_police</mat-icon>
+        <div class="info-content">
+          <span class="label">Delegacia da circunscrição</span>
+          <span class="value">{{
+            f.featureData.occurrence.delegacia_circunscricao
+          }}</span>
+        </div>
+      </div>
+      } @if (f.featureData.occurrence.delegacia) {
+      <div class="info-item">
+        <mat-icon>local_police</mat-icon>
+        <div class="info-content">
+          <span class="label">Delegacia de registro</span>
+          <span class="value">{{ f.featureData.occurrence.delegacia }}</span>
+        </div>
+      </div>
+      } @if (f.featureData.occurrence.natureza_apurada) {
+      <div class="info-item full-width">
+        <mat-icon>description</mat-icon>
+        <div class="info-content">
+          <span class="label">Natureza Apurada</span>
+          <span class="value">{{
+            f.featureData.occurrence.natureza_apurada
+          }}</span>
+        </div>
+      </div>
+      }
+    </div>
+    @if (f.featureData.all_rubricas.length > 0) {
+    <div class="rubricas-section">
+      <span class="section-label">Rubricas:</span>
+      <mat-chip-set>
+        @for (rubrica of f.featureData.all_rubricas; track rubrica) {
+        <mat-chip>{{ rubrica }}</mat-chip>
+        }
+      </mat-chip-set>
+    </div>
+    }
+  </section>
+
+  @if (hasImlRecords()) {
+  <mat-divider></mat-divider>
+  <section class="records-section iml-section">
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>clinical_notes</mat-icon>
+        Registro de Óbitos - IML ({{ imlRecords().length }})
+      </h3>
+      <div class="record-list">
+        @for (registro of imlRecords(); track registro.sourceTable + ':' + registro.sourceId) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>clinical_notes</mat-icon>
+            <mat-card-title>Registro de entrada no IML</mat-card-title>
+            <mat-card-subtitle>{{
+              formatImlDate(registro.dataEntradaIml)
+            }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (registro.delegaciaRegistro) {
+              <div class="detail-item full-width">
+                <span class="label">Delegacia de registro</span>
+                <span class="value">{{ registro.delegaciaRegistro }}</span>
+              </div>
+              } @if (registro.numeroLaudo || registro.anoLaudo) {
+              <div class="detail-item">
+                <span class="label">Laudo</span>
+                <span class="value"
+                  >{{ registro.numeroLaudo || 'N/A' }}/{{
+                    registro.anoLaudo || 'N/A'
+                  }}</span
+                >
+              </div>
+              } @if (registro.idadeVitima) {
+              <div class="detail-item">
+                <span class="label">Idade da vítima</span>
+                <span class="value"
+                  >{{ registro.idadeVitima }} {{ registro.tipoIdade }}</span
+                >
+              </div>
+              } @if (registro.declaracaoObito) {
+              <div class="detail-item">
+                <span class="label">Declaração de óbito</span>
+                <span class="value">{{ registro.declaracaoObito }}</span>
+              </div>
+              } @if (registro.conclusao) {
+              <div class="detail-item full-width">
+                <span class="label">Conclusão</span>
+                <span class="value">{{ registro.conclusao }}</span>
+              </div>
+              } @if (registro.causaMortis) {
+              <div class="detail-item full-width">
+                <span class="label">Causa mortis</span>
+                <span class="value">{{ registro.causaMortis }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+  </section>
+  }
+
+  <mat-divider></mat-divider>
+  <section class="records-section">
+    @if (hasVeiculos()) {
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>directions_car</mat-icon>
+        Veículos ({{ veiculos().length }})
+      </h3>
+      <div class="record-list">
+        @for (veiculo of veiculos(); track veiculo.source_id) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>directions_car</mat-icon>
+            <mat-card-title>{{ veiculo.marca || 'Veículo' }}</mat-card-title>
+            <mat-card-subtitle>{{ veiculo.tipo_veiculo }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (veiculo.placa) {
+              <div class="detail-item">
+                <span class="label">Placa</span>
+                <span class="value plate">{{ veiculo.placa }}</span>
+              </div>
+              } @if (veiculo.cor) {
+              <div class="detail-item">
+                <span class="label">Cor</span>
+                <span class="value">{{ veiculo.cor }}</span>
+              </div>
+              } @if (veiculo.ano_modelo) {
+              <div class="detail-item">
+                <span class="label">Ano</span>
+                <span class="value"
+                  >{{ veiculo.ano_fabricacao }}/{{ veiculo.ano_modelo }}</span
+                >
+              </div>
+              } @if (veiculo.descr_ocorrencia) {
+              <div class="detail-item">
+                <span class="label">Situação</span>
+                <span class="value">{{ veiculo.descr_ocorrencia }}</span>
+              </div>
+              } @if (veiculo.rubrica) {
+              <div class="detail-item full-width">
+                <span class="label">Rubrica</span>
+                <span class="value">{{ veiculo.rubrica }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+    }
+
+    @if (hasCelulares()) {
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>smartphone</mat-icon>
+        Celulares ({{ celulares().length }})
+      </h3>
+      <div class="record-list">
+        @for (celular of celulares(); track celular.source_id) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>smartphone</mat-icon>
+            <mat-card-title>{{ celular.marca || 'Celular' }}</mat-card-title>
+            <mat-card-subtitle>{{
+              celular.descr_tipo_objeto
+            }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (celular.descr_subtipo_objeto) {
+              <div class="detail-item">
+                <span class="label">Subtipo</span>
+                <span class="value">{{ celular.descr_subtipo_objeto }}</span>
+              </div>
+              } @if (celular.quantidade) {
+              <div class="detail-item">
+                <span class="label">Quantidade</span>
+                <span class="value">{{ celular.quantidade }}</span>
+              </div>
+              } @if (celular.bloqueio !== undefined) {
+              <div class="detail-item">
+                <span class="label">Bloqueio</span>
+                <span class="value">{{
+                  celular.bloqueio ? 'Sim' : 'Não'
+                }}</span>
+              </div>
+              } @if (celular.rubrica) {
+              <div class="detail-item full-width">
+                <span class="label">Rubrica</span>
+                <span class="value">{{ celular.rubrica }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+    }
+
+    @if (hasObjetos()) {
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>inventory_2</mat-icon>
+        Objetos ({{ objetos().length }})
+      </h3>
+      <div class="record-list">
+        @for (objeto of objetos(); track objeto.source_id) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>inventory_2</mat-icon>
+            <mat-card-title>{{
+              objeto.descr_tipo_objeto || 'Objeto'
+            }}</mat-card-title>
+            <mat-card-subtitle>{{
+              objeto.descr_subtipo_objeto
+            }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (objeto.marca) {
+              <div class="detail-item">
+                <span class="label">Marca</span>
+                <span class="value">{{ objeto.marca }}</span>
+              </div>
+              } @if (objeto.quantidade) {
+              <div class="detail-item">
+                <span class="label">Quantidade</span>
+                <span class="value">{{ objeto.quantidade }}</span>
+              </div>
+              } @if (objeto.rubrica) {
+              <div class="detail-item full-width">
+                <span class="label">Rubrica</span>
+                <span class="value">{{ objeto.rubrica }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+    }
+
+    @if (hasArmas()) {
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>gavel</mat-icon>
+        Armas ({{ armas().length }})
+      </h3>
+      <div class="record-list">
+        @for (arma of armas(); track arma.source_id) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>gavel</mat-icon>
+            <mat-card-title>{{ arma.tipo_arma || 'Arma' }}</mat-card-title>
+            <mat-card-subtitle>{{ arma.marca }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (arma.calibre) {
+              <div class="detail-item">
+                <span class="label">Calibre</span>
+                <span class="value">{{ arma.calibre }}</span>
+              </div>
+              } @if (arma.descr_modo_objeto) {
+              <div class="detail-item">
+                <span class="label">Modo</span>
+                <span class="value">{{ arma.descr_modo_objeto }}</span>
+              </div>
+              } @if (arma.descricao_apresentacao) {
+              <div class="detail-item full-width">
+                <span class="label">Apresentação</span>
+                <span class="value">{{ arma.descricao_apresentacao }}</span>
+              </div>
+              } @if (arma.natureza_apurada) {
+              <div class="detail-item full-width">
+                <span class="label">Natureza</span>
+                <span class="value">{{ arma.natureza_apurada }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+    }
+
+    @if (hasEntorpecentes()) {
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>medication</mat-icon>
+        Entorpecentes ({{ entorpecentes().length }})
+      </h3>
+      <div class="record-list">
+        @for (droga of entorpecentes(); track droga.source_id) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>medication</mat-icon>
+            <mat-card-title>{{
+              droga.tipo_droga || 'Entorpecente'
+            }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (droga.quantidade_gramas) {
+              <div class="detail-item">
+                <span class="label">Quantidade</span>
+                <span class="value">{{ droga.quantidade_gramas }}g</span>
+              </div>
+              } @if (droga.descricao_apresentacao) {
+              <div class="detail-item full-width">
+                <span class="label">Apresentação</span>
+                <span class="value">{{ droga.descricao_apresentacao }}</span>
+              </div>
+              } @if (droga.natureza_apurada) {
+              <div class="detail-item full-width">
+                <span class="label">Natureza</span>
+                <span class="value">{{ droga.natureza_apurada }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+    }
+
+    @if (hasVeiculosRecuperados()) {
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>directions_car</mat-icon>
+        Veículos recuperados ({{ veiculosRecuperados().length }})
+      </h3>
+      <div class="record-list">
+        @for (veiculo of veiculosRecuperados(); track veiculo.source_id) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>directions_car</mat-icon>
+            <mat-card-title>{{ veiculo.marca || 'Veículo' }}</mat-card-title>
+            <mat-card-subtitle>{{ veiculo.tipo_veiculo }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (veiculo.placa) {
+              <div class="detail-item">
+                <span class="label">Placa</span>
+                <span class="value plate">{{ veiculo.placa }}</span>
+              </div>
+              } @if (veiculo.cor) {
+              <div class="detail-item">
+                <span class="label">Cor</span>
+                <span class="value">{{ veiculo.cor }}</span>
+              </div>
+              } @if (veiculo.ano_modelo) {
+              <div class="detail-item">
+                <span class="label">Ano</span>
+                <span class="value"
+                  >{{ veiculo.ano_fabricacao }}/{{ veiculo.ano_modelo }}</span
+                >
+              </div>
+              } @if (veiculo.descr_ocorrencia) {
+              <div class="detail-item">
+                <span class="label">Situação</span>
+                <span class="value">{{ veiculo.descr_ocorrencia }}</span>
+              </div>
+              } @if (veiculo.descricao_apresentacao) {
+              <div class="detail-item full-width">
+                <span class="label">Apresentação</span>
+                <span class="value">{{ veiculo.descricao_apresentacao }}</span>
+              </div>
+              } @if (veiculo.natureza_apurada) {
+              <div class="detail-item full-width">
+                <span class="label">Natureza</span>
+                <span class="value">{{ veiculo.natureza_apurada }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+    }
+
+    @if (hasPessoas()) {
+    <section class="record-group">
+      <h3 class="record-group-title">
+        <mat-icon>person</mat-icon>
+        Pessoas ({{ pessoas().length }})
+      </h3>
+      <div class="record-list">
+        @for (pessoa of pessoas(); track pessoa.source_id) {
+        <mat-card class="record-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar>person</mat-icon>
+            <mat-card-title>{{
+              pessoa.tipo_pessoa || 'Pessoa'
+            }}</mat-card-title>
+            <mat-card-subtitle>{{
+              pessoa.descricao_apresentacao
+            }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="record-details">
+              @if (pessoa.sexo) {
+              <div class="detail-item">
+                <span class="label">Sexo</span>
+                <span class="value">{{ pessoa.sexo }}</span>
+              </div>
+              } @if (pessoa.idade) {
+              <div class="detail-item">
+                <span class="label">Idade</span>
+                <span class="value">{{ pessoa.idade }} anos</span>
+              </div>
+              } @if (pessoa.cor) {
+              <div class="detail-item">
+                <span class="label">Cor</span>
+                <span class="value">{{ pessoa.cor }}</span>
+              </div>
+              } @if (pessoa.profissao) {
+              <div class="detail-item">
+                <span class="label">Profissão</span>
+                <span class="value">{{ pessoa.profissao }}</span>
+              </div>
+              } @if (pessoa.nacionalidade) {
+              <div class="detail-item">
+                <span class="label">Nacionalidade</span>
+                <span class="value">{{ pessoa.nacionalidade }}</span>
+              </div>
+              } @if (pessoa.grau_instrucao) {
+              <div class="detail-item">
+                <span class="label">Escolaridade</span>
+                <span class="value">{{ pessoa.grau_instrucao }}</span>
+              </div>
+              } @if (pessoa.descricao_apresentacao) {
+              <div class="detail-item full-width">
+                <span class="label">Apresentação</span>
+                <span class="value">{{ pessoa.descricao_apresentacao }}</span>
+              </div>
+              } @if (pessoa.natureza_apurada) {
+              <div class="detail-item full-width">
+                <span class="label">Natureza</span>
+                <span class="value">{{ pessoa.natureza_apurada }}</span>
+              </div>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        }
+      </div>
+    </section>
+    }
+  </section>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Fechar</button>
+</mat-dialog-actions>

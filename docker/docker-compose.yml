@@ -1,24 +1,280 @@
+name: mapa-criminalidade
+
+x-logging: &default-logging
+  driver: 'json-file'
+  options:
+    max-size: '500k'
+
+x-database-logging: &database-logging
+  driver: 'json-file'
+  options:
+    max-size: '10m'
+    max-file: '3'
+
 services:
-  angular-ssr:
-    build: ../frontend
+  frontend:
+    build:
+      context: ..
+      dockerfile: apps/frontend/Dockerfile
     networks:
       - traefik
+      - default
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.scope=public'
+      - 'traefik.docker.network=traefik'
+      - 'traefik.http.routers.criminalidade-frontend.rule=Host(`criminalidade.yudi.com.br`) && PathPrefix(`/app`)'
+      - 'traefik.http.routers.criminalidade-frontend.priority=5'
+      - 'traefik.http.services.criminalidade-frontend-svc.loadbalancer.server.port=4000'
+      - 'traefik.http.routers.criminalidade-frontend.entrypoints=web, websecure'
+      - 'traefik.http.routers.criminalidade-frontend.service=criminalidade-frontend-svc'
+      - 'traefik.http.routers.criminalidade-frontend.tls=true'
+      - 'traefik.http.routers.criminalidade-frontend.tls.certResolver=letsencrypt'
+      - 'traefik.http.middlewares.criminalidade-frontend-redirect-root.redirectregex.regex=^/$'
+      - 'traefik.http.middlewares.criminalidade-frontend-redirect-root.redirectregex.replacement=/app'
+      - 'traefik.http.middlewares.criminalidade-frontend-redirect-root.redirectregex.permanent=true'
+      - 'traefik.http.routers.criminalidade-frontend-root.rule=Host(`criminalidade.yudi.com.br`) && Path(`/`)'
+      - 'traefik.http.routers.criminalidade-frontend-root.priority=100'
+      - 'traefik.http.routers.criminalidade-frontend-root.entrypoints=web, websecure'
+      - 'traefik.http.routers.criminalidade-frontend-root.service=criminalidade-frontend-svc'
+      - 'traefik.http.routers.criminalidade-frontend-root.tls=true'
+      - 'traefik.http.routers.criminalidade-frontend-root.tls.certResolver=letsencrypt'
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_OPTIONS: --max-old-space-size=192
+    logging: *default-logging
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres?schema=public
+      REDIS_URL: redis://redis-queue:6379
+      REDIS_CACHE_URL: redis://redis-cache:6379
+      NODE_OPTIONS: --max-old-space-size=256
+      PRISMA_POOL_MAX: 3
+      MAP_FEATURES_ETL_BATCH_SIZE: 2000
+      PORT: 8080
+      ALLOWED_ORIGINS: https://criminalidade.yudi.com.br
+    volumes:
+      - /media/nvme-data/docker/mapa-criminalidade/shared_import_data:/app/temp # Shared volume for COPY operations
+    networks:
+      - backend
+      - traefik
+      - default
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.scope=public'
+      - 'traefik.docker.network=traefik'
+      - 'traefik.http.routers.criminalidade-backend.rule=Host(`criminalidade.yudi.com.br`) && PathPrefix(`/api`)'
+      - 'traefik.http.routers.criminalidade-backend.priority=50'
+      - 'traefik.http.services.criminalidade-backend-svc.loadbalancer.server.port=8080'
+      - 'traefik.http.routers.criminalidade-backend.entrypoints=web, websecure'
+      - 'traefik.http.routers.criminalidade-backend.service=criminalidade-backend-svc'
+      - 'traefik.http.routers.criminalidade-backend.tls=true'
+      - 'traefik.http.routers.criminalidade-backend.tls.certResolver=letsencrypt'
+    depends_on:
+      db:
+        condition: service_healthy
+      backend-migrate:
+        condition: service_completed_successfully
+      redis-queue:
+        condition: service_started
+      redis-cache:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(''http://127.0.0.1:8080/api/health/ready'').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+    restart: unless-stopped
+
+  martin:
+    image: ghcr.io/maplibre/martin:1.10.1
+    command: ['--config', '/config/config.yaml']
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+    volumes:
+      - ./martin_config:/config
+    networks:
+      - backend
+      - traefik
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.scope=public'
+      - 'traefik.docker.network=traefik'
+      - 'traefik.http.routers.criminalidade-martin.rule=Host(`criminalidade.yudi.com.br`) && PathPrefix(`/api/tiles`)'
+      - 'traefik.http.routers.criminalidade-martin.priority=90'
+      - 'traefik.http.services.criminalidade-martin-svc.loadbalancer.server.port=3000'
+      - 'traefik.http.routers.criminalidade-martin.entrypoints=web, websecure'
+      - 'traefik.http.routers.criminalidade-martin.service=criminalidade-martin-svc'
+      - 'traefik.http.routers.criminalidade-martin.middlewares=criminalidade-martin-ratelimit,criminalidade-martin-inflight,criminalidade-martin-cache'
+      - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.average=2400'
+      - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.period=1m'
+      - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.burst=4800'
+      - 'traefik.http.middlewares.criminalidade-martin-inflight.inflightreq.amount=200'
+      - 'traefik.http.middlewares.criminalidade-martin-cache.headers.customresponseheaders.Cache-Control=public,max-age=3600,stale-while-revalidate=86400'
+      - 'traefik.http.routers.criminalidade-martin.tls=true'
+      - 'traefik.http.routers.criminalidade-martin.tls.certResolver=letsencrypt'
+    depends_on:
+      db:
+        condition: service_healthy
+      backend-migrate:
+        condition: service_completed_successfully
+    logging: *default-logging
+    restart: unless-stopped
+
+  backend-migrate:
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres?schema=public
+    command:
+      - sh
+      - -c
+      - cd /app && ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    networks:
+      - backend
+    logging: *default-logging
 
   db:
-    image: postgis/postgis:17-3.5
+    image: postgis/postgis:18-3.6-alpine
     container_name: postgis_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
+    command:
+      [
+        'postgres',
+        '-c',
+        'shared_buffers=${POSTGRES_SHARED_BUFFERS:-256MB}',
+        '-c',
+        'effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-1GB}',
+        '-c',
+        'work_mem=${POSTGRES_WORK_MEM:-4MB}',
+        '-c',
+        'maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}',
+        '-c',
+        'autovacuum_work_mem=${POSTGRES_AUTOVACUUM_WORK_MEM:-64MB}',
+        '-c',
+        'min_wal_size=${POSTGRES_MIN_WAL_SIZE:-256MB}',
+        '-c',
+        'max_wal_size=${POSTGRES_MAX_WAL_SIZE:-1GB}',
+        '-c',
+        'max_connections=${POSTGRES_MAX_CONNECTIONS:-20}',
+        '-c',
+        'random_page_cost=1.1',
+        '-c',
+        'effective_io_concurrency=${POSTGRES_EFFECTIVE_IO_CONCURRENCY:-32}',
+        '-c',
+        'max_parallel_workers_per_gather=${POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER:-1}',
+        '-c',
+        'max_parallel_workers=${POSTGRES_MAX_PARALLEL_WORKERS:-2}',
+        '-c',
+        'track_io_timing=on',
+        '-c',
+        'session_preload_libraries=auto_explain',
+        '-c',
+        'auto_explain.log_min_duration=5000',
+        '-c',
+        'auto_explain.log_analyze=on',
+        '-c',
+        'auto_explain.log_buffers=on',
+        '-c',
+        'auto_explain.log_nested_statements=on',
+        '-c',
+        'auto_explain.log_timing=off',
+        '-c',
+        'auto_explain.sample_rate=0.1',
+        '-c',
+        'log_temp_files=0',
+        '-c',
+        'log_lock_waits=on',
+        '-c',
+        'jit=off',
+      ]
     volumes:
-      - ./postgis_data:/var/lib/postgresql/data
+      - /media/nvme-data/docker/mapa-criminalidade/postgis_data:/var/lib/postgresql
+      - /media/nvme-data/docker/mapa-criminalidade/shared_import_data:/tmp/shared_import # Named volume for production COPY operations
     networks:
-      - traefik
-      - default
+      - backend
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U postgres -d postgres -h localhost || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *database-logging
+    restart: unless-stopped
+    shm_size: '512mb'
+
+  redis-queue:
+    image: redis:7-alpine
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--appendfsync',
+        'everysec',
+        '--maxmemory',
+        '96mb',
+        '--maxmemory-policy',
+        'noeviction',
+      ]
+    expose:
+      - 6379
+    volumes:
+      - /media/nvme-data/docker/mapa-criminalidade/redis_data:/data
+    networks:
+      - backend
+    logging: *default-logging
+    restart: unless-stopped
+
+  redis-cache:
+    image: redis:7-alpine
+    command:
+      [
+        'redis-server',
+        '--save',
+        '',
+        '--appendonly',
+        'no',
+        '--maxmemory',
+        '64mb',
+        '--maxmemory-policy',
+        'allkeys-lfu',
+      ]
+    expose:
+      - 6379
+    networks:
+      - backend
+    logging: *default-logging
     restart: unless-stopped
 
 networks:
   default:
+  backend:
   traefik:
     external: true
