@@ -1,0 +1,98 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.app }} image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+
+    strategy:
+      fail-fast: true
+      matrix:
+        app:
+          - backend
+          - frontend
+
+    steps:
+      - name: Checkout published commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image="${REGISTRY}/${IMAGE_NAME}/${{ matrix.app }}"
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          short_sha="${sha:0:12}"
+
+          {
+            echo 'tags<<EOF'
+            echo "${image}:sha-${short_sha}"
+
+            if [ "${{ github.event_name }}" = 'workflow_run' ] || [ "${GITHUB_REF}" = 'refs/heads/main' ]; then
+              echo "${image}:main"
+              echo "${image}:latest"
+            fi
+
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha || github.sha }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
