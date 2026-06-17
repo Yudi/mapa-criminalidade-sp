@@ -15,7 +15,7 @@ describe('VectorTileMapSetupService', () => {
         {
           provide: MatDialog,
           useValue: {
-            open: jest.fn(),
+            open: vi.fn(),
           },
         },
       ],
@@ -26,16 +26,16 @@ describe('VectorTileMapSetupService', () => {
 
   it('should clear spread layers without forcing a synchronous render', () => {
     const source = {
-      clear: jest.fn(),
+      clear: vi.fn(),
     };
     const spreadLayer = {
-      getSource: jest.fn(() => source),
-      dispose: jest.fn(),
+      getSource: vi.fn(() => source),
+      dispose: vi.fn(),
     };
     const olMap = {
-      removeLayer: jest.fn(),
-      render: jest.fn(),
-      renderSync: jest.fn(),
+      removeLayer: vi.fn(),
+      render: vi.fn(),
+      renderSync: vi.fn(),
     };
     const testableService = service as unknown as {
       spreadLayer: unknown;
@@ -54,16 +54,16 @@ describe('VectorTileMapSetupService', () => {
   });
 
   it('zooms into server-generated clusters without copying their members', async () => {
-    const animate = jest.fn();
+    const animate = vi.fn();
     const view = {
-      getZoom: jest.fn(() => 12),
-      getMaxZoom: jest.fn(() => 19),
+      getZoom: vi.fn(() => 12),
+      getMaxZoom: vi.fn(() => 19),
       animate,
     };
     const olMap = {
-      getView: jest.fn(() => view),
-      getLayers: jest.fn(() => ({ getArray: () => [] })),
-      getSize: jest.fn(() => [1000, 800]),
+      getView: vi.fn(() => view),
+      getLayers: vi.fn(() => ({ getArray: () => [] })),
+      getSize: vi.fn(() => [1000, 800]),
     };
     const cluster = new Feature({
       geometry: new Point([100, 200]),
@@ -105,12 +105,12 @@ describe('VectorTileMapSetupService', () => {
   });
 
   it('keeps registration police unit in the BO identity', () => {
-    const first = new Feature({
+    const first = new Feature<Point>({
       num_bo: '123',
       ano_bo: 2021,
       delegacia: '1º DP',
     });
-    const second = new Feature({
+    const second = new Feature<Point>({
       num_bo: '123',
       ano_bo: 2021,
       delegacia: '2º DP',

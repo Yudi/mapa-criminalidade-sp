@@ -11,7 +11,7 @@ describe('RequestTimeoutService', () => {
   it('deduplicates timeout notifications until the snackbar closes', () => {
     const afterDismissed = new Subject<void>();
     const snackBar = {
-      open: jest.fn(() => ({
+      open: vi.fn(() => ({
         afterDismissed: () => afterDismissed,
       })),
     };

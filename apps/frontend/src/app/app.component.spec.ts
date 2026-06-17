@@ -1,5 +1,5 @@
 import { provideZonelessChangeDetection } from '@angular/core';
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { provideDateFnsAdapter } from '@angular/material-date-fns-adapter';
 import { MAT_DATE_LOCALE } from '@angular/material/core';
 import { ptBR } from 'date-fns/locale';
@@ -21,13 +21,13 @@ describe('AppComponent', () => {
     },
   ];
   let occurrencesService: {
-    getTileMetadata: jest.Mock;
-    getCategoryPeriodStatsForBounds: jest.Mock;
+    getTileMetadata: ReturnType<typeof vi.fn>;
+    getCategoryPeriodStatsForBounds: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
     occurrencesService = {
-      getTileMetadata: jest.fn(() =>
+      getTileMetadata: vi.fn(() =>
         of({
           dateRange: {
             earliest: '2013-01-01',
@@ -36,7 +36,7 @@ describe('AppComponent', () => {
           },
         })
       ),
-      getCategoryPeriodStatsForBounds: jest.fn(() =>
+      getCategoryPeriodStatsForBounds: vi.fn(() =>
         of({ categories, periods: [] })
       ),
     };
@@ -50,6 +50,10 @@ describe('AppComponent', () => {
         { provide: OccurrencesService, useValue: occurrencesService },
       ],
     }).compileComponents();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('should create the app', () => {
@@ -73,7 +77,8 @@ describe('AppComponent', () => {
     ).not.toBeNull();
   });
 
-  it('keeps category selections when zooming below the feature threshold', fakeAsync(() => {
+  it('keeps category selections when zooming below the feature threshold', () => {
+    vi.useFakeTimers();
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
     const emissions: CategoryInfo[][] = [];
@@ -88,7 +93,7 @@ describe('AppComponent', () => {
       maxLat: -23,
       zoom: MIN_CRIME_TILE_ZOOM,
     });
-    tick(300);
+    vi.advanceTimersByTime(300);
     app.onRubricasFormChange({ Furto: true });
 
     app.onBoundsChange({
@@ -98,7 +103,7 @@ describe('AppComponent', () => {
       maxLat: -22,
       zoom: MIN_CRIME_TILE_ZOOM - 1,
     });
-    tick(300);
+    vi.advanceTimersByTime(300);
 
     expect(
       occurrencesService.getCategoryPeriodStatsForBounds
@@ -107,9 +112,10 @@ describe('AppComponent', () => {
     expect(app.categoriesFormValues).toEqual({ Furto: true });
 
     subscription.unsubscribe();
-  }));
+  });
 
-  it('refreshes statistics with the exact visible bounds after panning', fakeAsync(() => {
+  it('refreshes statistics with the exact visible bounds after panning', () => {
+    vi.useFakeTimers();
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
     const subscription = app.categories.subscribe();
@@ -122,7 +128,7 @@ describe('AppComponent', () => {
       zoom: MIN_CRIME_TILE_ZOOM,
     };
     app.onBoundsChange(initialBounds);
-    tick(300);
+    vi.advanceTimersByTime(300);
 
     const pannedBounds = {
       minLon: -46.9,
@@ -132,7 +138,7 @@ describe('AppComponent', () => {
       zoom: MIN_CRIME_TILE_ZOOM,
     };
     app.onBoundsChange(pannedBounds);
-    tick(300);
+    vi.advanceTimersByTime(300);
 
     expect(
       occurrencesService.getCategoryPeriodStatsForBounds
@@ -151,9 +157,10 @@ describe('AppComponent', () => {
       undefined
     );
     subscription.unsubscribe();
-  }));
+  });
 
-  it('shares one statistics request between category and period filters', fakeAsync(() => {
+  it('shares one statistics request between category and period filters', () => {
+    vi.useFakeTimers();
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
     const categoriesSubscription = app.categories.subscribe();
@@ -166,7 +173,7 @@ describe('AppComponent', () => {
       maxLat: -23,
       zoom: MIN_CRIME_TILE_ZOOM,
     });
-    tick(300);
+    vi.advanceTimersByTime(300);
 
     expect(
       occurrencesService.getCategoryPeriodStatsForBounds
@@ -174,9 +181,10 @@ describe('AppComponent', () => {
 
     categoriesSubscription.unsubscribe();
     periodsSubscription.unsubscribe();
-  }));
+  });
 
-  it('waits for metadata and sends the default three-month date range', fakeAsync(() => {
+  it('waits for metadata and sends the default three-month date range', () => {
+    vi.useFakeTimers();
     const metadata = new Subject<{
       dateRange: {
         earliest: string;
@@ -196,7 +204,7 @@ describe('AppComponent', () => {
       maxLat: -23,
       zoom: MIN_CRIME_TILE_ZOOM,
     });
-    tick(300);
+    vi.advanceTimersByTime(300);
 
     expect(
       occurrencesService.getCategoryPeriodStatsForBounds
@@ -209,7 +217,7 @@ describe('AppComponent', () => {
         defaultAfter: '2026-01-30',
       },
     });
-    tick(300);
+    vi.advanceTimersByTime(300);
 
     expect(
       occurrencesService.getCategoryPeriodStatsForBounds
@@ -226,9 +234,10 @@ describe('AppComponent', () => {
     );
 
     subscription.unsubscribe();
-  }));
+  });
 
-  it('keeps refreshing category filters after a failed request', fakeAsync(() => {
+  it('keeps refreshing category filters after a failed request', () => {
+    vi.useFakeTimers();
     occurrencesService.getCategoryPeriodStatsForBounds
       .mockReturnValueOnce(throwError(() => new Error('Request failed')))
       .mockReturnValueOnce(of({ categories, periods: [] }));
@@ -246,7 +255,7 @@ describe('AppComponent', () => {
       maxLat: -23,
       zoom: MIN_CRIME_TILE_ZOOM,
     });
-    tick(300);
+    vi.advanceTimersByTime(300);
     app.onBoundsChange({
       minLon: -49,
       minLat: -26,
@@ -254,7 +263,7 @@ describe('AppComponent', () => {
       maxLat: -25,
       zoom: MIN_CRIME_TILE_ZOOM,
     });
-    tick(300);
+    vi.advanceTimersByTime(300);
 
     expect(
       occurrencesService.getCategoryPeriodStatsForBounds
@@ -262,5 +271,5 @@ describe('AppComponent', () => {
     expect(emissions).toEqual([categories]);
 
     subscription.unsubscribe();
-  }));
+  });
 });

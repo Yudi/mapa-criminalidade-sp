@@ -3,7 +3,7 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import {
   BACKEND_REQUEST_TIMEOUT_MS,
   requestTimeoutInterceptor,
@@ -16,10 +16,10 @@ import {
 describe('requestTimeoutInterceptor', () => {
   let http: HttpClient;
   let httpTesting: HttpTestingController;
-  let requestTimeoutService: { notify: jest.Mock };
+  let requestTimeoutService: { notify: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    requestTimeoutService = { notify: jest.fn() };
+    requestTimeoutService = { notify: vi.fn() };
 
     TestBed.configureTestingModule({
       providers: [
@@ -37,6 +37,7 @@ describe('requestTimeoutInterceptor', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     httpTesting.verify({ ignoreCancelled: true });
   });
 
@@ -58,7 +59,8 @@ describe('requestTimeoutInterceptor', () => {
     expect(requestTimeoutService.notify).toHaveBeenCalledTimes(1);
   });
 
-  it('aborts and notifies when the backend stops responding', fakeAsync(() => {
+  it('aborts and notifies when the backend stops responding', () => {
+    vi.useFakeTimers();
     let receivedError: unknown;
 
     http.get('/api/data').subscribe({
@@ -68,14 +70,15 @@ describe('requestTimeoutInterceptor', () => {
     });
 
     const request = httpTesting.expectOne('/api/data');
-    tick(BACKEND_REQUEST_TIMEOUT_MS);
+    vi.advanceTimersByTime(BACKEND_REQUEST_TIMEOUT_MS);
 
     expect(request.cancelled).toBe(true);
     expect(receivedError).toBeInstanceOf(RequestTimeoutError);
     expect(requestTimeoutService.notify).toHaveBeenCalledTimes(1);
-  }));
+  });
 
-  it('does not impose the backend timeout on external requests', fakeAsync(() => {
+  it('does not impose the backend timeout on external requests', () => {
+    vi.useFakeTimers();
     let completed = false;
 
     http.get('https://example.com/data').subscribe(() => {
@@ -83,11 +86,11 @@ describe('requestTimeoutInterceptor', () => {
     });
 
     const request = httpTesting.expectOne('https://example.com/data');
-    tick(BACKEND_REQUEST_TIMEOUT_MS);
+    vi.advanceTimersByTime(BACKEND_REQUEST_TIMEOUT_MS);
     expect(request.cancelled).toBe(false);
 
     request.flush({});
     expect(completed).toBe(true);
     expect(requestTimeoutService.notify).not.toHaveBeenCalled();
-  }));
+  });
 });

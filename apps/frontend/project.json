@@ -94,13 +94,19 @@
       "executor": "@nx/eslint:lint"
     },
     "test": {
-      "executor": "@nx/jest:jest",
+      "executor": "@angular/build:unit-test",
       "outputs": [
-        "{workspaceRoot}/coverage/{projectRoot}"
+        "{workspaceRoot}/coverage/frontend"
       ],
       "options": {
-        "jestConfig": "apps/frontend/jest.config.ts",
+        "buildTarget": "frontend:build:development",
+        "runner": "vitest",
         "tsConfig": "apps/frontend/tsconfig.spec.json"
+      },
+      "configurations": {
+        "ci": {
+          "coverage": true
+        }
       }
     },
     "serve-static": {

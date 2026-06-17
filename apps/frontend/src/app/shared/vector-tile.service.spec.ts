@@ -11,7 +11,7 @@ describe('VectorTileService', () => {
         VectorTileService,
         {
           provide: GraphqlClientService,
-          useValue: { request: jest.fn() },
+          useValue: { request: vi.fn() },
         },
       ],
     });

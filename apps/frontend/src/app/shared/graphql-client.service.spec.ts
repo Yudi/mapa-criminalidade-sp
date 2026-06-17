@@ -15,10 +15,10 @@ import {
 describe('GraphqlClientService', () => {
   let httpTesting: HttpTestingController;
   let service: GraphqlClientService;
-  let requestTimeoutService: { notify: jest.Mock };
+  let requestTimeoutService: { notify: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    requestTimeoutService = { notify: jest.fn() };
+    requestTimeoutService = { notify: vi.fn() };
 
     TestBed.configureTestingModule({
       providers: [

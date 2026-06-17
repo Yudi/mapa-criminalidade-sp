@@ -269,7 +269,7 @@ describe('CardComponent', () => {
   });
 
   it('submits the lookup from the dedicated address button', () => {
-    const submitSpy = jest.spyOn(component.submitEvent, 'emit');
+    const submitSpy = vi.spyOn(component.submitEvent, 'emit');
     const button: HTMLButtonElement = fixture.nativeElement.querySelector(
       '.address-lookup__submit'
     );
@@ -282,7 +282,7 @@ describe('CardComponent', () => {
   it.each(['street', 'city', 'state'])(
     'submits the lookup when Enter is pressed in the %s input',
     (controlName) => {
-      const submitSpy = jest.spyOn(component.submitEvent, 'emit');
+      const submitSpy = vi.spyOn(component.submitEvent, 'emit');
       const input: HTMLInputElement = fixture.nativeElement.querySelector(
         `input[formControlName="${controlName}"]`
       );
@@ -300,7 +300,7 @@ describe('CardComponent', () => {
   );
 
   it('does not submit when Enter is pressed in a date input', () => {
-    const submitSpy = jest.spyOn(component.submitEvent, 'emit');
+    const submitSpy = vi.spyOn(component.submitEvent, 'emit');
     const dateInput: HTMLInputElement = fixture.nativeElement.querySelector(
       'input[formControlName="afterDate"]'
     );

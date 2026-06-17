@@ -13,13 +13,13 @@ describe('FeatureDetailDialogComponent', () => {
         {
           provide: OccurrencesService,
           useValue: {
-            getFullFeature: jest.fn(),
+            getFullFeature: vi.fn(),
           },
         },
         {
           provide: MatDialogRef,
           useValue: {
-            close: jest.fn(),
+            close: vi.fn(),
           },
         },
         {

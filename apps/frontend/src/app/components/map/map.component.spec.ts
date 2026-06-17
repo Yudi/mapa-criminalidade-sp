@@ -21,7 +21,7 @@ describe('MapComponent', () => {
         {
           provide: VectorTileMapSetupService,
           useValue: {
-            setupMap: jest.fn(() => null),
+            setupMap: vi.fn(() => null),
           },
         },
       ],
@@ -141,29 +141,29 @@ describe('MapComponent', () => {
   });
 
   it('debounces consecutive tile-layer refreshes', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     const testableComponent = component as unknown as {
       olMap: object | null;
       scheduleTileLayerUpdate(): void;
       updateTileLayer(): void;
     };
     testableComponent.olMap = {};
-    const updateSpy = jest
+    const updateSpy = vi
       .spyOn(testableComponent, 'updateTileLayer')
       .mockImplementation(() => undefined);
 
     testableComponent.scheduleTileLayerUpdate();
     testableComponent.scheduleTileLayerUpdate();
     testableComponent.scheduleTileLayerUpdate();
-    jest.advanceTimersByTime(199);
+    vi.advanceTimersByTime(199);
 
     expect(updateSpy).not.toHaveBeenCalled();
 
-    jest.advanceTimersByTime(1);
+    vi.advanceTimersByTime(1);
 
     expect(updateSpy).toHaveBeenCalledTimes(1);
     updateSpy.mockRestore();
     testableComponent.olMap = null;
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 });
