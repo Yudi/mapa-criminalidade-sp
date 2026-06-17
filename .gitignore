@@ -68,3 +68,5 @@ __pycache__/
 *$py.class
 
 generated/
+
+.nx/migrate-runs
