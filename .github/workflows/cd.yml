@@ -69,6 +69,7 @@ jobs:
           set -euo pipefail
 
           image="${REGISTRY}/${IMAGE_NAME}/${{ matrix.app }}"
+          image="$(printf '%s' "$image" | tr '[:upper:]' '[:lower:]')"
           sha="${{ github.event.workflow_run.head_sha || github.sha }}"
           short_sha="${sha:0:12}"
 
