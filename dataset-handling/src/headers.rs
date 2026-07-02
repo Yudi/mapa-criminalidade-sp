@@ -10,7 +10,7 @@ pub fn verify_matching_headers(paths: &[&Path]) -> Result<(), Box<dyn Error>> {
     }
 
     // Get reference headers from first file
-    let reference_headers: Vec<String> = get_headers(&paths[0])?;
+    let reference_headers: Vec<String> = get_headers(paths[0])?;
 
     // Compare remaining files
     for path in &paths[1..] {

@@ -233,7 +233,7 @@ fn run_convert(args: ConvertArgs) -> Result<(), Box<dyn Error>> {
 }
 
 fn run_merge(args: MergeArgs) -> Result<(), Box<dyn Error>> {
-    let input_paths: Vec<_> = args.inputs.iter().map(|p| Path::new(p)).collect();
+    let input_paths: Vec<_> = args.inputs.iter().map(Path::new).collect();
     let output_path = Path::new(&args.output);
     merger::merge_csv_files(input_paths, output_path)?;
     Ok(())

@@ -25,20 +25,11 @@ import VectorSource from 'ol/source/Vector';
 import ClusterSource from 'ol/source/Cluster';
 import MVTFormat from 'ol/format/MVT';
 import Feature from 'ol/Feature';
-import Style from 'ol/style/Style';
-import Icon from 'ol/style/Icon';
-import CircleStyle from 'ol/style/Circle';
-import Fill from 'ol/style/Fill';
-import Stroke from 'ol/style/Stroke';
-import Text from 'ol/style/Text';
-import { firstValueFrom, Subject, take, takeUntil } from 'rxjs';
+import { Subject, take } from 'rxjs';
 import { FeatureLike } from 'ol/Feature';
 import { unByKey } from 'ol/Observable';
 import { EventsKey } from 'ol/events';
 import Point from 'ol/geom/Point';
-import RenderFeature from 'ol/render/Feature';
-import type OlVectorTile from 'ol/VectorTile';
-import TileState from 'ol/TileState';
 import type { LoadFunction } from 'ol/Tile';
 
 import { MapMarkersService } from '../../shared/map-markers.service';
@@ -47,25 +38,31 @@ import {
   ExtendedTileFilterParams,
 } from '../../shared/vector-tile.service';
 import {
-  MAP_INTERACTIVE_LAYER_PROPERTY,
   VectorTileMapSetupService,
 } from './services/vector-tile-map-setup.service';
+import { MAP_INTERACTIVE_LAYER_PROPERTY } from './utils/map-layer.constants';
 import { DateService } from '../../shared/date.service';
 import {
   MAX_CRIME_TILE_ZOOM,
   MIN_CRIME_TILE_ZOOM,
 } from '@mapa-criminalidade/shared-types';
+import {
+  createClusterStyleFunction,
+  createOccurrenceStyleFunction,
+} from './utils/map-style.utils';
+import {
+  createClientClusterFeature,
+  getClusterFeatureKey,
+  getFeatureCoordinate,
+  shouldIncludeClientClusterFeature,
+} from './utils/map-cluster.utils';
+import { createVectorTileLoadFunction } from './utils/map-tile-loader.utils';
 const DEFAULT_ZOOM = 16;
 const MAP_MAX_ZOOM = 19;
 const LAYER_MAX_ZOOM = MAP_MAX_ZOOM + 1;
 const CLIENT_CLUSTER_MIN_ZOOM = 16;
 const CLUSTER_DISTANCE_PX = 44;
 const CLUSTER_MIN_DISTANCE_PX = 28;
-const SUPPRESSED_CLUSTER_MEMBER_PROPERTY = 'suppressedClusterMember';
-const TILE_STATUS_HEADER = 'X-Map-Tile-Status';
-const HTTP_STATUS_NO_CONTENT = 204;
-const SERVER_CLUSTER_PROPERTY = 'server_cluster';
-const SERVER_SINGLETON_PROPERTY = 'server_singleton';
 const TILE_LAYER_UPDATE_DEBOUNCE_MS = 200;
 export interface MapBounds {
   minLon: number;
@@ -378,7 +375,10 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     this.tileLayer = new VectorTileLayer({
       source,
-      style: this.createStyleFunction(this.activeCategories()),
+      style: createOccurrenceStyleFunction(
+        this.activeCategories(),
+        (category) => this.markersService.markerChooser(category)
+      ),
       declutter: false,
       renderMode: 'hybrid',
       preload: 0,
@@ -403,52 +403,14 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     tileLayerVersion: number,
     cancellation$: Subject<void>
   ): LoadFunction {
-    return (tile, url) => {
-      const vectorTile = tile as OlVectorTile<FeatureLike>;
-
-      vectorTile.setLoader(async (extent, _resolution, projection) => {
-        try {
-          const response = await firstValueFrom(
-            this.http
-              .get(url, {
-                observe: 'response',
-                responseType: 'arraybuffer',
-              })
-              .pipe(takeUntil(cancellation$))
-          );
-          const tileStatus = response.headers.get(TILE_STATUS_HEADER);
-
-          if (tileStatus === 'timeout') {
-            this.openTileTimeoutDialog(tileLayerVersion);
-            vectorTile.setFeatures([]);
-            return [];
-          }
-
-          if (response.status === HTTP_STATUS_NO_CONTENT) {
-            vectorTile.setFeatures([]);
-            return [];
-          }
-
-          const data = response.body;
-          if (!data || data.byteLength === 0) {
-            vectorTile.setFeatures([]);
-            return [];
-          }
-
-          const features = vectorTile.getFormat().readFeatures(data, {
-            extent,
-            featureProjection: projection,
-          });
-          vectorTile.setFeatures(features);
-          return features;
-        } catch {
-          if (!this.isDestroyed && tileLayerVersion === this.tileLayerVersion) {
-            vectorTile.setState(TileState.ERROR);
-          }
-          return [];
-        }
-      });
-    };
+    return createVectorTileLoadFunction({
+      http: this.http,
+      tileLayerVersion,
+      cancellation$,
+      onTimeout: (version) => this.openTileTimeoutDialog(version),
+      shouldMarkTileError: (version) =>
+        !this.isDestroyed && version === this.tileLayerVersion,
+    });
   }
 
   private openTileTimeoutDialog(tileLayerVersion: number): void {
@@ -497,7 +459,9 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const clusterLayer = new VectorLayer({
       source: clusterSource,
-      style: this.createClusterStyleFunction(activeCategories),
+      style: createClusterStyleFunction(activeCategories, (category) =>
+        this.markersService.markerChooser(category)
+      ),
       declutter: true,
       zIndex: 100,
       minZoom: CLIENT_CLUSTER_MIN_ZOOM,
@@ -516,97 +480,19 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (!clusterFeatureSource) return;
 
     features.forEach((feature) => {
-      const category = feature.get('category') as string | undefined;
-      if (
-        !category ||
-        !activeCategories.has(category) ||
-        Number(feature.get(SERVER_CLUSTER_PROPERTY) ?? 0) === 1 ||
-        Number(feature.get(SERVER_SINGLETON_PROPERTY) ?? 0) === 1
-      ) {
-        return;
-      }
+      if (!shouldIncludeClientClusterFeature(feature, activeCategories)) return;
 
-      const coordinate = this.getFeatureCoordinate(feature);
+      const coordinate = getFeatureCoordinate(feature);
       if (!coordinate) return;
 
-      const key = this.getClusterFeatureKey(feature, coordinate);
+      const key = getClusterFeatureKey(feature, coordinate);
       if (this.loadedClusterFeatureKeys.has(key)) return;
 
-      const clusterFeature = new Feature({
-        geometry: new Point(coordinate),
-      });
-      clusterFeature.setProperties({
-        num_bo: feature.get('num_bo'),
-        ano_bo: feature.get('ano_bo'),
-        delegacia: feature.get('delegacia'),
-        category,
-      });
-
       this.loadedClusterFeatureKeys.add(key);
-      clusterFeatureSource.addFeature(clusterFeature);
-    });
-  }
-
-  private getFeatureCoordinate(feature: FeatureLike): [number, number] | null {
-    const geometry = feature.getGeometry();
-
-    if (geometry instanceof Point) {
-      const [x, y] = geometry.getCoordinates();
-      return [x, y];
-    }
-
-    if (geometry instanceof RenderFeature && geometry.getType() === 'Point') {
-      const [x, y] = geometry.getFlatCoordinates();
-      return [x, y];
-    }
-
-    return null;
-  }
-
-  private getClusterFeatureKey(
-    feature: FeatureLike,
-    coordinate: [number, number]
-  ): string {
-    return [
-      feature.get('num_bo'),
-      feature.get('ano_bo'),
-      feature.get('delegacia') ?? '',
-      Math.round(coordinate[0]),
-      Math.round(coordinate[1]),
-    ].join(':');
-  }
-
-  private createClusterStyleFunction(
-    activeCategories: string[]
-  ): (feature: FeatureLike) => Style | Style[] {
-    const singleFeatureStyle = this.createIconStyleFunction(activeCategories);
-    const clusterStyleCache = new Map<number, Style>();
-    const hiddenStyle = new Style({});
-
-    return (feature: FeatureLike): Style | Style[] => {
-      const clusteredFeatures = feature.get('features') as
-        | Feature<Point>[]
-        | undefined;
-
-      if (!clusteredFeatures || clusteredFeatures.length === 0) {
-        return hiddenStyle;
-      }
-
-      const visibleFeatures = clusteredFeatures.filter(
-        (clusteredFeature) =>
-          clusteredFeature.get(SUPPRESSED_CLUSTER_MEMBER_PROPERTY) !== true
+      clusterFeatureSource.addFeature(
+        createClientClusterFeature(feature, coordinate)
       );
-
-      if (visibleFeatures.length === 0) {
-        return hiddenStyle;
-      }
-
-      if (visibleFeatures.length === 1) {
-        return singleFeatureStyle(visibleFeatures[0]);
-      }
-
-      return this.getClusterStyle(visibleFeatures.length, clusterStyleCache);
-    };
+    });
   }
 
   private disposeClusterLayer(): void {
@@ -667,86 +553,4 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.addClusterFeatures(features, new Set(this.activeCategories()));
   }
 
-  private createStyleFunction(
-    activeCategories: string[]
-  ): (feature: FeatureLike) => Style | Style[] {
-    const iconStyle = this.createIconStyleFunction(activeCategories);
-    const clusterStyleCache = new Map<number, Style>();
-    const hiddenStyle = new Style({});
-
-    return (feature: FeatureLike): Style | Style[] => {
-      const category = feature.get('category') as string;
-
-      if (!activeCategories.includes(category)) {
-        return hiddenStyle;
-      }
-
-      const clusterCount = Number(feature.get('cluster_count') ?? 1);
-      const isServerCluster =
-        Number(feature.get(SERVER_CLUSTER_PROPERTY) ?? 0) === 1;
-      if (isServerCluster || clusterCount > 1) {
-        return this.getClusterStyle(clusterCount, clusterStyleCache);
-      }
-
-      if (Number(feature.get(SERVER_SINGLETON_PROPERTY) ?? 0) !== 1) {
-        return hiddenStyle;
-      }
-
-      return iconStyle(feature);
-    };
-  }
-
-  private createIconStyleFunction(
-    activeCategories: string[]
-  ): (feature: FeatureLike) => Style {
-    const styleCache = new Map<string, Style>();
-    const hiddenStyle = new Style({});
-
-    return (feature: FeatureLike): Style => {
-      const category = feature.get('category') as string;
-      if (!activeCategories.includes(category)) return hiddenStyle;
-
-      const cached = styleCache.get(category);
-      if (cached) return cached;
-
-      const style = new Style({
-        image: new Icon({
-          anchor: [0.5, 1],
-          scale: 0.2,
-          anchorXUnits: 'fraction',
-          anchorYUnits: 'fraction',
-          src: this.markersService.markerChooser(category),
-        }),
-      });
-
-      styleCache.set(category, style);
-      return style;
-    };
-  }
-
-  private getClusterStyle(
-    count: number,
-    styleCache: Map<number, Style>
-  ): Style {
-    const cached = styleCache.get(count);
-    if (cached) return cached;
-
-    const radius = count < 10 ? 14 : count < 100 ? 17 : 21;
-    const style = new Style({
-      image: new CircleStyle({
-        radius,
-        fill: new Fill({ color: '#1565c0' }),
-        stroke: new Stroke({ color: '#ffffff', width: 2 }),
-      }),
-      text: new Text({
-        text: count.toLocaleString('pt-BR'),
-        fill: new Fill({ color: '#ffffff' }),
-        stroke: new Stroke({ color: '#0d47a1', width: 3 }),
-        font: '700 12px Inter, Arial, sans-serif',
-      }),
-    });
-
-    styleCache.set(count, style);
-    return style;
-  }
 }

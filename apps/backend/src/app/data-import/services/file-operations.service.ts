@@ -389,15 +389,26 @@ export class FileOperationsService {
     return results;
   }
   async cleanup(filePath?: string, csvDir?: string): Promise<void> {
-    try {
-      if (filePath && filePath.trim() !== '') {
+    if (filePath && filePath.trim() !== '') {
+      try {
         await fs.unlink(filePath);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to cleanup temporary file ${filePath}:`,
+          error
+        );
       }
-      if (csvDir) {
+    }
+
+    if (csvDir) {
+      try {
         await fs.rm(csvDir, { recursive: true, force: true });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to cleanup temporary directory ${csvDir}:`,
+          error
+        );
       }
-    } catch (error) {
-      this.logger.warn(`Failed to cleanup temporary files:`, error);
     }
   }
   async getFileSize(filePath: string): Promise<number> {

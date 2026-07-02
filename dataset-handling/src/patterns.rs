@@ -17,25 +17,12 @@ pub static IDENTIFIER_WITH_DASHES: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(
 
 pub static INTEGER: Lazy<Regex> = Lazy::new(|| Regex::new(r"^-?\d+$").unwrap());
 
-pub static DATE_ISO: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap());
-
-pub static DATE_EU: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{1,2}/\d{1,2}/\d{4}$").unwrap());
-
-pub static DATE_DASH: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{1,2}-\d{1,2}-\d{4}$").unwrap());
-
 pub static TIME_HH_MM: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{1,2}:\d{2}$").unwrap());
 
 pub static TIME_HH_MM_SS: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{1,2}:\d{2}:\d{2}$").unwrap());
 
 pub static TIME_WITH_MICRO: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^\d{1,2}:\d{2}:\d{2}\.\d+$").unwrap());
-
-pub static TIME_H_FORMAT: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(\d{1,2})h(\d{2})$").unwrap());
-
-pub static TIME_DOT_FORMAT: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(\d{1,2})\.(\d{2})$").unwrap());
-
-pub static TIME_COMPACT: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(\d{3,4})$").unwrap());
 
 pub static COMMA_DECIMAL: Lazy<Regex> = Lazy::new(|| Regex::new(r"(-?\d+),(\d+)").unwrap());
 
@@ -99,11 +86,6 @@ pub fn is_valid_numeric(value: &str) -> bool {
 }
 
 #[inline]
-pub fn matches_date_pattern(value: &str) -> bool {
-    DATE_ISO.is_match(value) || DATE_EU.is_match(value) || DATE_DASH.is_match(value)
-}
-
-#[inline]
 pub fn matches_time_pattern(value: &str) -> bool {
     TIME_HH_MM.is_match(value) || TIME_HH_MM_SS.is_match(value) || TIME_WITH_MICRO.is_match(value)
 }
@@ -163,14 +145,6 @@ mod tests {
         assert!(!is_valid_numeric("-"));
         assert!(!is_valid_numeric("."));
         assert!(!is_valid_numeric(""));
-    }
-
-    #[test]
-    fn test_matches_date_pattern() {
-        assert!(matches_date_pattern("2024-01-15"));
-        assert!(matches_date_pattern("15/01/2024"));
-        assert!(matches_date_pattern("15-01-2024"));
-        assert!(!matches_date_pattern("2024/01/15"));
     }
 
     #[test]

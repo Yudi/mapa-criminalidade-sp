@@ -1,47 +1,50 @@
 import { PrismaService } from '../../prisma/prisma.service';
-import { RedisCacheService } from '../../shared/cache/redis-cache.service';
+import {
+  normalizedSourceNumberTextExpression,
+  sourceTextExpression,
+} from '../utils/source-sql.utils';
+import { getSourceTableConfig } from '../config/source-tables.config';
 import { MapFeaturesEtlService } from './map-features-etl.service';
+import { MapFeaturesQueryService } from './map-features-query.service';
+import {
+  buildProcessableRowsWhere,
+  buildRemoveSourceTableFeaturesSql,
+} from './etl/map-features-etl-sql';
+
+type SourceTableConfig = NonNullable<ReturnType<typeof getSourceTableConfig>>;
 
 describe('MapFeaturesEtlService', () => {
+  function createQueryServiceMock(): Pick<
+    MapFeaturesQueryService,
+    'invalidateReadCache'
+  > {
+    return {
+      invalidateReadCache: jest.fn().mockResolvedValue(0),
+    };
+  }
+
+  function createService(
+    prisma: PrismaService = {} as PrismaService,
+    queryService: Pick<MapFeaturesQueryService, 'invalidateReadCache'> =
+      createQueryServiceMock()
+  ): MapFeaturesEtlService {
+    return new MapFeaturesEtlService(
+      prisma,
+      queryService as MapFeaturesQueryService
+    );
+  }
+
   function createValidator(): {
     hasValidSourceMetadata(row: {
       table_name: string;
       columns_json: unknown;
     }): boolean;
   } {
-    return new MapFeaturesEtlService({} as PrismaService) as unknown as {
+    return createService() as unknown as {
       hasValidSourceMetadata(row: {
         table_name: string;
         columns_json: unknown;
       }): boolean;
-    };
-  }
-
-  function createSqlBuilder(): {
-    buildRemoveSourceTableFeaturesSql(): string;
-    sourceTextExpression(column: string): string;
-    normalizedSourceNumberTextExpression(column: string): string;
-    buildProcessableRowsWhere(config: {
-      columnMappings: {
-        num_bo: string;
-        ano_bo: string;
-        latitude: string;
-        longitude: string;
-      };
-    }): string;
-  } {
-    return new MapFeaturesEtlService({} as PrismaService) as unknown as {
-      buildRemoveSourceTableFeaturesSql(): string;
-      sourceTextExpression(column: string): string;
-      normalizedSourceNumberTextExpression(column: string): string;
-      buildProcessableRowsWhere(config: {
-        columnMappings: {
-          num_bo: string;
-          ano_bo: string;
-          latitude: string;
-          longitude: string;
-        };
-      }): string;
     };
   }
 
@@ -79,29 +82,26 @@ describe('MapFeaturesEtlService', () => {
   });
 
   it('casts raw source columns to text before trimming them', () => {
-    const service = createSqlBuilder();
-
-    expect(service.sourceTextExpression('NUM_BO')).toContain(
+    expect(sourceTextExpression('NUM_BO')).toContain(
       'btrim("NUM_BO"::text)'
     );
-    expect(service.normalizedSourceNumberTextExpression('ANO_BO')).toContain(
+    expect(normalizedSourceNumberTextExpression('ANO_BO')).toContain(
       'btrim("ANO_BO"::text)'
     );
     expect(
-      service.buildProcessableRowsWhere({
+      buildProcessableRowsWhere({
         columnMappings: {
           num_bo: 'NUM_BO',
           ano_bo: 'ANO_BO',
           latitude: 'LATITUDE',
           longitude: 'LONGITUDE',
         },
-      })
+      } as SourceTableConfig)
     ).toContain('btrim("NUM_BO"::text)');
   });
 
   it('removes only refreshed source-table records from merged features', () => {
-    const service = createSqlBuilder();
-    const sql = service.buildRemoveSourceTableFeaturesSql();
+    const sql = buildRemoveSourceTableFeaturesSql();
 
     expect(sql).toContain('UPDATE map_features');
     expect(sql).toContain('array_remove(source_tables, $1)');
@@ -120,7 +120,7 @@ describe('MapFeaturesEtlService', () => {
       .mockImplementation(async (operation) =>
         operation({ $executeRawUnsafe: executeRawUnsafe })
       );
-    const service = new MapFeaturesEtlService({
+    const service = createService({
       $transaction: transaction,
     } as unknown as PrismaService) as unknown as {
       runEtlTransaction<T>(
@@ -151,18 +151,18 @@ describe('MapFeaturesEtlService', () => {
   });
 
   it('invalidates map feature read caches after refreshed source tables', async () => {
-    const cache = {
-      deleteByPrefix: jest.fn().mockResolvedValue(3),
+    const queryService = {
+      invalidateReadCache: jest.fn().mockResolvedValue(3),
     };
-    const service = new MapFeaturesEtlService(
+    const service = createService(
       {} as PrismaService,
-      cache as unknown as RedisCacheService
+      queryService
     ) as unknown as {
       invalidateReadCacheIfNeeded(refreshedTables: number): Promise<void>;
     };
 
     await service.invalidateReadCacheIfNeeded(2);
 
-    expect(cache.deleteByPrefix).toHaveBeenCalledWith('map-features:v2:');
+    expect(queryService.invalidateReadCache).toHaveBeenCalledTimes(1);
   });
 });

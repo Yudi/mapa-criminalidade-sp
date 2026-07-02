@@ -64,66 +64,6 @@ const DIACRITIC_MAP_UPPER: &[(char, char)] = &[
     ('ñ', 'N'),
 ];
 
-/// Mapping of accented characters to their ASCII equivalents (lowercase).
-const DIACRITIC_MAP_LOWER: &[(char, char)] = &[
-    // A variants
-    ('À', 'a'),
-    ('Á', 'a'),
-    ('Â', 'a'),
-    ('Ã', 'a'),
-    ('Ä', 'a'),
-    ('Å', 'a'),
-    ('à', 'a'),
-    ('á', 'a'),
-    ('â', 'a'),
-    ('ã', 'a'),
-    ('ä', 'a'),
-    ('å', 'a'),
-    // E variants
-    ('È', 'e'),
-    ('É', 'e'),
-    ('Ê', 'e'),
-    ('Ë', 'e'),
-    ('è', 'e'),
-    ('é', 'e'),
-    ('ê', 'e'),
-    ('ë', 'e'),
-    // I variants
-    ('Ì', 'i'),
-    ('Í', 'i'),
-    ('Î', 'i'),
-    ('Ï', 'i'),
-    ('ì', 'i'),
-    ('í', 'i'),
-    ('î', 'i'),
-    ('ï', 'i'),
-    // O variants
-    ('Ò', 'o'),
-    ('Ó', 'o'),
-    ('Ô', 'o'),
-    ('Õ', 'o'),
-    ('Ö', 'o'),
-    ('ò', 'o'),
-    ('ó', 'o'),
-    ('ô', 'o'),
-    ('õ', 'o'),
-    ('ö', 'o'),
-    // U variants
-    ('Ù', 'u'),
-    ('Ú', 'u'),
-    ('Û', 'u'),
-    ('Ü', 'u'),
-    ('ù', 'u'),
-    ('ú', 'u'),
-    ('û', 'u'),
-    ('ü', 'u'),
-    // C and N variants
-    ('Ç', 'c'),
-    ('ç', 'c'),
-    ('Ñ', 'n'),
-    ('ñ', 'n'),
-];
-
 /// Remove diacritics from a character and convert to uppercase.
 ///
 /// Returns the ASCII equivalent of accented characters, or the uppercase
@@ -136,20 +76,6 @@ pub fn remove_diacritic_upper(c: char) -> char {
         }
     }
     c.to_ascii_uppercase()
-}
-
-/// Remove diacritics from a character and convert to lowercase.
-///
-/// Returns the ASCII equivalent of accented characters, or the lowercase
-/// version of non-accented characters.
-#[inline]
-pub fn remove_diacritic_lower(c: char) -> char {
-    for &(from, to) in DIACRITIC_MAP_LOWER {
-        if c == from {
-            return to;
-        }
-    }
-    c.to_lowercase().next().unwrap_or(c)
 }
 
 /// Normalize a column name for database compatibility.
@@ -195,33 +121,6 @@ pub fn normalize_column_name(name: &str) -> String {
         .join("_")
 }
 
-/// Normalize text by removing accents, converting to lowercase, and standardizing separators.
-///
-/// This function is used for consistent text comparison across the codebase.
-/// Spaces are converted to underscores for uniform comparison.
-///
-/// # Examples
-///
-/// ```
-/// use dataset_handling::text_normalizer::normalize_text_lower;
-///
-/// assert_eq!(normalize_text_lower("Não Informado"), "nao_informado");
-/// assert_eq!(normalize_text_lower("MADRUGADA"), "madrugada");
-/// ```
-pub fn normalize_text_lower(text: &str) -> String {
-    text.chars()
-        .map(|c| {
-            if c == ' ' {
-                '_'
-            } else if c.is_ascii() {
-                c.to_ascii_lowercase()
-            } else {
-                remove_diacritic_lower(c)
-            }
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,13 +145,6 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_text_lower() {
-        assert_eq!(normalize_text_lower("Não Informado"), "nao_informado");
-        assert_eq!(normalize_text_lower("MADRUGADA"), "madrugada");
-        assert_eq!(normalize_text_lower("Período da Manhã"), "periodo_da_manha");
-    }
-
-    #[test]
     fn test_remove_diacritic_upper() {
         assert_eq!(remove_diacritic_upper('É'), 'E');
         assert_eq!(remove_diacritic_upper('ã'), 'A');
@@ -260,11 +152,4 @@ mod tests {
         assert_eq!(remove_diacritic_upper('a'), 'A');
     }
 
-    #[test]
-    fn test_remove_diacritic_lower() {
-        assert_eq!(remove_diacritic_lower('É'), 'e');
-        assert_eq!(remove_diacritic_lower('Ã'), 'a');
-        assert_eq!(remove_diacritic_lower('Ç'), 'c');
-        assert_eq!(remove_diacritic_lower('A'), 'a');
-    }
 }

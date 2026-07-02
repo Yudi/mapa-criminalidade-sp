@@ -6,7 +6,7 @@
 //! Note: Datetime format detection is now done during chunk processing in the analyzer,
 //! where ALL rows are analyzed. The type inference uses pre-computed flags from that analysis.
 
-use crate::types::{ColumnAnalysis, IntegerRange, NumericStats};
+use crate::types::{ColumnAnalysis, NumericStats};
 
 /// Configuration for type inference behavior.
 #[derive(Debug, Clone)]
@@ -139,17 +139,6 @@ fn determine_text_type() -> String {
     "TEXT".to_string()
 }
 
-/// Calculate the integer range from numeric statistics.
-pub fn calculate_integer_range(min: f64, max: f64) -> IntegerRange {
-    if min >= -32_768.0 && max <= 32_767.0 {
-        IntegerRange::SmallInt
-    } else if min >= -2_147_483_648.0 && max <= 2_147_483_647.0 {
-        IntegerRange::Int
-    } else {
-        IntegerRange::BigInt
-    }
-}
-
 /// Apply intelligent type correction based on column naming patterns.
 ///
 /// This function corrects common misdetections, such as descriptive text
@@ -195,13 +184,12 @@ pub fn correct_column_type(column_name: &str, db_type: &str, sample_value: Optio
     }
 
     // Only actual time columns should use time type
-    if db_type_lower == "time" || db_type_lower.contains("time") {
-        if !column_upper.contains("HORA")
-            && !column_upper.contains("TIME")
-            && !column_upper.contains("HORARIO")
-        {
-            return "text".to_string();
-        }
+    if (db_type_lower == "time" || db_type_lower.contains("time"))
+        && !column_upper.contains("HORA")
+        && !column_upper.contains("TIME")
+        && !column_upper.contains("HORARIO")
+    {
+        return "text".to_string();
     }
 
     db_type.to_string()
@@ -224,19 +212,6 @@ mod tests {
     fn test_determine_text_type() {
         // All string columns should use TEXT for safety with external data
         assert_eq!(determine_text_type(), "TEXT");
-    }
-
-    #[test]
-    fn test_calculate_integer_range() {
-        assert_eq!(calculate_integer_range(0.0, 100.0), IntegerRange::SmallInt);
-        assert_eq!(
-            calculate_integer_range(-50000.0, 50000.0),
-            IntegerRange::Int
-        );
-        assert_eq!(
-            calculate_integer_range(0.0, 3_000_000_000.0),
-            IntegerRange::BigInt
-        );
     }
 
     #[test]

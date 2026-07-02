@@ -11,6 +11,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 const DEFAULT_BATCH_SIZE: usize = 8_192;
+type StringRows = Vec<Vec<String>>;
+type ParquetStringRows = (Vec<String>, StringRows);
 
 pub fn write_string_rows_to_parquet(
     output_path: &Path,
@@ -68,7 +70,7 @@ pub fn read_parquet_headers(input_path: &Path) -> Result<Vec<String>, Box<dyn Er
 
 pub fn read_parquet_string_rows(
     input_path: &Path,
-) -> Result<(Vec<String>, Vec<Vec<String>>), Box<dyn Error>> {
+) -> Result<ParquetStringRows, Box<dyn Error>> {
     let file = File::open(input_path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
     let headers = builder

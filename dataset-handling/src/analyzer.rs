@@ -254,13 +254,12 @@ impl CsvAnalyzer {
                 self.analyze_csv_sequential(file_path)
             };
 
-        result.map(|analysis| {
+        result.inspect(|_| {
             let duration = start_time.elapsed();
             self.logger.success(&format!(
                 "Analysis completed in {:.2}s",
                 duration.as_secs_f64()
             ));
-            analysis
         })
     }
 

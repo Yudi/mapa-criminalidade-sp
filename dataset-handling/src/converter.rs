@@ -65,17 +65,6 @@ fn is_data_row(row: &[DataType], _column_count: usize) -> bool {
     !row.is_empty() && row.iter().any(|cell| !cell.to_string().trim().is_empty())
 }
 
-pub fn convert_excel_to_csv(excel_path: &Path, output_dir: &Path) -> Result<(), Box<dyn Error>> {
-    convert_excel(excel_path, output_dir, OutputFormat::Csv)
-}
-
-pub fn convert_excel_to_parquet(
-    excel_path: &Path,
-    output_dir: &Path,
-) -> Result<(), Box<dyn Error>> {
-    convert_excel(excel_path, output_dir, OutputFormat::Parquet)
-}
-
 pub fn convert_excel(
     excel_path: &Path,
     output_dir: &Path,
@@ -218,13 +207,32 @@ fn write_csv_sheet(
         .quote_style(csv::QuoteStyle::Always)
         .from_path(output_path)?;
 
-    writer.write_record(column_names)?;
+    let escaped_column_names: Vec<String> = column_names
+        .iter()
+        .map(|value| escape_csv_formula_value(value))
+        .collect();
+    writer.write_record(&escaped_column_names)?;
+
     for row in data_rows {
-        writer.write_record(row)?;
+        let escaped_row: Vec<String> = row
+            .iter()
+            .map(|value| escape_csv_formula_value(value))
+            .collect();
+        writer.write_record(&escaped_row)?;
     }
     writer.flush()?;
 
     Ok(())
+}
+
+fn escape_csv_formula_value(value: &str) -> String {
+    let first_meaningful_character = value.trim_start().chars().next();
+
+    if matches!(first_meaningful_character, Some('=' | '+' | '-' | '@')) {
+        format!("'{}", value)
+    } else {
+        value.to_string()
+    }
 }
 
 fn extract_row_values(row: &[DataType], column_names: &[String]) -> Vec<String> {
@@ -364,4 +372,31 @@ fn select_columns(rows: &[Vec<String>], column_indices: &[usize]) -> Vec<Vec<Str
                 .collect()
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape_csv_formula_value;
+
+    #[test]
+    fn escapes_values_that_spreadsheets_can_interpret_as_formulas() {
+        for dangerous_value in ["=2+3", "+2+3", "-10+20", "@A1"] {
+            assert_eq!(
+                escape_csv_formula_value(dangerous_value),
+                format!("'{}", dangerous_value)
+            );
+        }
+    }
+
+    #[test]
+    fn escapes_formula_values_after_leading_whitespace() {
+        assert_eq!(escape_csv_formula_value("  =2+3"), "'  =2+3");
+    }
+
+    #[test]
+    fn preserves_regular_values() {
+        for safe_value in ["normal", "1+1", "", " NULL "] {
+            assert_eq!(escape_csv_formula_value(safe_value), safe_value);
+        }
+    }
 }

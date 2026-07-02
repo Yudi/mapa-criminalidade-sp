@@ -14,33 +14,17 @@ import type { FileCheckCache } from './services/import-decision.service';
 import { ImportStatusService } from './services/import-status.service';
 import { getErrorMessage } from '../shared/error.utils';
 import { ImlImportService } from './services/iml-import.service';
-
-type ImportIoLimiter = <T>(operation: () => Promise<T>) => Promise<T>;
-
-interface ImportUrlGroup {
-  url: string;
-  year: number;
-  categories: DataCategory[];
-}
-
-interface ImportTarget {
-  category: DataCategory;
-  year: number;
-}
-
-interface ImportGroupResult {
-  success: boolean;
-  url: string;
-  categories: number;
-  error?: string;
-}
-
-interface CategoryProcessResult {
-  success: boolean;
-  category: string;
-  recordCount?: number;
-  error?: string;
-}
+import {
+  CategoryProcessResult,
+  ImportGroupResult,
+  ImportIoLimiter,
+  ImportTarget,
+  ImportUrlGroup,
+} from './types/import-orchestration.types';
+import {
+  createImportConcurrencyLimiter,
+  processWithConcurrency,
+} from './utils/import-concurrency.utils';
 
 const DATASET_HANDLING_PARALLELIZATION = 1;
 
@@ -48,40 +32,10 @@ const DATASET_HANDLING_PARALLELIZATION = 1;
 export class DataImportService {
   private readonly logger = new Logger(DataImportService.name);
   private readonly tempDir = path.join(process.cwd(), 'temp');
+  private readonly tempDirReady: Promise<void>;
 
   private readonly maxConcurrentImportOperations =
     DATASET_HANDLING_PARALLELIZATION;
-  private readonly downloadTimeoutMs = this.getPositiveIntegerEnv(
-    'DATA_IMPORT_DOWNLOAD_TIMEOUT_MS',
-    3_600_000,
-    600_000,
-    7_200_000
-  );
-  private readonly fileProcessingTimeoutMs = this.getPositiveIntegerEnv(
-    'DATA_IMPORT_FILE_PROCESSING_TIMEOUT_MS',
-    5_400_000,
-    1_800_000,
-    10_800_000
-  );
-  private withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    timeoutMessage: string
-  ): Promise<T> {
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(
-        () => reject(new Error(timeoutMessage)),
-        timeoutMs
-      );
-    });
-
-    return Promise.race([promise, timeoutPromise]).finally(() => {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
-    });
-  }
 
   constructor(
     private readonly fileOperationsService: FileOperationsService,
@@ -92,7 +46,14 @@ export class DataImportService {
     private readonly importStatusService: ImportStatusService,
     private readonly imlImportService: ImlImportService
   ) {
-    this.ensureTempDir();
+    this.tempDirReady = this.ensureTempDir();
+    this.tempDirReady.catch((error) => {
+      this.logger.warn(
+        `Failed to initialize temp directory ${this.tempDir}: ${getErrorMessage(
+          error
+        )}`
+      );
+    });
     // Check Rust tool availability on startup (don't await to avoid blocking)
     this.rustToolService.ensureRustTool().catch((error) => {
       this.logger.warn(
@@ -103,84 +64,6 @@ export class DataImportService {
 
   private async ensureTempDir(): Promise<void> {
     await this.fileOperationsService.ensureDirectory(this.tempDir);
-  }
-
-  private getPositiveIntegerEnv(
-    name: string,
-    fallback: number,
-    min: number,
-    max: number
-  ): number {
-    const configuredValue = Number(process.env[name] ?? fallback);
-
-    if (
-      !Number.isInteger(configuredValue) ||
-      configuredValue < min
-    ) {
-      return fallback;
-    }
-
-    return Math.min(configuredValue, max);
-  }
-
-  private createConcurrencyLimiter(
-    concurrencyLimit: number
-  ): ImportIoLimiter {
-    let activeCount = 0;
-    const queue: Array<() => void> = [];
-
-    const acquire = async (): Promise<() => void> =>
-      new Promise((resolve) => {
-        const start = () => {
-          activeCount++;
-          resolve(() => {
-            activeCount--;
-            const next = queue.shift();
-            if (next) {
-              next();
-            }
-          });
-        };
-
-        if (activeCount < concurrencyLimit) {
-          start();
-        } else {
-          queue.push(start);
-        }
-      });
-
-    return async <T>(operation: () => Promise<T>): Promise<T> => {
-      const release = await acquire();
-      try {
-        return await operation();
-      } finally {
-        release();
-      }
-    };
-  }
-
-  private async processWithConcurrency<T, R>(
-    items: T[],
-    concurrencyLimit: number,
-    processor: (item: T) => Promise<R>
-  ): Promise<R[]> {
-    const results = new Array<R>(items.length);
-    let nextIndex = 0;
-
-    const workers = Array.from(
-      { length: Math.min(concurrencyLimit, items.length) },
-      async () => {
-        while (nextIndex < items.length) {
-          const currentIndex = nextIndex;
-          nextIndex++;
-          results[currentIndex] = await processor(items[currentIndex]);
-        }
-      }
-    );
-
-    await Promise.all(workers);
-
-    return results;
   }
 
   private getErrorMessage(error: unknown): string {
@@ -204,7 +87,7 @@ export class DataImportService {
     const validCategories = DataCategoryConfig.getDirectCategories();
     const fileCheckCache: FileCheckCache = new Map();
 
-    const targetGroups = await this.processWithConcurrency(
+    const targetGroups = await processWithConcurrency(
       validCategories,
       this.maxConcurrentImportOperations,
       async (category): Promise<ImportTarget[]> => {
@@ -239,6 +122,8 @@ export class DataImportService {
   private async importTargetsOptimized(targets: ImportTarget[]): Promise<void> {
     if (targets.length === 0) return;
 
+    await this.tempDirReady;
+
     const urlGroups = new Map<string, ImportUrlGroup>();
 
     for (const { category, year } of targets) {
@@ -271,7 +156,7 @@ export class DataImportService {
 
       return left.url.localeCompare(right.url);
     });
-    const ioLimiter = this.createConcurrencyLimiter(
+    const ioLimiter = createImportConcurrencyLimiter(
       this.maxConcurrentImportOperations
     );
 
@@ -279,7 +164,7 @@ export class DataImportService {
       `Starting parallel processing with max ${this.maxConcurrentImportOperations} concurrent I/O operations...`
     );
 
-    const groupResults = await this.processWithConcurrency(
+    const groupResults = await processWithConcurrency(
       groups,
       this.maxConcurrentImportOperations,
       async (group): Promise<ImportGroupResult> => {
@@ -288,15 +173,11 @@ export class DataImportService {
         );
 
         try {
-          await this.withTimeout(
-            this.importFromSingleFile(
-              group.url,
-              group.year,
-              group.categories,
-              ioLimiter
-            ),
-            this.fileProcessingTimeoutMs,
-            `Overall timeout for processing ${group.url} with ${group.categories.length} categories`
+          await this.importFromSingleFile(
+            group.url,
+            group.year,
+            group.categories,
+            ioLimiter
           );
           return {
             success: true,
@@ -438,22 +319,23 @@ export class DataImportService {
     const url = DataCategoryConfig.getUrl(category, year);
     const fileName = `${category.tablePrefix}_${year}.xlsx`;
     const filePath = path.join(this.tempDir, fileName);
+    const parquetDir = path.join(
+      this.tempDir,
+      `${category.tablePrefix}_${year}_parquet`
+    );
 
+    await this.tempDirReady;
     this.logger.log(`Downloading ${url}...`);
 
-    await this.fileOperationsService.downloadFile(url, filePath);
-
-    const fileHash = await this.fileOperationsService.calculateFileHash(
-      filePath
-    );
-    const fileSize = await this.fileOperationsService.getFileSize(filePath);
-
     try {
-      // Convert Excel to Parquet using Rust tool
-      const parquetDir = path.join(
-        this.tempDir,
-        `${category.tablePrefix}_${year}_parquet`
+      await this.fileOperationsService.downloadFile(url, filePath);
+
+      const fileHash = await this.fileOperationsService.calculateFileHash(
+        filePath
       );
+      const fileSize = await this.fileOperationsService.getFileSize(filePath);
+
+      // Convert Excel to Parquet using Rust tool
       await this.rustToolService.convertExcelToParquet(filePath, parquetDir);
 
       const recordCount =
@@ -474,10 +356,7 @@ export class DataImportService {
         recordCount: recordCount,
       };
       await this.metadataService.saveFileMetadata(metadata);
-
-      await this.fileOperationsService.cleanup(filePath, parquetDir);
     } catch (error) {
-      await this.fileOperationsService.cleanup(filePath);
       const errorMessage = getErrorMessage(error);
 
       if (
@@ -495,6 +374,9 @@ export class DataImportService {
       }
 
       throw error;
+    } finally {
+      await this.fileOperationsService.cleanup(filePath);
+      await this.fileOperationsService.cleanup(undefined, parquetDir);
     }
   }
   private async importFromSingleFile(
@@ -517,14 +399,10 @@ export class DataImportService {
     let fileSize = 0;
 
     try {
-      // Download file with timeout protection
+      // Download attempts are timed out inside FileOperationsService.
       const downloadStart = Date.now();
       await ioLimiter(() =>
-        this.withTimeout(
-          this.fileOperationsService.downloadFile(url, filePath),
-          this.downloadTimeoutMs,
-          `Download timeout for ${url}`
-        )
+        this.fileOperationsService.downloadFile(url, filePath)
       );
       const downloadTime = Date.now() - downloadStart;
 
@@ -532,19 +410,11 @@ export class DataImportService {
         `Download completed in ${(downloadTime / 1000).toFixed(1)}s`
       );
 
-      // Calculate file hash and size with timeout protection
+      // Hash and size checks are awaited directly so cleanup cannot overlap them.
       [fileHash, fileSize] = await ioLimiter(() =>
         Promise.all([
-          this.withTimeout(
-            this.fileOperationsService.calculateFileHash(filePath),
-            120_000, // 1 minute timeout for hash calculation
-            `Hash calculation timeout for ${fileName}`
-          ),
-          this.withTimeout(
-            this.fileOperationsService.getFileSize(filePath),
-            10_000, // 10 seconds timeout for file size
-            `File size check timeout for ${fileName}`
-          ),
+          this.fileOperationsService.calculateFileHash(filePath),
+          this.fileOperationsService.getFileSize(filePath),
         ])
       );
 
@@ -582,11 +452,7 @@ export class DataImportService {
         `Converting ${fileName} once for ${categoriesToProcess.length} categories`
       );
       await ioLimiter(() =>
-        this.withTimeout(
-          this.rustToolService.convertExcelToParquet(filePath, parquetDir),
-          600000, // 10 minutes timeout for Excel conversion (large files)
-          `Excel to Parquet conversion timeout for ${fileName}`
-        )
+        this.rustToolService.convertExcelToParquet(filePath, parquetDir)
       );
 
       this.logger.log(
@@ -603,15 +469,12 @@ export class DataImportService {
 
               const processingStart = Date.now();
 
-              const recordCount = await this.withTimeout(
-                this.parquetProcessingService.importParquetToDatabase(
+              const recordCount =
+                await this.parquetProcessingService.importParquetToDatabase(
                   parquetDir,
                   category,
                   year
-                ),
-                3_600_000, // 60m timeout for database import (large files)
-                `Database import timeout for ${category.name}`
-              );
+                );
 
               const metadata: FileMetadata = {
                 category: category.name,

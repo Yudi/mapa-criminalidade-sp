@@ -10,14 +10,30 @@ import {
 import { TableColumnInfo } from '../types/data-import.types';
 import { StringUtils } from '../utils/string.utils';
 import { RustToolService } from './rust-tool.service';
-import * as path from 'path';
 import {
   getErrorMessage,
   getErrorStringProperty,
 } from '../../shared/error.utils';
+import {
+  applyColumnTypeOverrides,
+  buildRawSourceColumns,
+  createTextTypeMap,
+  isRawSystemColumn,
+  matchCsvColumnsToTableColumns,
+  normalizeColumnTypeOverrides,
+  RAW_SOURCE_COLUMN_TYPE,
+} from './database/database-import-column.utils';
+import {
+  convertToPostgresSharedPath,
+  POSTGRES_SHARED_IMPORT_PATH,
+  readCsvHeaderColumns,
+} from './database/database-import-file.utils';
+import {
+  buildCopyCsvSql,
+  buildCreateRawTableSql,
+} from './database/database-import-sql.utils';
 
 type DatabaseExecutor = PrismaService | Prisma.TransactionClient;
-const RAW_SOURCE_COLUMN_TYPE = 'TEXT';
 
 @Injectable()
 export class DatabaseService {
@@ -29,27 +45,19 @@ export class DatabaseService {
     private readonly rustToolService: RustToolService
   ) {}
   private convertToPostgresPath(localPath: string): string {
-    // In Docker environment, PostgreSQL runs in a separate container
-    // The backend mounts temp folder to /tmp/shared_import in both containers
-    const tempDir = path.resolve(process.cwd(), 'temp');
-    const postgresSharedPath = '/tmp/shared_import'; // Hardcoded path for PostgreSQL container
-
     this.logger.debug(
-      `Path conversion setup: tempDir=${tempDir}, postgresSharedPath=${postgresSharedPath}`
+      `Path conversion setup: postgresSharedPath=${POSTGRES_SHARED_IMPORT_PATH}`
     );
 
-    if (localPath.startsWith(tempDir)) {
-      // Convert local temp path to Docker volume path
-      const relativePath = path.relative(tempDir, localPath);
-      const dockerPath = path.posix.join(postgresSharedPath, relativePath);
+    const postgresPath = convertToPostgresSharedPath(localPath);
 
+    if (postgresPath !== localPath) {
       this.logger.log(
-        `Docker path conversion: ${localPath} → ${dockerPath}`
+        `Docker path conversion: ${localPath} → ${postgresPath}`
       );
-      return dockerPath;
+      return postgresPath;
     }
 
-    // If not in temp directory, use the path as-is (for non-Docker environments)
     this.logger.debug(`Path unchanged (not in temp): ${localPath}`);
     return localPath;
   }
@@ -304,7 +312,7 @@ export class DatabaseService {
     const existingColumns = await this.getTableColumns(tableName);
     const { columns: sourceColumns, types: inferredTypes } =
       await this.analyzeDataFileStructureWithRust(dataPath);
-    const logicalTypes = this.applyColumnTypeOverrides(
+    const logicalTypes = applyColumnTypeOverrides(
       inferredTypes,
       columnTypeOverrides
     );
@@ -355,10 +363,10 @@ export class DatabaseService {
       // Update metadata (optional - only if metadata table exists)
       try {
         const existingSourceColumns = existingColumns.filter(
-          (column) => !this.isRawSystemColumn(column)
+          (column) => !isRawSystemColumn(column)
         );
         const allColumns = [...existingSourceColumns, ...missingColumns];
-        const storageTypes = this.createTextTypeMap(allColumns);
+        const storageTypes = createTextTypeMap(allColumns);
         const updatedLogicalTypes = { ...logicalTypes };
         existingSourceColumns.forEach((column) => {
           if (!updatedLogicalTypes[column]) {
@@ -416,7 +424,7 @@ export class DatabaseService {
     await this.ensureRawSchema();
     const { columns: rawColumns, types: inferredRawTypes } =
       await this.analyzeDataFileStructureWithRust(dataPath);
-    const logicalRawTypes = this.applyColumnTypeOverrides(
+    const logicalRawTypes = applyColumnTypeOverrides(
       inferredRawTypes,
       columnTypeOverrides
     );
@@ -425,63 +433,22 @@ export class DatabaseService {
       throw new Error(`No columns found in source file: ${dataPath}`);
     }
 
-    const columns: string[] = [];
-    const types: Record<string, string> = {};
-    const logicalTypes: Record<string, string> = {};
-    const seenColumns = new Set<string>();
-
-    rawColumns.forEach((column, index) => {
-      let processedColumn = column;
-
-      // If column name is empty, null, or just whitespace, create a fallback name
-      if (!column || column.trim() === '') {
-        processedColumn = `column_${index + 1}`;
-        this.logger.warn(
-          `Found empty column name at index ${index}, using fallback: ${processedColumn}`
-        );
-      }
-
-      if (processedColumn && processedColumn.trim() !== '') {
-        const upperColumn = processedColumn.toUpperCase();
-        if (seenColumns.has(upperColumn)) {
-          const originalName = processedColumn;
-          let suffix = 2;
-          while (seenColumns.has(`${upperColumn}_${suffix}`)) {
-            suffix++;
-          }
-          processedColumn = `${processedColumn}_${suffix}`;
-          this.logger.warn(
-            `Duplicate column "${originalName}" found at index ${index}, renamed to "${processedColumn}"`
-          );
-        }
-
-        seenColumns.add(processedColumn.toUpperCase());
-        columns.push(processedColumn);
-        types[processedColumn] = RAW_SOURCE_COLUMN_TYPE;
-        logicalTypes[processedColumn] =
-          logicalRawTypes[column] || RAW_SOURCE_COLUMN_TYPE;
-      }
-    });
+    const { columns, types, logicalTypes } = buildRawSourceColumns(
+      rawColumns,
+      logicalRawTypes,
+      this.logger
+    );
 
     if (columns.length === 0) {
       throw new Error(
         `No valid columns found in source file after filtering: ${dataPath}`
       );
     }
-    const columnDefinitions = columns
-      .map((column) => {
-        const type = types[column];
-        return `${quoteIdentifier(column)} ${type}`;
-      })
-      .join(',\n  ');
-
-    const createTableSQL = `
-      CREATE TABLE IF NOT EXISTS ${this.rawTable(tableName)} (
-        id SERIAL PRIMARY KEY,
-        ${columnDefinitions},
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+    const createTableSQL = buildCreateRawTableSql(
+      this.rawTable(tableName),
+      columns,
+      types
+    );
 
     this.logger.debug(
       `Creating table with ${columns.length} processed columns`
@@ -537,21 +504,7 @@ export class DatabaseService {
 
     const countBefore = await this.getTableRecordCount(tableName, db);
     const actualColumns = await this.getTableColumns(tableName, db);
-    const fs = require('fs');
-    const readline = require('readline');
-
-    const fileStream = fs.createReadStream(csvFilePath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    let csvColumns: string[] = [];
-    for await (const line of rl as AsyncIterable<string>) {
-      csvColumns = line.split(';').map((col) => col.trim().replace(/"/g, ''));
-      break;
-    }
-    rl.close();
+    const csvColumns = await readCsvHeaderColumns(csvFilePath);
 
     this.logger.debug(
       `Column matching: CSV(${csvColumns.length}) vs DB(${actualColumns.length})`
@@ -559,42 +512,8 @@ export class DatabaseService {
     this.logger.verbose(`CSV columns: ${csvColumns.join(', ')}`);
     this.logger.verbose(`DB columns: ${actualColumns.join(', ')}`);
 
-    // Enhanced column matching - CSV data is already normalized, match with DB columns
-    const columnMapping = new Map<string, string>();
-    const mappedColumns = [];
-    const unmatchedColumns = [];
-
-    for (const csvCol of csvColumns) {
-      let matchingDbCol = null;
-
-      // Strategy 1: Direct match (CSV columns are already normalized)
-      matchingDbCol = actualColumns.find((dbCol) => dbCol === csvCol);
-
-      // Strategy 2: Normalize DB column to match normalized CSV column
-      if (!matchingDbCol) {
-        matchingDbCol = actualColumns.find(
-          (dbCol) => StringUtils.normalizeColumnName(dbCol) === csvCol
-        );
-      }
-
-      // Strategy 3: Case-insensitive match (fallback for legacy tables)
-      if (!matchingDbCol) {
-        matchingDbCol = actualColumns.find(
-          (dbCol) => dbCol.toLowerCase() === csvCol.toLowerCase()
-        );
-      }
-
-      if (matchingDbCol) {
-        columnMapping.set(csvCol, matchingDbCol);
-        mappedColumns.push(`${csvCol}→${matchingDbCol}`);
-        this.logger.verbose(
-          `Mapped CSV "${csvCol}" → DB "${matchingDbCol}"`
-        );
-      } else {
-        unmatchedColumns.push(csvCol);
-        this.logger.verbose(`No match for CSV column "${csvCol}"`);
-      }
-    }
+    const { columnMapping, mappedColumns, unmatchedColumns } =
+      matchCsvColumnsToTableColumns(csvColumns, actualColumns, this.logger);
 
     this.logger.debug(
       `Column mapping: ${mappedColumns.length} mapped, ${unmatchedColumns.length} unmatched`
@@ -617,20 +536,11 @@ export class DatabaseService {
     }
     const dbColumnsToUse = Array.from(columnMapping.values());
 
-    const copyQuery = `
-      COPY ${this.rawTable(tableName)} (${dbColumnsToUse
-      .map((col) => quoteIdentifier(col))
-      .join(', ')})
-      FROM ${quoteLiteral(postgresFilePath)}
-      WITH (
-        FORMAT csv,
-        HEADER true,
-        DELIMITER ';',
-        NULL '',
-        QUOTE '"',
-        ESCAPE '"'
-      )
-    `;
+    const copyQuery = buildCopyCsvSql(
+      this.rawTable(tableName),
+      dbColumnsToUse,
+      postgresFilePath
+    );
 
     this.logger.debug(`Executing COPY command for ${tableName}`);
     this.logger.verbose(`COPY columns: ${dbColumnsToUse.join(', ')}`);
@@ -711,7 +621,7 @@ export class DatabaseService {
     columnTypeOverrides: Record<string, string>,
     db: DatabaseExecutor = this.prisma
   ): Promise<void> {
-    const overrides = this.normalizeColumnTypeOverrides(columnTypeOverrides);
+    const overrides = normalizeColumnTypeOverrides(columnTypeOverrides);
     if (overrides.size === 0) {
       return;
     }
@@ -739,42 +649,6 @@ export class DatabaseService {
     if (!/^registro_obitos_iml_\d{4}$/.test(tableName)) {
       throw new Error(`Invalid IML table name: ${tableName}`);
     }
-  }
-
-  private applyColumnTypeOverrides(
-    inferredTypes: Record<string, string>,
-    columnTypeOverrides: Record<string, string>
-  ): Record<string, string> {
-    const overrides = this.normalizeColumnTypeOverrides(columnTypeOverrides);
-    if (overrides.size === 0) {
-      return inferredTypes;
-    }
-
-    const types = { ...inferredTypes };
-    for (const column of Object.keys(types)) {
-      const normalizedColumn = StringUtils.normalizeColumnName(column);
-      const overrideType = overrides.get(normalizedColumn);
-      if (overrideType) {
-        types[column] = overrideType;
-      }
-    }
-
-    return types;
-  }
-
-  private normalizeColumnTypeOverrides(
-    columnTypeOverrides: Record<string, string>
-  ): Map<string, string> {
-    const overrides = new Map<string, string>();
-    for (const [columnName, columnType] of Object.entries(
-      columnTypeOverrides
-    )) {
-      overrides.set(
-        StringUtils.normalizeColumnName(columnName),
-        columnType.toUpperCase()
-      );
-    }
-    return overrides;
   }
 
   private async ensureRawSchema(): Promise<void> {
@@ -805,13 +679,4 @@ export class DatabaseService {
     });
   }
 
-  private createTextTypeMap(columns: string[]): Record<string, string> {
-    return Object.fromEntries(
-      columns.map((column) => [column, RAW_SOURCE_COLUMN_TYPE])
-    );
-  }
-
-  private isRawSystemColumn(column: string): boolean {
-    return column === 'id' || column === 'created_at';
-  }
 }

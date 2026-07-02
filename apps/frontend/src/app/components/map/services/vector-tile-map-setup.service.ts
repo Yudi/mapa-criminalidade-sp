@@ -1,38 +1,35 @@
 import { inject, Injectable } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import TileLayer from 'ol/layer/Tile';
-import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorLayer from 'ol/layer/Vector';
 import Map from 'ol/Map';
 import Feature, { FeatureLike } from 'ol/Feature';
 import Point from 'ol/geom/Point';
-import RenderFeature from 'ol/render/Feature';
 import { fromLonLat } from 'ol/proj';
 import OSM from 'ol/source/OSM';
-import VectorTileSource from 'ol/source/VectorTile';
 import VectorSource from 'ol/source/Vector';
 import Style from 'ol/style/Style';
 import Icon from 'ol/style/Icon';
 import View from 'ol/View';
 import { Pixel } from 'ol/pixel';
-import TileState from 'ol/TileState';
-import type Tile from 'ol/Tile';
 import { MapMarkersService } from '../../../shared/map-markers.service';
 import type { FeatureDetailDialogData } from '../components/feature-detail-dialog/feature-detail-dialog.component';
+import { getFeatureCoordinate } from '../utils/map-cluster.utils';
+import { preloadNextZoomTiles } from '../utils/map-cluster-preload.utils';
+import { MAP_INTERACTIVE_LAYER_PROPERTY } from '../utils/map-layer.constants';
+import {
+  getSpreadPixelOffsets,
+  SPREAD_ANIMATION_MS,
+  SPREAD_MARKER_PROPERTY,
+} from '../utils/map-spread.utils';
 
 const DEFAULT_COORDINATES: [number, number] = [-46.63394714, -23.5503953];
 const DEFAULT_ZOOM = 16;
 const MAX_ZOOM = 19;
 const HIT_TOLERANCE = 4;
-const SPREAD_MARKER_PROPERTY = 'spreadMarker';
 const SUPPRESSED_CLUSTER_MEMBER_PROPERTY = 'suppressedClusterMember';
-const SPREAD_RADIUS_PX = 38;
-const SPREAD_RING_GAP_PX = 30;
-const SPREAD_ANIMATION_MS = 220;
 const CLUSTER_FEATURES_PROPERTY = 'features';
 const SERVER_CLUSTER_COUNT_PROPERTY = 'cluster_count';
-const CLUSTER_PRELOAD_MAX_WAIT_MS = 300;
-export const MAP_INTERACTIVE_LAYER_PROPERTY = 'mapInteractiveLayer';
 
 @Injectable({
   providedIn: 'root',
@@ -184,7 +181,7 @@ export class VectorTileMapSetupService {
       this.clearSpreadLayer(olMap);
 
       if (clusterCoordinate && this.canZoomIn(olMap)) {
-        await this.preloadNextZoomTiles(olMap, clusterCoordinate);
+        await preloadNextZoomTiles(olMap, clusterCoordinate);
         this.zoomIntoCluster(olMap, clusterCoordinate);
       }
       return;
@@ -238,7 +235,7 @@ export class VectorTileMapSetupService {
     }
 
     const source = new VectorSource<Feature<Point>>();
-    const offsets = this.getSpreadPixelOffsets(features.length);
+    const offsets = getSpreadPixelOffsets(features.length);
     const originCoordinate = olMap.getCoordinateFromPixel(originPixel);
     const spreadFeatures: {
       feature: Feature<Point>;
@@ -329,125 +326,6 @@ export class VectorTileMapSetupService {
       zoom: nextZoom,
       duration: 250,
     });
-  }
-
-  private async preloadNextZoomTiles(
-    olMap: Map,
-    coordinate: [number, number]
-  ): Promise<void> {
-    const tileLayer = olMap
-      .getLayers()
-      .getArray()
-      .find(
-        (layer): layer is VectorTileLayer =>
-          layer instanceof VectorTileLayer &&
-          layer.get(MAP_INTERACTIVE_LAYER_PROPERTY) === true
-      );
-    const source = tileLayer?.getSource();
-    const mapSize = olMap.getSize();
-
-    if (!(source instanceof VectorTileSource) || !mapSize) return;
-
-    const view = olMap.getView();
-    const currentZoom = view.getZoom() ?? 0;
-    const nextZoom = Math.min(Math.ceil(currentZoom + 1), view.getMaxZoom());
-    const projection = view.getProjection();
-    const resolution = view.getResolutionForZoom(nextZoom);
-    const halfWidth = (mapSize[0] * resolution) / 2;
-    const halfHeight = (mapSize[1] * resolution) / 2;
-    const targetExtent = [
-      coordinate[0] - halfWidth,
-      coordinate[1] - halfHeight,
-      coordinate[0] + halfWidth,
-      coordinate[1] + halfHeight,
-    ];
-    const tileGrid = source.getTileGridForProjection(projection);
-    const sourceTiles = new Set<Tile>();
-
-    tileGrid.forEachTileCoord(targetExtent, nextZoom, ([z, x, y]) => {
-      const renderTile = source.getTile(
-        z,
-        x,
-        y,
-        olMap.getPixelRatio(),
-        projection
-      );
-      renderTile.load();
-      renderTile.getSourceTiles().forEach((tile) => sourceTiles.add(tile));
-    });
-
-    await this.waitForTiles([...sourceTiles]);
-  }
-
-  private waitForTiles(tiles: Tile[]): Promise<void> {
-    const pendingTiles = new Set(
-      tiles.filter((tile) => !this.isTileSettled(tile))
-    );
-    if (pendingTiles.size === 0) return Promise.resolve();
-
-    return new Promise((resolve) => {
-      const listeners = new globalThis.Map<Tile, () => void>();
-      const finish = () => {
-        clearTimeout(timeout);
-        listeners.forEach((listener, tile) =>
-          tile.removeEventListener('change', listener)
-        );
-        resolve();
-      };
-      const timeout = setTimeout(finish, CLUSTER_PRELOAD_MAX_WAIT_MS);
-
-      pendingTiles.forEach((tile) => {
-        const listener = () => {
-          if (!this.isTileSettled(tile)) return;
-
-          tile.removeEventListener('change', listener);
-          listeners.delete(tile);
-          pendingTiles.delete(tile);
-
-          if (pendingTiles.size === 0) {
-            finish();
-          }
-        };
-
-        listeners.set(tile, listener);
-        tile.addEventListener('change', listener);
-      });
-    });
-  }
-
-  private isTileSettled(tile: Tile): boolean {
-    return [TileState.LOADED, TileState.ERROR, TileState.EMPTY].includes(
-      tile.getState()
-    );
-  }
-
-  private getSpreadPixelOffsets(count: number): [number, number][] {
-    const offsets: [number, number][] = [];
-    let remaining = count;
-    let placed = 0;
-    let ring = 1;
-
-    while (remaining > 0) {
-      const capacity = ring === 1 ? 8 : ring * 12;
-      const markersInRing = Math.min(remaining, capacity);
-      const radius = SPREAD_RADIUS_PX + (ring - 1) * SPREAD_RING_GAP_PX;
-      const angleOffset = ring % 2 === 0 ? Math.PI / markersInRing : 0;
-
-      for (let index = 0; index < markersInRing; index++) {
-        const angle =
-          (2 * Math.PI * index) / markersInRing - Math.PI / 2 + angleOffset;
-        offsets[placed + index] = [
-          Math.cos(angle) * radius,
-          Math.sin(angle) * radius,
-        ];
-      }
-
-      placed += markersInRing;
-      remaining -= markersInRing;
-      ring++;
-    }
-
-    return offsets;
   }
 
   private getUniqueClickableFeatures(features: FeatureLike[]): FeatureLike[] {
@@ -553,19 +431,7 @@ export class VectorTileMapSetupService {
   }
 
   private getPointCoordinate(feature: FeatureLike): [number, number] | null {
-    const geometry = feature.getGeometry();
-
-    if (geometry instanceof Point) {
-      const [x, y] = geometry.getCoordinates();
-      return [x, y];
-    }
-
-    if (geometry instanceof RenderFeature && geometry.getType() === 'Point') {
-      const [x, y] = geometry.getFlatCoordinates();
-      return [x, y];
-    }
-
-    return null;
+    return getFeatureCoordinate(feature);
   }
 
   private suppressClusterMembers(features: FeatureLike[]): void {

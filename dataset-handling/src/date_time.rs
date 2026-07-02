@@ -102,33 +102,6 @@ pub fn is_timestamp_format(value: &str) -> bool {
         || NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S").is_ok()
 }
 
-/// Check if a value could be an Excel serial date.
-///
-/// Excel serial dates are integers where:
-/// - 1 = January 1, 1900
-/// - 41275 = January 1, 2013
-/// - 44927 = December 31, 2022
-///
-/// We use a conservative range (41275-73050) to avoid false positives
-/// with regular integers and to reject occurrence dates before 2013.
-///
-/// # Examples
-///
-/// ```
-/// use dataset_handling::date_time::is_excel_serial_date;
-///
-/// assert!(is_excel_serial_date("44927")); // Valid Excel date
-/// assert!(!is_excel_serial_date("100")); // Too small
-/// assert!(!is_excel_serial_date("hello")); // Not a number
-/// ```
-pub fn is_excel_serial_date(value: &str) -> bool {
-    if let Ok(serial) = value.parse::<i32>() {
-        serial >= EXCEL_SERIAL_MIN && serial <= EXCEL_SERIAL_MAX
-    } else {
-        false
-    }
-}
-
 /// Convert an Excel serial date to a NaiveDate.
 ///
 /// Excel's epoch is January 1, 1900 (day 1), but Excel incorrectly treats
@@ -183,7 +156,7 @@ pub fn convert_excel_serial_if_needed(value: &str) -> String {
 
     // Try to parse as Excel serial date
     if let Some(serial) = parse_excel_serial_number(value) {
-        if serial >= EXCEL_SERIAL_MIN && serial <= EXCEL_SERIAL_MAX {
+        if (EXCEL_SERIAL_MIN..=EXCEL_SERIAL_MAX).contains(&serial) {
             if let Some(date) = excel_serial_to_date(serial) {
                 return date.format("%Y-%m-%d").to_string();
             }
@@ -200,7 +173,7 @@ fn parse_excel_serial_number(value: &str) -> Option<i32> {
     }
 
     let serial = value.parse::<f64>().ok()?;
-    if serial >= EXCEL_SERIAL_MIN as f64 && serial <= EXCEL_SERIAL_MAX as f64 {
+    if (EXCEL_SERIAL_MIN as f64..=EXCEL_SERIAL_MAX as f64).contains(&serial) {
         Some(serial.floor() as i32)
     } else {
         None
@@ -368,18 +341,6 @@ mod tests {
         assert!(is_timestamp_format("2024-01-15T14:30:00"));
         assert!(!is_timestamp_format("2024-01-15"));
         assert!(!is_timestamp_format("14:30:00"));
-    }
-
-    #[test]
-    fn test_is_excel_serial_date() {
-        assert!(is_excel_serial_date("44927"));
-        assert!(is_excel_serial_date("41275"));
-        assert!(!is_excel_serial_date("41274"));
-        assert!(!is_excel_serial_date("36526"));
-        assert!(!is_excel_serial_date("100"));
-        assert!(!is_excel_serial_date("30000"));
-        assert!(!is_excel_serial_date("100000"));
-        assert!(!is_excel_serial_date("hello"));
     }
 
     #[test]

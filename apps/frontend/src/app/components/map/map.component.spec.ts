@@ -9,6 +9,10 @@ import Style from 'ol/style/Style';
 
 import { MapComponent } from './map.component';
 import { VectorTileMapSetupService } from './services/vector-tile-map-setup.service';
+import {
+  createClusterStyleFunction,
+  createOccurrenceStyleFunction,
+} from './utils/map-style.utils';
 
 describe('MapComponent', () => {
   let component: MapComponent;
@@ -49,44 +53,33 @@ describe('MapComponent', () => {
   });
 
   it('renders clickable low-zoom singletons as icons', () => {
-    const testableComponent = component as unknown as {
-      createStyleFunction(categories: string[]): (feature: Feature) => Style;
-    };
-    const style = testableComponent.createStyleFunction(['Roubo'])(
+    const style = createOccurrenceStyleFunction(['Roubo'], () => '/marker.png')(
       new Feature({
         category: 'Roubo',
         server_singleton: 1,
         num_bo: '123',
         ano_bo: 2024,
       })
-    );
+    ) as Style;
 
     expect(style.getImage()).toBeInstanceOf(Icon);
     expect(style.getText()).toBeNull();
   });
 
   it('renders dense low-zoom aggregates as clusters', () => {
-    const testableComponent = component as unknown as {
-      createStyleFunction(categories: string[]): (feature: Feature) => Style;
-    };
-    const style = testableComponent.createStyleFunction(['Roubo'])(
+    const style = createOccurrenceStyleFunction(['Roubo'], () => '/marker.png')(
       new Feature({
         category: 'Roubo',
         cluster_count: 42,
         server_cluster: 1,
       })
-    );
+    ) as Style;
 
     expect(style.getImage()).toBeInstanceOf(CircleStyle);
     expect(style.getText()?.getText()).toBe('42');
   });
 
   it('clusters high-zoom raw features but keeps a solo feature as an icon', () => {
-    const testableComponent = component as unknown as {
-      createClusterStyleFunction(
-        categories: string[]
-      ): (feature: Feature) => Style;
-    };
     const first = new Feature({
       geometry: new Point([1, 2]),
       category: 'Roubo',
@@ -95,15 +88,16 @@ describe('MapComponent', () => {
       geometry: new Point([2, 3]),
       category: 'Roubo',
     });
-    const styleFunction = testableComponent.createClusterStyleFunction([
-      'Roubo',
-    ]);
+    const styleFunction = createClusterStyleFunction(
+      ['Roubo'],
+      () => '/marker.png'
+    );
 
     expect(
-      styleFunction(new Feature({ features: [first] })).getImage()
+      (styleFunction(new Feature({ features: [first] })) as Style).getImage()
     ).toBeInstanceOf(Icon);
     expect(
-      styleFunction(new Feature({ features: [first, second] }))
+      (styleFunction(new Feature({ features: [first, second] })) as Style)
         .getText()
         ?.getText()
     ).toBe('2');

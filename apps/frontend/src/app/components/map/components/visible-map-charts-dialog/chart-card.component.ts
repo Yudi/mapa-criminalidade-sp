@@ -254,15 +254,36 @@ export class ChartCardComponent
         const bucket = this.config().buckets.find(
           (item) => item.label === params.name
         );
+        const name = this.escapeHtml(params.name);
+        const amountLabel = this.escapeHtml(
+          this.config().amountLabel ?? 'Quantidade'
+        );
         const count = this.formatNumber(params.value);
         const amount =
           bucket?.amount !== null && bucket?.amount !== undefined
-            ? `<br/>${this.config().amountLabel ?? 'Quantidade'}: ${this.formatNumber(bucket.amount)}`
+            ? `<br/>${amountLabel}: ${this.formatNumber(bucket.amount)}`
             : '';
 
-        return `<strong>${params.name}</strong><br/>Ocorrências: ${count}${amount}`;
+        return `<strong>${name}</strong><br/>Ocorrências: ${count}${amount}`;
       },
     };
+  }
+
+  private escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, (character) => {
+      switch (character) {
+        case '&':
+          return '&amp;';
+        case '<':
+          return '&lt;';
+        case '>':
+          return '&gt;';
+        case '"':
+          return '&quot;';
+        default:
+          return '&#39;';
+      }
+    });
   }
 
   private isTooltipParam(

@@ -106,7 +106,13 @@ impl DataImporter {
         let result = tokio::task::spawn_blocking({
             let excel_path = excel_path.to_owned();
             let output_dir = output_dir.to_owned();
-            move || crate::converter::convert_excel_to_csv(&excel_path, &output_dir)
+            move || {
+                crate::converter::convert_excel(
+                    &excel_path,
+                    &output_dir,
+                    crate::converter::OutputFormat::Csv,
+                )
+            }
         })
         .await;
 
