@@ -94,7 +94,7 @@
     "jest-environment-node": "^30.4.1",
     "jest-util": "^30.4.1",
     "jsdom": "^29.1.1",
-    "nx": "23.0.0",
+    "nx": "23.0.2",
     "prettier": "^2.8.8",
     "ts-jest": "^29.4.12",
     "ts-node": "10.9.1",
