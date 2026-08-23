@@ -1,8 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Service } from '@angular/core';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class ObjectHandlingService {
   areObjectsEqual(obj1: unknown, obj2: unknown): boolean {
     if (obj1 === obj2) return true; // Same reference or both are null/undefined

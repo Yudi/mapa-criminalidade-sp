@@ -1,11 +1,9 @@
-import { Injectable } from '@angular/core';
+import { Service } from '@angular/core';
 import { AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
 import { compareAsc, format } from 'date-fns';
 import { DateRange } from '@mapa-criminalidade/shared-types';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class DateService {
   defaultAfterDate(dateRange: DateRange | null | undefined): Date | null {
     return (

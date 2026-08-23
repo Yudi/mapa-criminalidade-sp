@@ -1,6 +1,6 @@
 import { isPlatformBrowser } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { inject, Injectable, PLATFORM_ID } from '@angular/core';
+import { inject, PLATFORM_ID, Service } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { TimeoutError } from 'rxjs';
 
@@ -23,9 +23,7 @@ export function isRequestTimeoutError(error: unknown): boolean {
   );
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class RequestTimeoutService {
   private readonly snackBar = inject(MatSnackBar);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));

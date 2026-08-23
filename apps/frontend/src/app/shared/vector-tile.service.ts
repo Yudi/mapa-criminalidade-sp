@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Service, inject } from '@angular/core';
 import { Observable, map, shareReplay, take } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
@@ -17,9 +17,7 @@ export interface ExtendedTileFilterParams extends TileFilterParams {
   categories?: string[];
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class VectorTileService {
   private graphql = inject(GraphqlClientService);
   private metadataCache$: Observable<OccurrenceTileMetadata> | null = null;

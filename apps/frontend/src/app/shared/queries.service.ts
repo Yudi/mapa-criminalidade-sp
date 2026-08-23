@@ -1,5 +1,5 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { inject, Injectable } from '@angular/core';
+import { inject, Service } from '@angular/core';
 import { of, shareReplay, take, Observable, catchError, map } from 'rxjs';
 import {
   CategoryInfo,
@@ -18,9 +18,7 @@ interface NominatimAddressResult {
   lon: string;
 }
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class QueriesService {
   private http = inject(HttpClient);
   private dateService = inject(DateService);

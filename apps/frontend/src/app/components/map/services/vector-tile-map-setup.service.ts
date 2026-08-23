@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Service } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
@@ -31,9 +31,7 @@ const SUPPRESSED_CLUSTER_MEMBER_PROPERTY = 'suppressedClusterMember';
 const CLUSTER_FEATURES_PROPERTY = 'features';
 const SERVER_CLUSTER_COUNT_PROPERTY = 'cluster_count';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class VectorTileMapSetupService {
   private readonly dialog = inject(MatDialog);
   private readonly markersService = inject(MapMarkersService);

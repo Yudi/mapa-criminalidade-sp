@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Service, inject } from '@angular/core';
 import { Observable, of, shareReplay, take, catchError, map } from 'rxjs';
 import {
   GroupedOccurrence,
@@ -31,9 +31,7 @@ import {
   parseGroupedOccurrence,
   parseMapFeatureResponse,
 } from './schemas/map-feature-response.schema';
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class OccurrencesService {
   private dateService = inject(DateService);
   private graphql = inject(GraphqlClientService);

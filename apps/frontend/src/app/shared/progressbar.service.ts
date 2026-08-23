@@ -1,8 +1,6 @@
-import { computed, Injectable, signal, WritableSignal } from '@angular/core';
+import { computed, Service, signal, WritableSignal } from '@angular/core';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class ProgressBarService {
   private readonly activeRequests = signal(0);
   readonly isLoading = computed(() => this.activeRequests() > 0);

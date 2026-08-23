@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Service, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
@@ -12,9 +12,7 @@ import {
   RequestTimeoutService,
 } from './request-timeout.service';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Service()
 export class GraphqlClientService {
   private readonly http = inject(HttpClient);
   private readonly requestTimeoutService = inject(RequestTimeoutService);
