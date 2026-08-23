@@ -8,8 +8,10 @@ import {
   parseIntegerParam,
   parseLocationQuery,
   parseOptionalIntegerQuery,
+  normalizeLookup,
   validateDateFilters,
 } from '../utils/map-feature-request.utils';
+import { AmbiguousMapFeatureLookupError } from '../services/query/map-features-detail-query';
 
 @ApiTags('Occurrences')
 @Controller('occurrences')
@@ -91,18 +93,27 @@ export class OccurrencesController {
   ) {
     const parsedAnoBo = parseIntegerParam(anoBo, 'anoBo');
 
-    const features = await this.queryService.getFeaturesByBo(
-      numBo.trim(),
-      parsedAnoBo,
-      delegacia?.trim()
-    );
+    let feature;
+    try {
+      const lookup = normalizeLookup(undefined, numBo, parsedAnoBo, delegacia);
+      feature = await this.queryService.getFeatureByBo(
+        lookup.numBo,
+        lookup.anoBo,
+        lookup.delegacia
+      );
+    } catch (error) {
+      if (error instanceof AmbiguousMapFeatureLookupError) {
+        throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      }
+      throw error;
+    }
 
-    if (features.length === 0) {
+    if (!feature) {
       throw new HttpException('Feature not found', HttpStatus.NOT_FOUND);
     }
 
     // Transform to GroupedOccurrence format for backwards compatibility
-    return this.mapper.toGroupedOccurrence(features[0]);
+    return this.mapper.toGroupedOccurrence(feature);
   }
 
   /** Uses the registration police unit to disambiguate pre-2022 BO numbers. */
@@ -121,18 +132,27 @@ export class OccurrencesController {
     @Query('delegacia') delegacia?: string
   ) {
     const anoBo = parseOptionalIntegerQuery(ano, 'ano');
-    const features = await this.queryService.getFeaturesByBo(
-      numBo.trim(),
-      anoBo,
-      delegacia?.trim()
-    );
+    let feature;
+    try {
+      const lookup = normalizeLookup(undefined, numBo, anoBo, delegacia);
+      feature = await this.queryService.getFeatureByBo(
+        lookup.numBo,
+        lookup.anoBo,
+        lookup.delegacia
+      );
+    } catch (error) {
+      if (error instanceof AmbiguousMapFeatureLookupError) {
+        throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      }
+      throw error;
+    }
 
-    if (features.length === 0) {
+    if (!feature) {
       throw new HttpException('Feature not found', HttpStatus.NOT_FOUND);
     }
 
     // Transform to GroupedOccurrence format for backwards compatibility
-    return this.mapper.toGroupedOccurrence(features[0]);
+    return this.mapper.toGroupedOccurrence(feature);
   }
 
   /** Uses the registration police unit to disambiguate pre-2022 BO numbers. */
@@ -152,17 +172,25 @@ export class OccurrencesController {
   ) {
     const parsedAnoBo = parseIntegerParam(anoBo, 'anoBo');
 
-    const features = await this.queryService.getFeaturesByBo(
-      numBo.trim(),
-      parsedAnoBo,
-      delegacia?.trim()
-    );
+    let feature;
+    try {
+      const lookup = normalizeLookup(undefined, numBo, parsedAnoBo, delegacia);
+      feature = await this.queryService.getFeatureByBo(
+        lookup.numBo,
+        lookup.anoBo,
+        lookup.delegacia
+      );
+    } catch (error) {
+      if (error instanceof AmbiguousMapFeatureLookupError) {
+        throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+      }
+      throw error;
+    }
 
-    if (features.length === 0) {
+    if (!feature) {
       throw new HttpException('Feature not found', HttpStatus.NOT_FOUND);
     }
 
-    const feature = features[0];
     const imlRecords = await this.queryService.getImlRecordsByBo(
       feature.num_bo,
       feature.ano_bo,

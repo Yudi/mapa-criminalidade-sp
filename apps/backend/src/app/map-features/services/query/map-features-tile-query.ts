@@ -9,7 +9,9 @@ export type TileQueryRow = { mvt: RawTileBuffer | null };
 export type MapFeatureTileResult =
   | { status: 'ok'; tile: Buffer }
   | { status: 'empty'; tile: null }
-  | { status: 'timeout'; tile: null };
+  | { status: 'timeout'; tile: null }
+  | { status: 'busy'; tile: null }
+  | { status: 'cancelled'; tile: null };
 
 type SemaphoreQueueEntry = {
   resolve: (release: () => void) => void;
@@ -17,34 +19,43 @@ type SemaphoreQueueEntry = {
   timeoutHandle: ReturnType<typeof setTimeout>;
 };
 
+export class TileQueueCapacityError extends Error {
+  readonly code = 'MAP_FEATURES_TILE_QUEUE_CAPACITY';
+
+  constructor(message = 'Tile queue is full') {
+    super(message);
+    this.name = 'TileQueueCapacityError';
+  }
+}
+
 export const MAP_FEATURES_TILE_CONFIG = {
   MAX_CONCURRENT_TILES: getPositiveIntegerEnv(
     'MAP_FEATURES_MAX_CONCURRENT_TILES',
-    2,
+    4,
     1,
     16
   ),
   MAX_QUEUED_TILES: getPositiveIntegerEnv(
     'MAP_FEATURES_MAX_QUEUED_TILES',
-    512,
+    4_096,
     0,
     10_000
   ),
   QUEUE_TIMEOUT_MS: getPositiveIntegerEnv(
     'MAP_FEATURES_TILE_QUEUE_TIMEOUT_MS',
-    30_000,
+    60_000,
     1_000,
     120_000
   ),
   STATEMENT_TIMEOUT_MS: getPositiveIntegerEnv(
     'MAP_FEATURES_TILE_STATEMENT_TIMEOUT_MS',
-    30_000,
+    60_000,
     5_000,
     120_000
   ),
   TRANSACTION_MAX_WAIT_MS: getPositiveIntegerEnv(
     'MAP_FEATURES_TILE_TRANSACTION_MAX_WAIT_MS',
-    30_000,
+    60_000,
     1_000,
     120_000
   ),
@@ -90,7 +101,7 @@ export class Semaphore {
     }
 
     if (this.queue.length >= this.maxQueued) {
-      throw new Error('Tile queue is full');
+      throw new TileQueueCapacityError();
     }
 
     return new Promise<() => void>((resolve, reject) => {
@@ -99,7 +110,7 @@ export class Semaphore {
         reject,
         timeoutHandle: setTimeout(() => {
           this.queue = this.queue.filter((item) => item !== entry);
-          reject(new Error('Tile queue wait timed out'));
+          reject(new TileQueueCapacityError('Tile queue wait timed out'));
         }, this.queueTimeoutMs),
       };
       this.queue.push(entry);

@@ -14,6 +14,7 @@ import {
   Semaphore,
   SqlParam,
   TileQueryRow,
+  TileQueueCapacityError,
 } from './map-features-tile-query';
 
 export class MapFeaturesVectorTileQuery {
@@ -27,26 +28,34 @@ export class MapFeaturesVectorTileQuery {
   constructor(private readonly prisma: PrismaService) {}
 
   async getTile(
-    params: MapFeaturesTileParams
+    params: MapFeaturesTileParams,
+    signal?: AbortSignal
   ): Promise<MapFeatureTileResult> {
     let releaseTileSlot: (() => void) | undefined;
+
+    if (signal?.aborted) return { status: 'cancelled', tile: null };
 
     try {
       releaseTileSlot = await this.tileSemaphore.acquire();
     } catch (error) {
+      if (signal?.aborted) return { status: 'cancelled', tile: null };
       this.logger.warn(`Tile request rejected before query: ${error}`);
-      return { status: 'timeout', tile: null };
+      return error instanceof TileQueueCapacityError
+        ? { status: 'busy', tile: null }
+        : { status: 'timeout', tile: null };
     }
 
     try {
-      return await this.generateTileWithTimeout(params);
+      if (signal?.aborted) return { status: 'cancelled', tile: null };
+      return await this.generateTileWithTimeout(params, signal);
     } finally {
       releaseTileSlot();
     }
   }
 
   private async generateTileWithTimeout(
-    params: MapFeaturesTileParams
+    params: MapFeaturesTileParams,
+    signal?: AbortSignal
   ): Promise<MapFeatureTileResult> {
     const { z, x, y } = params;
     const queryParams: SqlParam[] = [
@@ -56,8 +65,8 @@ export class MapFeaturesVectorTileQuery {
       JSON.stringify({
         before: normalizeOptionalString(params.beforeDate),
         after: normalizeOptionalString(params.afterDate),
-        categories: normalizeStringList(params.categories)?.join(','),
-        periods: normalizeStringList(params.periods)?.join(','),
+        categories: normalizeStringList(params.categories),
+        periods: normalizeStringList(params.periods),
         startHour: params.startHour,
         endHour: params.endHour,
       }),
@@ -68,7 +77,7 @@ export class MapFeaturesVectorTileQuery {
 
     try {
       this.logger.debug(`Generating tile z=${z} x=${x} y=${y}`);
-      const result = await this.runTileQuery(mvtQuery, queryParams);
+      const result = await this.runTileQuery(mvtQuery, queryParams, signal);
 
       if (!result || result.length === 0 || !result[0]?.mvt) {
         return { status: 'empty', tile: null };
@@ -80,6 +89,10 @@ export class MapFeaturesVectorTileQuery {
       );
       return { status: 'ok', tile: mvtBuffer };
     } catch (error) {
+      if (signal?.aborted) {
+        return { status: 'cancelled', tile: null };
+      }
+
       if (isRequestTimeoutError(error)) {
         this.logger.warn(
           `Tile z=${z} x=${x} y=${y} timed out after ${MAP_FEATURES_TILE_CONFIG.STATEMENT_TIMEOUT_MS}ms`
@@ -94,8 +107,28 @@ export class MapFeaturesVectorTileQuery {
 
   private async runTileQuery(
     mvtQuery: string,
-    queryParams: SqlParam[]
+    queryParams: SqlParam[],
+    signal?: AbortSignal
   ): Promise<TileQueryRow[]> {
+    const cancelableQuery = (
+      this.prisma as unknown as {
+        executeCancelableReadOnlyQuery?: (
+          query: string,
+          params: readonly unknown[],
+          signal?: AbortSignal
+        ) => Promise<TileQueryRow[]>;
+      }
+    ).executeCancelableReadOnlyQuery;
+
+    if (cancelableQuery && signal) {
+      return await cancelableQuery.call(
+        this.prisma,
+        mvtQuery,
+        queryParams,
+        signal
+      );
+    }
+
     return await this.prisma.$transaction(
       async (tx) => {
         await configureTileTransaction(tx);

@@ -43,6 +43,14 @@ pub fn clean_integer_value(value: &str, logger: &Logger) -> String {
     let original_value = value;
     let cleaned = value.trim().to_string();
 
+    if cleaned.chars().any(|character| character.is_alphabetic()) {
+        logger.warn(&format!(
+            "Alphabetic characters are not valid in integer value: \"{}\", setting to empty",
+            original_value
+        ));
+        return String::new();
+    }
+
     // Handle whitespace-only values
     if is_whitespace_only(value) {
         if !original_value.is_empty() {

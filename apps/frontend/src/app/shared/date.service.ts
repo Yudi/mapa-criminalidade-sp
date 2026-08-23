@@ -17,9 +17,21 @@ export class DateService {
       return null;
     }
 
-    const [year, month, day] = value.split('-').map(Number);
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) {
+      return null;
+    }
 
-    if (!year || !month || !day) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const utcDate = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      utcDate.getUTCFullYear() !== year ||
+      utcDate.getUTCMonth() !== month - 1 ||
+      utcDate.getUTCDate() !== day
+    ) {
       return null;
     }
 
@@ -31,9 +43,10 @@ export class DateService {
       return '';
     }
 
-    // If it's already in YYYY-MM-DD format, return as-is
+    // Keep date-only values timezone independent, but only after validating
+    // the calendar components (Date normally rolls 31/02 into March).
     if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return date;
+      return this.parseDateOnly(date) ? date : '';
     }
 
     try {
@@ -52,18 +65,41 @@ export class DateService {
     afterDateControl: string
   ): ValidatorFn {
     return (group: AbstractControl): ValidationErrors | null => {
-      const beforeDate = group.get(beforeDateControl)?.value;
-      const afterDate = group.get(afterDateControl)?.value;
+      const beforeDate = group.get(beforeDateControl)?.value as
+        | Date
+        | string
+        | null
+        | undefined;
+      const afterDate = group.get(afterDateControl)?.value as
+        | Date
+        | string
+        | null
+        | undefined;
 
       if (!beforeDate || !afterDate) {
         return null;
       }
 
-      if (compareAsc(new Date(beforeDate), new Date(afterDate)) === -1) {
+      const before = this.toComparableDate(beforeDate);
+      const after = this.toComparableDate(afterDate);
+
+      if (!before || !after) {
+        return { beforeAfter: true };
+      }
+
+      if (compareAsc(before, after) === -1) {
         return { beforeAfter: true }; // Return error if beforeDate is after afterDate
       }
 
       return null; // Return null if validation passes
     };
+  }
+
+  private toComparableDate(value: Date | string): Date | null {
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+
+    return this.parseDateOnly(value) ?? null;
   }
 }

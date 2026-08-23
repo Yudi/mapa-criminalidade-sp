@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 
 import {
@@ -6,10 +5,7 @@ import {
   OCCURRENCE_COLUMN_MAPPINGS,
   getSourceTableConfig,
 } from '../../config/source-tables.config';
-import {
-  MIN_OCCURRENCE_DATE,
-  MIN_OCCURRENCE_DATE_ISO,
-} from '../../config/date-range.config';
+import { MIN_OCCURRENCE_DATE } from '../../config/date-range.config';
 import {
   LocationData,
   MapFeatureData,
@@ -48,46 +44,56 @@ export interface SourceTableCursor {
   id: number;
 }
 
-export class MapFeaturesEtlAggregator {
-  constructor(private readonly logger: Logger) {}
+export interface EtlAggregationQuality {
+  acceptedRows: number;
+  missingIdentityRows: number;
+  invalidCoordinateRows: number;
+  outsideSupportedAreaRows: number;
+}
 
+export function createEtlAggregationQuality(): EtlAggregationQuality {
+  return {
+    acceptedRows: 0,
+    missingIdentityRows: 0,
+    invalidCoordinateRows: 0,
+    outsideSupportedAreaRows: 0,
+  };
+}
+
+export class MapFeaturesEtlAggregator {
   aggregateRows(
     rows: Record<string, unknown>[],
     tableName: string,
     config: SourceTableConfig,
     columnSet: Set<string>,
-    features = new Map<string, AggregatedFeature>()
+    features = new Map<string, AggregatedFeature>(),
+    quality = createEtlAggregationQuality()
   ): Map<string, AggregatedFeature> {
-    if (rows.length > 0 && config.columnMappings.delegacia) {
-      const firstRow = rows[0];
-      const delegaciaCol = config.columnMappings.delegacia;
-      this.logger.debug(
-        `[DEBUG] Table: ${tableName}, Delegacia column: ${delegaciaCol}, Value: ${
-          firstRow[delegaciaCol]
-        }, Keys: ${Object.keys(firstRow)
-          .filter((k) => k.toLowerCase().includes('deleg'))
-          .join(', ')}`
-      );
-    }
-
     for (const row of rows) {
       const lat = this.parseCoordinate(row[config.columnMappings.latitude]);
       const lon = this.parseCoordinate(row[config.columnMappings.longitude]);
 
-      if (lat === null || lon === null) continue;
-      if (lat < -25 || lat > -19 || lon < -54 || lon > -44) continue;
+      if (lat === null || lon === null) {
+        quality.invalidCoordinateRows++;
+        continue;
+      }
+      if (lat < -25 || lat > -19 || lon < -54 || lon > -44) {
+        quality.outsideSupportedAreaRows++;
+        continue;
+      }
 
-      const numBo = String(row[config.columnMappings.num_bo]);
+      const numBo = String(row.__etl_sort_num_bo ?? '').trim();
       const anoBo = parseSourceInteger(row[config.columnMappings.ano_bo]);
-      const delegacia = row[config.columnMappings.delegacia]
-        ? String(row[config.columnMappings.delegacia])
-        : null;
+      const delegaciaText = String(row.__etl_sort_delegacia ?? '').trim();
+      const delegacia = delegaciaText || null;
 
-      if (!numBo || anoBo === null) continue;
+      if (!numBo || anoBo === null) {
+        quality.missingIdentityRows++;
+        continue;
+      }
 
       const locationHash = this.createLocationHash(lat, lon);
-      const delegaciaKey = delegacia || '';
-      const key = `${numBo}|${anoBo}|${delegaciaKey}|${locationHash}`;
+      const key = this.getCanonicalGroupKey(row);
 
       let feature = features.get(key);
       if (!feature) {
@@ -105,21 +111,40 @@ export class MapFeaturesEtlAggregator {
         features.set(key, feature);
       }
 
+      this.reconcileCanonicalFields(feature, row, config, columnSet);
       this.addRecordToFeature(feature, row, tableName, config);
+      quality.acceptedRows++;
     }
 
     return features;
   }
 
   getSourceTableCursor(row: Record<string, unknown>): SourceTableCursor {
+    const id = parseSourceInteger(row.id);
+    if (id === null || id < 1) {
+      throw new Error('ETL source row is missing a valid positive id');
+    }
+
     return {
       numBo: String(row.__etl_sort_num_bo),
       anoBo: String(row.__etl_sort_ano_bo),
       delegacia: String(row.__etl_sort_delegacia),
       latitudeBucket: String(row.__etl_sort_latitude_bucket),
       longitudeBucket: String(row.__etl_sort_longitude_bucket),
-      id: parseSourceInteger(row.id) ?? 0,
+      id,
     };
+  }
+
+  private getCanonicalGroupKey(row: Record<string, unknown>): string {
+    return [
+      row.__etl_sort_num_bo,
+      row.__etl_sort_ano_bo,
+      row.__etl_sort_delegacia,
+      row.__etl_sort_latitude_bucket,
+      row.__etl_sort_longitude_bucket,
+    ]
+      .map((value) => String(value ?? '').trim())
+      .join('|');
   }
 
   splitFinalAggregatedFeature(features: Map<string, AggregatedFeature>): {
@@ -210,12 +235,8 @@ export class MapFeaturesEtlAggregator {
 
   private parseOccurrenceDate(value: unknown): Date | null {
     const date = parseSourceDate(value);
-    const text = String(value).trim();
 
     if (!date || date < MIN_OCCURRENCE_DATE) {
-      this.logger.warn(
-        `Ignoring occurrence date before ${MIN_OCCURRENCE_DATE_ISO}: "${text}"`
-      );
       return null;
     }
 
@@ -261,19 +282,71 @@ export class MapFeaturesEtlAggregator {
     }
   }
 
+  private reconcileCanonicalFields(
+    feature: AggregatedFeature,
+    row: Record<string, unknown>,
+    config: SourceTableConfig,
+    columnSet: Set<string>
+  ): void {
+    const candidateDate = config.columnMappings.data_ocorrencia
+      ? this.parseOccurrenceDate(row[config.columnMappings.data_ocorrencia])
+      : null;
+    if (
+      candidateDate &&
+      (!feature.data_ocorrencia || candidateDate < feature.data_ocorrencia)
+    ) {
+      feature.data_ocorrencia = candidateDate;
+    }
+
+    const candidateCategory = config.columnMappings.rubrica
+      ? String(row[config.columnMappings.rubrica] ?? '').trim()
+      : config.derivedCategory ?? '';
+    if (candidateCategory && candidateCategory < feature.category) {
+      feature.category = candidateCategory;
+      feature.rubrica_for_styling = config.columnMappings.rubrica
+        ? candidateCategory
+        : config.stylingRubrica ?? candidateCategory;
+    }
+
+    this.mergeDeterministically(
+      feature.feature_data.location,
+      this.extractLocationData(row, columnSet)
+    );
+    this.mergeDeterministically(
+      feature.feature_data.occurrence,
+      this.extractOccurrenceMetadata(row, columnSet)
+    );
+  }
+
+  private mergeDeterministically<T extends object>(
+    target: T,
+    candidate: T
+  ): void {
+    const targetRecord = target as Record<string, unknown>;
+    for (const [key, value] of Object.entries(candidate)) {
+      const current = targetRecord[key];
+      if (
+        current === undefined ||
+        String(value).localeCompare(String(current), 'pt-BR') < 0
+      ) {
+        targetRecord[key] = value;
+      }
+    }
+  }
+
   private parseCoordinate(value: unknown): number | null {
     return parseSourceNumber(value);
   }
 
   private createLocationHash(lat: number, lon: number): string {
-    const roundedLat = Math.round(lat * 10000) / 10000;
-    const roundedLon = Math.round(lon * 10000) / 10000;
-    const input = `${roundedLat.toFixed(4)}|${roundedLon.toFixed(4)}`;
+    const roundedLat = Math.round(lat * 1_000_000) / 1_000_000;
+    const roundedLon = Math.round(lon * 1_000_000) / 1_000_000;
+    const input = `${roundedLat.toFixed(6)}|${roundedLon.toFixed(6)}`;
     return crypto
-      .createHash('md5')
+      .createHash('sha256')
       .update(input)
       .digest('hex')
-      .substring(0, 16);
+      .substring(0, 24);
   }
 
   private extractLocationData(

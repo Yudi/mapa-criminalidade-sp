@@ -21,6 +21,8 @@ node_modules/
 # compiled output
 dist
 tmp
+apps/backend/temp/
+apps/backend/uploads/
 out-tsc
 
 # dependencies

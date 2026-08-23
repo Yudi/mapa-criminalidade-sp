@@ -11,14 +11,20 @@ export function sourceTextExpression(column: string | undefined): string {
 }
 
 export function sourceIntegerExpression(column: string): string {
-  return `TRUNC(${sourceNumberExpression(column)})`;
+  const parsed = sourceNumberExpression(column);
+  return `CASE
+            WHEN ${parsed} = TRUNC(${parsed})
+            THEN ${parsed}
+            ELSE NULL
+          END`;
 }
 
 export function sourceNumberExpression(column: string): string {
   const normalized = normalizedSourceNumberTextExpression(column);
 
   return `CASE
-            WHEN ${normalized} ~ '^-?[0-9]+(\\.[0-9]+)?$'
+            WHEN btrim(${sourceTextColumnExpression(column)}) ~ '^[+-]?([0-9]+([.,][0-9]+)?|[0-9]{1,3}(\\.[0-9]{3})+,[0-9]+)$'
+              AND ${normalized} ~ '^[+-]?[0-9]+(\\.[0-9]+)?$'
             THEN ${normalized}::numeric
             ELSE NULL
           END`;

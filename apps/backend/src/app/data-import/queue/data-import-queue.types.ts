@@ -24,10 +24,18 @@ export const dataImportJobDataSchema = z
     requestedBy: z.enum(['scheduler', 'manual']),
     reason: z.string().trim().min(1),
     categoryName: z.string().trim().min(1).optional(),
+    rawImportCompletedAt: z.string().datetime().optional(),
   })
   .strict();
 
 export type DataImportJobData = z.infer<typeof dataImportJobDataSchema>;
+
+export interface DataImportJobResult {
+  status: 'completed';
+  rawImportCompletedAt: string;
+  etlCompletedAt: string;
+  etlProcessedFeatures: number;
+}
 
 export interface DataImportQueueJob {
   id?: string;

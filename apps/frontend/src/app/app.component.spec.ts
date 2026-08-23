@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideDateFnsAdapter } from '@angular/material-date-fns-adapter';
 import { MAT_DATE_LOCALE } from '@angular/material/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { ptBR } from 'date-fns/locale';
 import {
   CategoryInfo,
@@ -47,6 +48,7 @@ describe('AppComponent', () => {
         provideZonelessChangeDetection(),
         provideDateFnsAdapter(),
         { provide: MAT_DATE_LOCALE, useValue: ptBR },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: OccurrencesService, useValue: occurrencesService },
       ],
     }).compileComponents();

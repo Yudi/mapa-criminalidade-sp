@@ -1,6 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { Args, ID, Int, Query, Resolver } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
 import { ValidatorsService } from '../shared/validators/validators.service';
+import { DevelopmentOnlyGuard } from '../shared/guards/development-only.guard';
 import {
   CategoryStatObject,
   DateRangeObject,
@@ -18,6 +20,7 @@ import {
 } from './graphql/map-features.graphql';
 import { MapFeaturesMapperService } from './services/map-features-mapper.service';
 import { MapFeaturesQueryService } from './services/map-features-query.service';
+import { AmbiguousMapFeatureLookupError } from './services/query/map-features-detail-query';
 import {
   MAX_CRIME_TILE_ZOOM,
   MIN_CRIME_TILE_ZOOM,
@@ -45,8 +48,10 @@ export class MapFeaturesResolver {
 
   @Query(() => MapFeatureMetadataObject, { name: 'mapFeaturesMetadata' })
   async getMetadata(): Promise<MapFeatureMetadataObject> {
-    const [stats, dateRange, count] = await Promise.all([
-      this.queryService.getCategoryPeriodStats(),
+    // Keep the expensive statistics scan out of a three-way fan-out on the
+    // production pool (which is intentionally limited to three connections).
+    const stats = await this.queryService.getCategoryPeriodStats();
+    const [dateRange, count] = await Promise.all([
       this.queryService.getDateRange(),
       this.queryService.getCount(),
     ]);
@@ -160,11 +165,19 @@ export class MapFeaturesResolver {
     input: MapFeatureLookupInput
   ): Promise<GroupedOccurrenceObject | null> {
     const lookup = normalizeLookup(input);
-    const feature = await this.queryService.getFeatureByBo(
-      lookup.numBo,
-      lookup.anoBo,
-      lookup.delegacia
-    );
+    let feature;
+    try {
+      feature = await this.queryService.getFeatureByBo(
+        lookup.numBo,
+        lookup.anoBo,
+        lookup.delegacia
+      );
+    } catch (error) {
+      if (error instanceof AmbiguousMapFeatureLookupError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
 
     return feature ? this.mapper.toGroupedOccurrence(feature) : null;
   }
@@ -178,11 +191,19 @@ export class MapFeaturesResolver {
     input: MapFeatureLookupInput
   ): Promise<MapFeatureDetailObject | null> {
     const lookup = normalizeLookup(input);
-    const feature = await this.queryService.getFeatureByBo(
-      lookup.numBo,
-      lookup.anoBo,
-      lookup.delegacia
-    );
+    let feature;
+    try {
+      feature = await this.queryService.getFeatureByBo(
+        lookup.numBo,
+        lookup.anoBo,
+        lookup.delegacia
+      );
+    } catch (error) {
+      if (error instanceof AmbiguousMapFeatureLookupError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
 
     if (!feature) {
       return null;
@@ -237,6 +258,7 @@ export class MapFeaturesResolver {
   }
 
   @Query(() => [EtlStatusObject], { name: 'mapFeaturesEtlStatus' })
+  @UseGuards(DevelopmentOnlyGuard)
   async getEtlStatus(): Promise<EtlStatusObject[]> {
     const statuses = await this.queryService.getEtlStatus();
     return statuses.map((status) => ({

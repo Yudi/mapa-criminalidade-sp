@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -13,6 +13,8 @@ import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin
 import { ApolloServerPluginLandingPageDisabled } from '@apollo/server/plugin/disabled';
 import { GqlThrottlerGuard } from './shared/guards/gql-throttler.guard';
 import { formatGraphqlError } from './shared/graphql-error-formatter';
+import { createGraphqlQueryLimitsRule } from './shared/graphql-query-limits';
+import { RequestIdMiddleware } from './shared/observability/request-id.middleware';
 
 const isProduction = process.env.NODE_ENV === 'production';
 type GraphqlContextFactoryArgs = { req: unknown; res: unknown };
@@ -28,6 +30,7 @@ type GraphqlContextFactoryArgs = { req: unknown; res: unknown };
       graphiql: false,
       playground: false,
       introspection: !isProduction,
+      validationRules: [createGraphqlQueryLimitsRule()],
       context: ({ req, res }: GraphqlContextFactoryArgs) => ({ req, res }),
       formatError: formatGraphqlError,
       plugins: [
@@ -42,7 +45,7 @@ type GraphqlContextFactoryArgs = { req: unknown; res: unknown };
     ThrottlerModule.forRoot([
       {
         ttl: 60_000,
-        limit: 50,
+        limit: 200,
       },
     ]),
     MapFeaturesModule,
@@ -58,4 +61,8 @@ type GraphqlContextFactoryArgs = { req: unknown; res: unknown };
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

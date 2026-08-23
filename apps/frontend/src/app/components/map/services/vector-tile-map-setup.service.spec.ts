@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 
@@ -14,6 +15,12 @@ describe('VectorTileMapSetupService', () => {
         VectorTileMapSetupService,
         {
           provide: MatDialog,
+          useValue: {
+            open: vi.fn(),
+          },
+        },
+        {
+          provide: MatSnackBar,
           useValue: {
             open: vi.fn(),
           },

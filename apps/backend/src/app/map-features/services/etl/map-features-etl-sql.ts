@@ -149,21 +149,21 @@ export function buildSourceSortSelectColumns(
   config: SourceTableConfig
 ): string {
   return [
-    `${sourceTextExpression(
+    `UPPER(${sourceTextExpression(
       config.columnMappings.num_bo
-    )} AS "__etl_sort_num_bo"`,
+    )}) AS "__etl_sort_num_bo"`,
     `${sourceIntegerExpression(
       config.columnMappings.ano_bo
     )} AS "__etl_sort_ano_bo"`,
-    `${sourceTextExpression(
+    `UPPER(${sourceTextExpression(
       config.columnMappings.delegacia
-    )} AS "__etl_sort_delegacia"`,
+    )}) AS "__etl_sort_delegacia"`,
     `ROUND(${sourceNumberExpression(
       config.columnMappings.latitude
-    )}, 4) AS "__etl_sort_latitude_bucket"`,
+    )}, 6) AS "__etl_sort_latitude_bucket"`,
     `ROUND(${sourceNumberExpression(
       config.columnMappings.longitude
-    )}, 4) AS "__etl_sort_longitude_bucket"`,
+    )}, 6) AS "__etl_sort_longitude_bucket"`,
   ].join(', ');
 }
 

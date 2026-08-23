@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
+import { promises as fs } from 'fs';
 import { z } from 'zod';
 import { getErrorMessage } from '../../shared/error.utils';
 import { DataCategoryConfig } from '../config/data-category.config';
@@ -17,6 +18,7 @@ const scraperFileSchema = z
   .object({
     month: z.number().int().min(1).max(12),
     recordCount: z.number().int().nonnegative(),
+    rejectedRows: z.number().int().nonnegative().default(0),
     outputPath: z.string().min(1),
   })
   .strict();
@@ -24,6 +26,10 @@ const scraperFileSchema = z
 const scraperResultSchema = z
   .object({
     year: z.number().int(),
+    status: z.enum(['complete', 'partial']),
+    expectedMonths: z.number().int().nonnegative(),
+    succeededMonths: z.number().int().nonnegative(),
+    failedMonths: z.array(z.string()),
     files: z.array(scraperFileSchema),
   })
   .strict();
@@ -83,10 +89,12 @@ export class ImlImportService {
     force: boolean,
     category = DataCategoryConfig.getImlCategory()
   ): Promise<number> {
+    await this.fileOperationsService.sweepStaleDirectories(this.tempDir);
     await this.fileOperationsService.ensureDirectory(this.tempDir);
     const targets = await this.getMonthTargets(category, force);
     const targetsByYear = this.groupTargetsByYear(targets);
-    const failures: string[] = [];
+    const skippedMonths: string[] = [];
+    const fatalFailures: string[] = [];
     let importedMonths = 0;
 
     this.logger.log(
@@ -105,21 +113,35 @@ export class ImlImportService {
         const filesByMonth = new Map(
           result.files.map((file) => [file.month, file])
         );
+        if (result.failedMonths.length > 0) {
+          this.logger.warn(
+            `IML scraper skipped ${result.failedMonths.length} external month(s) for ${year}: ${result.failedMonths.join(
+              '; '
+            )}`
+          );
+        }
 
         for (const target of yearTargets) {
+          const file = filesByMonth.get(target.month);
+          if (!file) {
+            const message = `Scraper did not return ${this.formatMonth(target)}`;
+            skippedMonths.push(message);
+            this.logger.warn(`${message}; keeping existing data`);
+            continue;
+          }
+          if (file.recordCount === 0) {
+            const message = `IML export for ${this.formatMonth(target)} is empty`;
+            skippedMonths.push(message);
+            this.logger.warn(`${message}; keeping existing data`);
+            continue;
+          }
           try {
-            const file = filesByMonth.get(target.month);
-            if (!file) {
-              throw new Error(
-                `Scraper did not return ${this.formatMonth(target)}`
-              );
-            }
             if (await this.processMonth(category, target, file)) {
               importedMonths++;
             }
           } catch (error) {
             const message = getErrorMessage(error);
-            failures.push(`${this.formatMonth(target)}: ${message}`);
+            fatalFailures.push(`${this.formatMonth(target)}: ${message}`);
             this.logger.error(
               `Failed to import IML data for ${this.formatMonth(target)}:`,
               error
@@ -137,16 +159,23 @@ export class ImlImportService {
         }
       } catch (error) {
         const message = getErrorMessage(error);
-        failures.push(`${year}: ${message}`);
+        fatalFailures.push(`${year}: ${message}`);
         this.logger.error(`Failed to scrape IML data for ${year}:`, error);
       } finally {
         await this.fileOperationsService.cleanup(undefined, outputDir);
       }
     }
 
-    if (failures.length > 0) {
+    if (fatalFailures.length > 0) {
       throw new Error(
-        `Failed to import ${failures.length}/${targets.length} IML month(s): ${failures.join(
+        `Failed to import ${fatalFailures.length}/${targets.length} IML month(s): ${fatalFailures.join(
+          '; '
+        )}`
+      );
+    }
+    if (skippedMonths.length > 0) {
+      this.logger.warn(
+        `Skipped ${skippedMonths.length}/${targets.length} unavailable or invalid external IML month(s): ${skippedMonths.join(
           '; '
         )}`
       );
@@ -329,6 +358,61 @@ export class ImlImportService {
     const parsed = scraperResultSchema.parse(JSON.parse(result.stdout));
     if (parsed.year !== year) {
       throw new Error(`IML scraper returned unexpected year ${parsed.year}`);
+    }
+    const requestedMonths = new Set(months);
+    const returnedMonths = new Set(parsed.files.map((file) => file.month));
+    const statusIsConsistent =
+      (parsed.status === 'complete' && parsed.failedMonths.length === 0) ||
+      (parsed.status === 'partial' && parsed.failedMonths.length > 0);
+    if (
+      parsed.expectedMonths !== months.length ||
+      parsed.succeededMonths !== parsed.files.length ||
+      returnedMonths.size !== parsed.files.length ||
+      parsed.files.some((file) => !requestedMonths.has(file.month)) ||
+      parsed.succeededMonths + parsed.failedMonths.length !==
+        parsed.expectedMonths ||
+      !statusIsConsistent
+    ) {
+      throw new Error(
+        `IML scraper returned inconsistent result metadata for ${year}`
+      );
+    }
+    let resolvedOutputDir = path.resolve(outputDir);
+    try {
+      resolvedOutputDir = await fs.realpath(outputDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    for (const file of parsed.files) {
+      const expectedPath = path.join(
+        resolvedOutputDir,
+        `registro_obitos_iml_${year}_${String(file.month).padStart(2, '0')}.csv`
+      );
+      const resolvedFilePath = path.resolve(file.outputPath);
+      if (resolvedFilePath !== expectedPath) {
+        throw new Error(
+          `IML scraper returned an output path outside its job directory: ${file.outputPath}`
+        );
+      }
+      try {
+        const stats = await fs.lstat(resolvedFilePath);
+        if (stats.isSymbolicLink() || !stats.isFile()) {
+          throw new Error(`IML scraper output is not a regular file: ${file.outputPath}`);
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          // processMonth performs the final existence check; keep this
+          // validation focused on the subprocess path trust boundary.
+          continue;
+        }
+        throw new Error(
+          `IML scraper output is unavailable: ${file.outputPath} (${getErrorMessage(
+            error
+          )})`
+        );
+      }
     }
     return parsed;
   }

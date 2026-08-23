@@ -10,9 +10,18 @@
   <section class="map-section" aria-label="Mapa de ocorrências">
     <ng-container #mapOutlet></ng-container>
 
-    @if (!isMapComponentLoaded()) {
+    @if (!isMapComponentLoaded() && !mapLoadError()) {
     <div class="map-placeholder" aria-busy="true">
       <span>Carregando mapa...</span>
+    </div>
+    }
+
+    @if (mapLoadError()) {
+    <div class="map-placeholder map-placeholder--error" role="alert">
+      <span>Não foi possível carregar o mapa.</span>
+      <button type="button" mat-flat-button (click)="retryMapLoad()">
+        Tentar novamente
+      </button>
     </div>
     }
   </section>

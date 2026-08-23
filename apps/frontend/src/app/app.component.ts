@@ -18,8 +18,13 @@ import { ToolbarComponent } from './components/toolbar/toolbar.component';
 import { isPlatformBrowser } from '@angular/common';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatButtonModule } from '@angular/material/button';
 import DataFormValues from './shared/dataForm.interface';
-import { QueriesService } from './shared/queries.service';
+import {
+  AddressSearchInputError,
+  QueriesService,
+} from './shared/queries.service';
 import { OccurrencesService } from './shared/occurrences.service';
 import { DateService } from './shared/date.service';
 import { ProgressBarService } from './shared/progressbar.service';
@@ -64,7 +69,7 @@ type DynamicMapComponent = {
 };
 @Component({
   selector: 'app-root',
-  imports: [CardComponent, ToolbarComponent],
+  imports: [CardComponent, ToolbarComponent, MatButtonModule],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -77,6 +82,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private iconRegistry = inject(MatIconRegistry);
   private dateService = inject(DateService);
   private dialog = inject(MatDialog);
+  private snackBar = inject(MatSnackBar);
   private progressBarService = inject(ProgressBarService);
   private changeDetectorRef = inject(ChangeDetectorRef);
   categories: Observable<CategoryInfo[]> = of([]);
@@ -112,6 +118,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private hourFilterSubject = new BehaviorSubject<HourFilter>(this.hourFilter);
   currentBounds: MapBounds | null = null;
   isMapComponentLoaded = signal(false);
+  mapLoadError = signal(false);
   private isDestroyed = false;
   private mapComponentRef: ComponentRef<DynamicMapComponent> | null = null;
   private mapBoundsSubscription: SubscriptionLike | null = null;
@@ -226,17 +233,12 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   async ngAfterViewInit(): Promise<void> {
     if (!this.isBrowserOnly || !this.mapOutlet) return;
 
-    const { MapComponent } = await import('./components/map/map.component');
+    await this.loadMapComponent();
+  }
 
-    if (this.isDestroyed) return;
-
-    this.mapComponentRef = this.mapOutlet.createComponent(MapComponent);
-    this.mapBoundsSubscription =
-      this.mapComponentRef.instance.boundsChange.subscribe((bounds) =>
-        this.onBoundsChange(bounds)
-      );
-    this.syncMapInputs();
-    this.isMapComponentLoaded.set(true);
+  retryMapLoad(): void {
+    if (this.isDestroyed || !this.isBrowserOnly || !this.mapOutlet) return;
+    void this.loadMapComponent();
   }
 
   ngOnDestroy(): void {
@@ -291,20 +293,29 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       },
     };
 
-    const { VisibleMapChartsDialogComponent } = await import(
-      './components/map/components/visible-map-charts-dialog/visible-map-charts-dialog.component'
-    );
+    try {
+      const { VisibleMapChartsDialogComponent } = await import(
+        './components/map/components/visible-map-charts-dialog/visible-map-charts-dialog.component'
+      );
 
-    this.dialog.open(VisibleMapChartsDialogComponent, {
-      data: {
-        filter,
-        zoom: bounds.zoom,
-      },
-      width: 'min(96vw, 1180px)',
-      maxWidth: '96vw',
-      maxHeight: '94vh',
-      panelClass: 'visible-map-charts-dialog',
-    });
+      this.dialog.open(VisibleMapChartsDialogComponent, {
+        data: {
+          filter,
+          zoom: bounds.zoom,
+        },
+        width: 'min(96vw, 1180px)',
+        maxWidth: '96vw',
+        maxHeight: '94vh',
+        panelClass: 'visible-map-charts-dialog',
+      });
+    } catch (error) {
+      console.error('Error loading visible map charts dialog:', error);
+      this.snackBar.open(
+        'Não foi possível abrir os gráficos do mapa. Tente novamente.',
+        'Fechar',
+        { duration: 5000 }
+      );
+    }
   }
 
   onSubmitEvent(dataForm: DataFormValues) {
@@ -341,7 +352,50 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           this.changeDetectorRef.markForCheck();
         })
       )
-      .subscribe();
+      .subscribe({
+        error: (error: unknown) => {
+          this.showIndeterminateProgressBar.set(false);
+          console.error('Error searching address:', error);
+          this.snackBar.open(
+            error instanceof AddressSearchInputError
+              ? error.message
+              : 'Não foi possível buscar este endereço. Tente novamente.',
+            'Fechar',
+            { duration: 5000 }
+          );
+          this.changeDetectorRef.markForCheck();
+        },
+      });
+  }
+
+  private async loadMapComponent(): Promise<void> {
+    if (this.isDestroyed || !this.mapOutlet || this.mapComponentRef) return;
+
+    this.mapLoadError.set(false);
+    try {
+      const { MapComponent } = await import('./components/map/map.component');
+
+      if (this.isDestroyed || !this.mapOutlet) return;
+
+      this.mapComponentRef = this.mapOutlet.createComponent(MapComponent);
+      this.mapBoundsSubscription =
+        this.mapComponentRef.instance.boundsChange.subscribe((bounds) =>
+          this.onBoundsChange(bounds)
+        );
+      this.syncMapInputs();
+      this.isMapComponentLoaded.set(true);
+    } catch (error) {
+      if (this.isDestroyed) return;
+      this.isMapComponentLoaded.set(false);
+      this.mapLoadError.set(true);
+      console.error('Error loading map component:', error);
+      this.snackBar.open(
+        'Não foi possível carregar o mapa. Tente novamente.',
+        'Fechar',
+        { duration: 6000 }
+      );
+      this.changeDetectorRef.markForCheck();
+    }
   }
 
   private syncMapInputs(): void {

@@ -42,6 +42,15 @@ export type NormalizedLookup = {
   delegacia: string | null;
 };
 
+export const MAX_FILTER_LIST_ITEMS = 200;
+export const MAX_FILTER_ITEM_LENGTH = 256;
+export const MAX_FILTER_DATE_SPAN_DAYS = 30 * 366;
+export const MAX_BOUNDS_AREA_DEGREES = 20_000;
+export const MAX_NUM_BO_LENGTH = 160;
+export const MAX_DELEGACIA_LENGTH = 256;
+export const MIN_LOOKUP_YEAR = 1800;
+export const MAX_LOOKUP_YEAR = 2200;
+
 function badRequest(message: string): never {
   throw new BadRequestException(message);
 }
@@ -110,9 +119,36 @@ export function parseOptionalNumberQuery(
 }
 
 export function parseStringListQuery(
-  value: string | undefined
+  value: string | string[] | undefined,
+  name = 'filter'
 ): string[] | undefined {
-  return normalizeStringList(value?.split(','));
+  if (value === undefined) return undefined;
+
+  const values = Array.isArray(value) ? value : [value];
+  const parsedValues = values.flatMap((item) => {
+    const trimmed = item.trim();
+    if (trimmed.startsWith('[')) {
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(trimmed);
+      } catch {
+        badRequest(`Invalid ${name}`);
+      }
+
+      if (
+        !Array.isArray(decoded) ||
+        !decoded.every((entry): entry is string => typeof entry === 'string')
+      ) {
+        badRequest(`Invalid ${name}`);
+      }
+
+      return decoded;
+    }
+
+    return trimmed.split(',');
+  });
+
+  return validateStringList(parsedValues, name);
 }
 
 export function normalizeStringList(values?: string[]): string[] | undefined {
@@ -121,6 +157,30 @@ export function normalizeStringList(values?: string[]): string[] | undefined {
     .filter(Boolean);
 
   return normalized?.length ? normalized : undefined;
+}
+
+export function validateStringList(
+  values: string[] | undefined,
+  name: string
+): string[] | undefined {
+  const normalized = normalizeStringList(values);
+  if (!normalized) return undefined;
+
+  if (normalized.length > MAX_FILTER_LIST_ITEMS) {
+    badRequest(`${name} accepts at most ${MAX_FILTER_LIST_ITEMS} values`);
+  }
+
+  if (normalized.some((value) => value.length > MAX_FILTER_ITEM_LENGTH)) {
+    badRequest(
+      `${name} values must be at most ${MAX_FILTER_ITEM_LENGTH} characters`
+    );
+  }
+
+  if (normalized.some(containsControlCharacters)) {
+    badRequest(`${name} contains invalid characters`);
+  }
+
+  return [...new Set(normalized)];
 }
 
 export function validateDateFilters(
@@ -134,6 +194,18 @@ export function validateDateFilters(
 
   if (after && !validatorsService.isDateValid(after)) {
     badRequest('Invalid after date');
+  }
+
+  if (before && after) {
+    const spanDays =
+      (Date.parse(`${before}T00:00:00.000Z`) -
+        Date.parse(`${after}T00:00:00.000Z`)) /
+      86_400_000;
+    if (spanDays > MAX_FILTER_DATE_SPAN_DAYS) {
+      badRequest(
+        `Date range cannot exceed ${MAX_FILTER_DATE_SPAN_DAYS} days`
+      );
+    }
   }
 
   if (
@@ -214,6 +286,8 @@ export function validateFilterInput(
 
   validateDateFilters(validatorsService, filter.beforeDate, filter.afterDate);
   validateHourFilters(filter.startHour, filter.endHour);
+  validateStringList(filter.categories, 'categories');
+  validateStringList(filter.periods, 'periods');
 
   if (filter.bounds) {
     validateBounds(validatorsService, filter.bounds);
@@ -227,6 +301,7 @@ export function validateLocationInput(
   validateLocation(validatorsService, input);
   validateDateFilters(validatorsService, input.beforeDate, input.afterDate);
   validateHourFilters(input.startHour, input.endHour);
+  validateStringList(input.periods, 'periods');
 }
 
 export function toQueryParams(
@@ -262,14 +337,50 @@ export function normalizeLookup(
     badRequest('numBo is required');
   }
 
+  const normalizedNumBo = lookup.numBo.trim();
+  if (
+    normalizedNumBo.length > MAX_NUM_BO_LENGTH ||
+    containsControlCharacters(normalizedNumBo)
+  ) {
+    badRequest(`numBo must be at most ${MAX_NUM_BO_LENGTH} characters`);
+  }
+
+  if (
+    lookup.anoBo !== undefined &&
+    (!Number.isSafeInteger(lookup.anoBo) ||
+      lookup.anoBo < MIN_LOOKUP_YEAR ||
+      lookup.anoBo > MAX_LOOKUP_YEAR)
+  ) {
+    badRequest(`anoBo must be between ${MIN_LOOKUP_YEAR} and ${MAX_LOOKUP_YEAR}`);
+  }
+
+  const normalizedDelegacia = lookup.delegacia?.trim() || null;
+  if (
+    normalizedDelegacia &&
+    (normalizedDelegacia.length > MAX_DELEGACIA_LENGTH ||
+      containsControlCharacters(normalizedDelegacia))
+  ) {
+    badRequest(
+      `delegacia must be at most ${MAX_DELEGACIA_LENGTH} characters`
+    );
+  }
+
   return {
-    numBo: lookup.numBo.trim(),
+    numBo: normalizedNumBo,
     anoBo: lookup.anoBo,
-    delegacia: lookup.delegacia?.trim() || null,
+    delegacia: normalizedDelegacia,
   };
 }
 
-function validateBounds(
+function containsControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
+export function validateBounds(
   validatorsService: ValidatorsService,
   bounds: BoundsQuery
 ): BoundsQuery {
@@ -306,6 +417,16 @@ function validateBounds(
     completeBounds.minLat > completeBounds.maxLat
   ) {
     badRequest('Invalid bounds');
+  }
+
+  const longitudeSpan = completeBounds.maxLon - completeBounds.minLon;
+  const latitudeSpan = completeBounds.maxLat - completeBounds.minLat;
+  if (
+    longitudeSpan * latitudeSpan > MAX_BOUNDS_AREA_DEGREES ||
+    longitudeSpan > 180 ||
+    latitudeSpan > 90
+  ) {
+    badRequest('Bounds cover too large an area');
   }
 
   return completeBounds;

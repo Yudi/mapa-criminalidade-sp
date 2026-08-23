@@ -9,21 +9,33 @@
 
 use crate::date_time::{is_date_format, is_time_format, is_timestamp_format};
 use crate::logger::Logger;
-use crate::parallelism::DATASET_HANDLING_PARALLELISM;
 use crate::parquet_io;
 use crate::patterns::{is_brazilian_zip_code, is_null_pattern};
 use crate::text_normalizer::normalize_column_name;
 use crate::type_inference::determine_postgresql_type;
 use crate::types::{ChunkStats, ColumnAnalysis, CsvAnalysis, IntegerRange, NumericStats};
 
-use rayon::prelude::*;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
+
+fn estimate_unique_registers(registers: &[u8; 64]) -> usize {
+    let m = registers.len() as f64;
+    let sum = registers
+        .iter()
+        .map(|rank| 2_f64.powi(-i32::from(*rank)))
+        .sum::<f64>();
+    let estimate = 0.709 * m * m / sum.max(f64::MIN_POSITIVE);
+    let empty_registers = registers.iter().filter(|rank| **rank == 0).count();
+    if estimate <= 2.5 * m && empty_registers > 0 {
+        (m * (m / empty_registers as f64).ln()).round() as usize
+    } else {
+        estimate.round() as usize
+    }
+}
 
 /// CSV analyzer for determining optimal PostgreSQL column types.
 ///
@@ -41,8 +53,6 @@ pub struct CsvAnalyzer {
     chunk_size: usize,
     /// Whether to enable parallel processing for large files
     enable_parallel: bool,
-    /// Number of threads to use for parallel processing
-    num_threads: usize,
     /// Logger for progress messages
     logger: Logger,
 }
@@ -60,7 +70,6 @@ impl CsvAnalyzer {
             max_sample_size: 20,
             chunk_size: 10000,
             enable_parallel: true,
-            num_threads: DATASET_HANDLING_PARALLELISM,
             logger: Logger::new(false),
         }
     }
@@ -84,7 +93,6 @@ impl CsvAnalyzer {
             max_sample_size,
             chunk_size,
             enable_parallel,
-            num_threads: DATASET_HANDLING_PARALLELISM,
             logger,
         }
     }
@@ -96,138 +104,24 @@ impl CsvAnalyzer {
     fn handle_duplicate_columns(
         &self,
         headers: &csv::StringRecord,
-        all_records: &[Vec<String>],
     ) -> (Vec<String>, Vec<usize>) {
-        let mut normalized_to_indices: HashMap<String, Vec<usize>> = HashMap::new();
-
-        // Group columns by normalized name
-        for (idx, header) in headers.iter().enumerate() {
-            let normalized = normalize_column_name(header).to_uppercase();
-            normalized_to_indices
-                .entry(normalized)
-                .or_default()
-                .push(idx);
-        }
-
+        let mut seen: HashMap<String, usize> = HashMap::new();
         let mut final_headers = Vec::new();
         let mut column_indices = Vec::new();
-        let mut processed_indices = std::collections::HashSet::new();
 
         for (idx, header) in headers.iter().enumerate() {
-            if processed_indices.contains(&idx) {
-                continue;
-            }
-
             let normalized = normalize_column_name(header);
-            let upper = normalized.to_uppercase();
-            let indices = normalized_to_indices.get(&upper).unwrap();
-
-            if indices.len() == 1 {
+            let count = seen.entry(normalized.clone()).or_insert(0);
+            *count += 1;
+            if *count == 1 {
                 final_headers.push(normalized);
-                column_indices.push(idx);
-                processed_indices.insert(idx);
             } else {
-                let first_idx = indices[0];
-                let mut all_identical = true;
-
-                for &other_idx in &indices[1..] {
-                    if !self.columns_have_identical_data(all_records, first_idx, other_idx) {
-                        all_identical = false;
-                        break;
-                    }
-                }
-
-                if all_identical {
-                    self.logger.info(&format!(
-                        "Duplicate column \"{}\" found {} times with identical data - keeping only one",
-                        normalized, indices.len()
-                    ));
-                    final_headers.push(normalized);
-                    column_indices.push(first_idx);
-                    for &i in indices {
-                        processed_indices.insert(i);
-                    }
-                } else {
-                    self.logger.warn(&format!(
-                        "Duplicate column \"{}\" found with DIFFERENT data - keeping all with suffixes",
-                        normalized
-                    ));
-                    final_headers.push(normalized.clone());
-                    column_indices.push(first_idx);
-                    processed_indices.insert(first_idx);
-                    let mut suffix = 2;
-                    for &other_idx in &indices[1..] {
-                        let suffixed_name = format!("{}_{}", normalized, suffix);
-                        final_headers.push(suffixed_name);
-                        column_indices.push(other_idx);
-                        processed_indices.insert(other_idx);
-                        suffix += 1;
-                    }
-                }
+                final_headers.push(format!("{}_{}", normalized, count));
             }
+            column_indices.push(idx);
         }
 
         (final_headers, column_indices)
-    }
-
-    /// Check if two columns have identical data across all records.
-    /// Uses parallel processing with early exit for large datasets.
-    fn columns_have_identical_data(
-        &self,
-        records: &[Vec<String>],
-        col1_idx: usize,
-        col2_idx: usize,
-    ) -> bool {
-        // For small datasets, use sequential comparison
-        if records.len() < 10_000 {
-            return self.columns_have_identical_data_sequential(records, col1_idx, col2_idx);
-        }
-
-        // Shared atomic flag for early exit across all threads
-        let found_difference = AtomicBool::new(false);
-
-        // Process in parallel chunks with early exit
-        records
-            .par_chunks(5_000)
-            .try_for_each(|chunk| {
-                if found_difference.load(Ordering::Relaxed) {
-                    return Err(());
-                }
-
-                for record in chunk {
-                    if found_difference.load(Ordering::Relaxed) {
-                        return Err(());
-                    }
-
-                    let val1 = record.get(col1_idx).map(|s| s.trim()).unwrap_or("");
-                    let val2 = record.get(col2_idx).map(|s| s.trim()).unwrap_or("");
-
-                    if val1 != val2 {
-                        found_difference.store(true, Ordering::Relaxed);
-                        return Err(());
-                    }
-                }
-                Ok(())
-            })
-            .is_ok()
-    }
-
-    /// Sequential comparison for small datasets.
-    #[inline]
-    fn columns_have_identical_data_sequential(
-        &self,
-        records: &[Vec<String>],
-        col1_idx: usize,
-        col2_idx: usize,
-    ) -> bool {
-        for record in records {
-            let val1 = record.get(col1_idx).map(|s| s.trim()).unwrap_or("");
-            let val2 = record.get(col2_idx).map(|s| s.trim()).unwrap_or("");
-            if val1 != val2 {
-                return false;
-            }
-        }
-        true
     }
 
     /// Analyze a CSV file and return column analysis.
@@ -269,8 +163,36 @@ impl CsvAnalyzer {
         self.logger
             .info(&format!("Analyzing Parquet file: {}", file_path));
 
-        let (headers, all_records) = parquet_io::read_parquet_string_rows(Path::new(file_path))?;
-        let analysis = self.analyze_loaded_records(file_path, headers, all_records, "Parquet")?;
+        let headers = parquet_io::read_parquet_headers(Path::new(file_path))?;
+        let header_record = csv::StringRecord::from(headers);
+        let column_count = header_record.len();
+        let mut aggregate_stats: Vec<ChunkStats> =
+            (0..column_count).map(|_| ChunkStats::new()).collect();
+        let mut total_rows = 0usize;
+        parquet_io::for_each_parquet_batch(Path::new(file_path), |batch| {
+            let mut rows = Vec::with_capacity(batch.num_rows());
+            for row_index in 0..batch.num_rows() {
+                let row = (0..batch.num_columns())
+                    .map(|column_index| {
+                        parquet_io::array_value_to_string(batch.column(column_index), row_index)
+                    })
+                    .collect::<Vec<_>>();
+                rows.push(row);
+            }
+            total_rows += rows.len();
+            let stats = self.process_chunk(&rows, column_count);
+            for (target, source) in aggregate_stats.iter_mut().zip(stats) {
+                self.accumulate_chunk_stats(target, source);
+            }
+            Ok(())
+        })?;
+        let analysis = self.finalize_streaming_analysis(
+            file_path,
+            header_record,
+            aggregate_stats,
+            total_rows,
+            "Parquet",
+        );
 
         let duration = start_time.elapsed();
         self.logger.success(&format!(
@@ -316,9 +238,6 @@ impl CsvAnalyzer {
     /// Process a chunk of records and return statistics for each column.
     fn process_chunk(&self, chunk: &[Vec<String>], column_count: usize) -> Vec<ChunkStats> {
         let mut stats: Vec<ChunkStats> = (0..column_count).map(|_| ChunkStats::new()).collect();
-        let mut unique_values: Vec<HashMap<String, bool>> = vec![HashMap::new(); column_count];
-        let max_unique_tracking = 1000;
-
         for record in chunk.iter() {
             for (col_idx, field) in record.iter().enumerate() {
                 if col_idx >= column_count {
@@ -336,9 +255,7 @@ impl CsvAnalyzer {
 
                 stats[col_idx].update_length(trimmed_field.len());
 
-                if unique_values[col_idx].len() < max_unique_tracking {
-                    unique_values[col_idx].insert(trimmed_field.to_string(), true);
-                }
+                stats[col_idx].record_unique(trimmed_field);
 
                 if let Ok(num) = trimmed_field.parse::<f64>() {
                     stats[col_idx].record_numeric(num);
@@ -362,72 +279,83 @@ impl CsvAnalyzer {
             }
         }
 
-        for (col_idx, unique_map) in unique_values.iter().enumerate() {
-            stats[col_idx].unique_count = unique_map.len();
+        for stat in &mut stats {
+            stat.unique_count = stat.unique_estimate();
         }
 
         stats
     }
 
-    fn analyze_loaded_records(
+    fn accumulate_chunk_stats(&self, target: &mut ChunkStats, source: ChunkStats) {
+        target.null_count += source.null_count;
+        target.total_non_null += source.total_non_null;
+        target.min_length = target.min_length.min(source.min_length);
+        target.max_length = target.max_length.max(source.max_length);
+        target.all_time_format &= source.all_time_format;
+        target.all_date_format &= source.all_date_format;
+        target.all_timestamp_format &= source.all_timestamp_format;
+        target.has_non_null_values |= source.has_non_null_values;
+        target.has_zip_code_pattern |= source.has_zip_code_pattern;
+        for (target_register, source_register) in target
+            .unique_registers
+            .iter_mut()
+            .zip(source.unique_registers)
+        {
+            *target_register = (*target_register).max(source_register);
+        }
+        if target.sample_values.len() < self.max_sample_size {
+            target.sample_values.extend(
+                source
+                    .sample_values
+                    .into_iter()
+                    .take(self.max_sample_size - target.sample_values.len()),
+            );
+        }
+        match (&mut target.numeric_stats, source.numeric_stats) {
+            (Some(target_numeric), Some(source_numeric)) => {
+                target_numeric.min_value = target_numeric.min_value.min(source_numeric.min_value);
+                target_numeric.max_value = target_numeric.max_value.max(source_numeric.max_value);
+                target_numeric.is_integer &= source_numeric.is_integer;
+                target_numeric.all_numeric &= source_numeric.all_numeric;
+                target_numeric.numeric_count += source_numeric.numeric_count;
+                target_numeric.non_numeric_count += source_numeric.non_numeric_count;
+            }
+            (None, Some(source_numeric)) => target.numeric_stats = Some(source_numeric),
+            _ => {}
+        }
+        target.unique_count = estimate_unique_registers(&target.unique_registers);
+    }
+
+    fn finalize_streaming_analysis(
         &self,
         file_path: &str,
-        headers: Vec<String>,
-        all_records: Vec<Vec<String>>,
+        headers: csv::StringRecord,
+        aggregate_stats: Vec<ChunkStats>,
+        total_rows: usize,
         source_label: &str,
-    ) -> Result<CsvAnalysis, Box<dyn Error>> {
-        let headers = csv::StringRecord::from(headers);
-        let column_count = headers.len();
-        let total_rows = all_records.len();
-
-        self.logger.data(&format!(
-            "Found {} columns and {} rows in {} file",
-            column_count, total_rows, source_label
-        ));
-
-        let chunk_results = if self.enable_parallel && total_rows > 100_000 {
-            self.logger
-                .progress("Using parallel processing for large dataset");
-            let effective_threads = self.num_threads.min(total_rows / self.chunk_size).max(1);
-            let chunk_size = (total_rows / effective_threads).max(self.chunk_size);
-            let chunks: Vec<_> = all_records.chunks(chunk_size).collect();
-
-            chunks
-                .par_iter()
-                .map(|chunk| self.process_chunk(chunk, column_count))
-                .collect::<Vec<_>>()
-        } else {
-            self.logger
-                .progress("Using sequential processing for loaded dataset");
-            vec![self.process_chunk(&all_records, column_count)]
-        };
-
-        let (deduped_headers, column_indices) =
-            self.handle_duplicate_columns(&headers, &all_records);
-
-        let mut final_columns = Vec::new();
-        for (i, header) in deduped_headers.iter().enumerate() {
-            let original_col_idx = column_indices[i];
-            let column_chunk_stats: Vec<ChunkStats> = chunk_results
-                .iter()
-                .map(|chunk_result| chunk_result[original_col_idx].clone())
-                .collect();
-            let merged_column = self.merge_chunk_stats(header, column_chunk_stats);
-            final_columns.push(merged_column);
-        }
-
+    ) -> CsvAnalysis {
+        let (deduped_headers, column_indices) = self.handle_duplicate_columns(&headers);
+        let final_columns = deduped_headers
+            .iter()
+            .enumerate()
+            .map(|(index, header)| {
+                self.merge_chunk_stats(
+                    header,
+                    vec![aggregate_stats[column_indices[index]].clone()],
+                )
+            })
+            .collect::<Vec<_>>();
         self.logger.success(&format!(
             "{} analysis complete: {} rows, {} columns (after dedup)",
             source_label,
             total_rows,
             final_columns.len()
         ));
-
-        Ok(CsvAnalysis {
+        CsvAnalysis {
             columns: final_columns,
             total_rows,
             file_path: file_path.to_string(),
-        })
+        }
     }
 
     /// Merge multiple ChunkStats into a single ColumnAnalysis.
@@ -438,11 +366,13 @@ impl CsvAnalyzer {
     ) -> ColumnAnalysis {
         let mut merged = ColumnAnalysis::new(header_name, &normalize_column_name(header_name));
 
-        let mut has_any_non_numeric = false;
         let mut global_min_value = f64::INFINITY;
         let mut global_max_value = f64::NEG_INFINITY;
         let mut global_is_integer = true;
         let mut has_any_numeric = false;
+        let mut numeric_count = 0usize;
+        let mut numeric_invalid_count = 0usize;
+        let mut unique_registers = [0_u8; 64];
 
         // Track datetime formats across all chunks
         // Start as true, but set to false if ANY chunk has non-matching values
@@ -461,7 +391,12 @@ impl CsvAnalyzer {
                 merged.min_length = merged.min_length.min(chunk_stats.min_length);
             }
             merged.max_length = merged.max_length.max(chunk_stats.max_length);
-            merged.unique_count = merged.unique_count.max(chunk_stats.unique_count);
+            for (merged_register, chunk_register) in unique_registers
+                .iter_mut()
+                .zip(chunk_stats.unique_registers)
+            {
+                *merged_register = (*merged_register).max(chunk_register);
+            }
 
             // Merge datetime format tracking - if ANY chunk has non-matching values,
             // the entire column is not that format
@@ -484,9 +419,9 @@ impl CsvAnalyzer {
             }
 
             if let Some(numeric_stats) = chunk_stats.numeric_stats {
-                if !numeric_stats.all_numeric {
-                    has_any_non_numeric = true;
-                } else {
+                numeric_count += numeric_stats.numeric_count;
+                numeric_invalid_count += numeric_stats.non_numeric_count;
+                if numeric_stats.numeric_count > 0 {
                     has_any_numeric = true;
                     global_min_value = global_min_value.min(numeric_stats.min_value);
                     global_max_value = global_max_value.max(numeric_stats.max_value);
@@ -509,7 +444,13 @@ impl CsvAnalyzer {
         merged.all_timestamp_format = has_any_non_null && global_all_timestamp;
         merged.has_zip_code_pattern = has_any_zip_code;
 
-        if has_any_non_numeric || !has_any_numeric {
+        let invalid_ratio = if numeric_count + numeric_invalid_count == 0 {
+            1.0
+        } else {
+            numeric_invalid_count as f64 / (numeric_count + numeric_invalid_count) as f64
+        };
+        merged.numeric_invalid_count = numeric_invalid_count;
+        if !has_any_numeric || invalid_ratio > 0.05 {
             merged.numeric_stats = None;
         } else {
             merged.numeric_stats = Some(NumericStats {
@@ -523,6 +464,7 @@ impl CsvAnalyzer {
         if merged.min_length == usize::MAX {
             merged.min_length = 0;
         }
+        merged.unique_count = estimate_unique_registers(&unique_registers);
 
         merged.recommended_type = determine_postgresql_type(&merged);
         merged
@@ -531,142 +473,59 @@ impl CsvAnalyzer {
     /// Analyze CSV using parallel processing.
     fn analyze_csv_parallel(&self, file_path: &str) -> Result<CsvAnalysis, Box<dyn Error>> {
         self.logger.progress("Setting up parallel processing...");
-
-        let file = File::open(file_path)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(file);
-
-        let headers = reader.headers()?.clone();
-        let column_count = headers.len();
-
-        self.logger.data(&format!(
-            "Found {} columns, processing in parallel chunks",
-            column_count
-        ));
-
-        let mut all_records = Vec::new();
-
-        self.logger.progress("Reading all records...");
-        for (row_idx, result) in reader.records().enumerate() {
-            let record = result?;
-            all_records.push(record.iter().map(|s| s.to_string()).collect::<Vec<_>>());
-
-            if row_idx > 0 && row_idx % 100000 == 0 {
-                self.logger
-                    .progress(&format!("Read {} records...", row_idx));
-            }
-        }
-
-        let total_rows = all_records.len();
-        self.logger
-            .data(&format!("Processing {} records in parallel...", total_rows));
-
-        // Use fixed thread count since IO is the bottleneck, not CPU
-        let effective_threads = self.num_threads.min(total_rows / self.chunk_size).max(1);
-        let chunk_size = (total_rows / effective_threads).max(self.chunk_size);
-        let chunks: Vec<_> = all_records.chunks(chunk_size).collect();
-
-        self.logger.data(&format!(
-            "Processing {} chunks of ~{} records each (IO-optimized: {} threads)",
-            chunks.len(),
-            chunk_size,
-            effective_threads
-        ));
-
-        let chunk_results: Vec<Vec<ChunkStats>> = chunks
-            .par_iter()
-            .map(|chunk| self.process_chunk(chunk, column_count))
-            .collect();
-
-        self.logger.progress("Merging parallel results...");
-
-        // Handle duplicate columns - remove identical duplicates, keep different ones with suffix
-        let (deduped_headers, column_indices) =
-            self.handle_duplicate_columns(&headers, &all_records);
-
-        let mut final_columns = Vec::new();
-        for (i, header) in deduped_headers.iter().enumerate() {
-            let original_col_idx = column_indices[i];
-            let column_chunk_stats: Vec<ChunkStats> = chunk_results
-                .iter()
-                .map(|chunk_result| chunk_result[original_col_idx].clone())
-                .collect();
-
-            let merged_column = self.merge_chunk_stats(header, column_chunk_stats);
-            final_columns.push(merged_column);
-        }
-
-        self.logger.success(&format!(
-            "Parallel analysis complete: {} rows, {} columns (after dedup)",
-            total_rows,
-            final_columns.len()
-        ));
-
-        Ok(CsvAnalysis {
-            columns: final_columns,
-            total_rows,
-            file_path: file_path.to_string(),
-        })
+        self.analyze_csv_streaming(file_path, "CSV (bounded parallel lane)")
     }
 
     /// Analyze CSV using sequential processing.
     fn analyze_csv_sequential(&self, file_path: &str) -> Result<CsvAnalysis, Box<dyn Error>> {
+        self.analyze_csv_streaming(file_path, "CSV")
+    }
+
+    fn analyze_csv_streaming(
+        &self,
+        file_path: &str,
+        source_label: &str,
+    ) -> Result<CsvAnalysis, Box<dyn Error>> {
         let file = File::open(file_path)?;
         let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(file);
 
         let headers = reader.headers()?.clone();
         let column_count = headers.len();
-
         self.logger.data(&format!(
-            "Found {} columns: {}",
-            column_count,
-            headers.iter().collect::<Vec<_>>().join(", ")
+            "Found {} columns in {}",
+            column_count, source_label
         ));
+        let mut aggregate_stats: Vec<ChunkStats> =
+            (0..column_count).map(|_| ChunkStats::new()).collect();
+        let mut chunk = Vec::with_capacity(self.chunk_size);
+        let mut total_rows = 0;
 
-        let mut all_records = Vec::new();
-
-        self.logger.progress("Reading all records...");
-        for (row_idx, result) in reader.records().enumerate() {
+        for result in reader.records() {
             let record = result?;
-
-            if row_idx > 0 && row_idx % 25000 == 0 {
-                self.logger.progress(&format!("Read {} rows...", row_idx));
+            chunk.push(record.iter().map(str::to_string).collect::<Vec<_>>());
+            total_rows += 1;
+            if chunk.len() >= self.chunk_size {
+                let stats = self.process_chunk(&chunk, column_count);
+                for (target, source) in aggregate_stats.iter_mut().zip(stats) {
+                    self.accumulate_chunk_stats(target, source);
+                }
+                chunk.clear();
             }
-
-            all_records.push(record.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        }
+        if !chunk.is_empty() {
+            let stats = self.process_chunk(&chunk, column_count);
+            for (target, source) in aggregate_stats.iter_mut().zip(stats) {
+                self.accumulate_chunk_stats(target, source);
+            }
         }
 
-        let total_rows = all_records.len();
-
-        self.logger.data(&format!(
-            "Processing {} records sequentially...",
-            total_rows
-        ));
-
-        let chunk_stats = self.process_chunk(&all_records, column_count);
-
-        // Handle duplicate columns - remove identical duplicates, keep different ones with suffix
-        let (deduped_headers, column_indices) =
-            self.handle_duplicate_columns(&headers, &all_records);
-
-        let mut final_columns = Vec::new();
-        for (i, header) in deduped_headers.iter().enumerate() {
-            let original_col_idx = column_indices[i];
-            let merged_column =
-                self.merge_chunk_stats(header, vec![chunk_stats[original_col_idx].clone()]);
-            final_columns.push(merged_column);
-        }
-
-        self.logger.success(&format!(
-            "Sequential analysis complete: {} rows, {} columns (after dedup)",
+        Ok(self.finalize_streaming_analysis(
+            file_path,
+            headers,
+            aggregate_stats,
             total_rows,
-            final_columns.len()
-        ));
-
-        Ok(CsvAnalysis {
-            columns: final_columns,
-            total_rows,
-            file_path: file_path.to_string(),
-        })
+            source_label,
+        ))
     }
 }
 

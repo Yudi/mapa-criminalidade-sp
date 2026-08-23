@@ -7,6 +7,7 @@ import {
   Req,
   HttpStatus,
   HttpException,
+  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -36,6 +37,8 @@ function isBelowTileDataZoom(zoom: number): boolean {
 @ApiTags('Tiles')
 @Controller('tiles')
 export class TilesController {
+  private readonly logger = new Logger(TilesController.name);
+
   constructor(
     private readonly queryService: MapFeaturesQueryService,
     private readonly validatorsService: ValidatorsService
@@ -44,11 +47,11 @@ export class TilesController {
   @Get('metadata')
   @ApiOperation({ summary: 'Get tile metadata' })
   async getMetadata() {
-    const [categories, periods, dateRange] = await Promise.all([
+    const [categories, periods] = await Promise.all([
       this.queryService.getCategories(),
       this.queryService.getPeriods(),
-      this.queryService.getDateRange(),
     ]);
+    const dateRange = await this.queryService.getDateRange();
     const categoryNames = categories.map((c) => c.name);
 
     return {
@@ -75,9 +78,9 @@ export class TilesController {
     @Param('y') y: string,
     @Query('before') before: string,
     @Query('after') after: string,
-    @Query('categories') categories: string,
-    @Query('rubricas') rubricas: string, // Backwards compat
-    @Query('periods') periods: string,
+    @Query('categories') categories: string | string[],
+    @Query('rubricas') rubricas: string | string[], // Backwards compat
+    @Query('periods') periods: string | string[],
     @Query('startHour') startHour: string,
     @Query('endHour') endHour: string,
     @Req() req: Request,
@@ -126,8 +129,10 @@ export class TilesController {
     const periodList = parseStringListQuery(periods);
 
     let clientDisconnected = false;
+    const abortController = new AbortController();
     const onClose = () => {
       clientDisconnected = true;
+      abortController.abort();
     };
     req.on('close', onClose);
 
@@ -146,7 +151,7 @@ export class TilesController {
         periods: periodList,
         startHour: parsedStartHour,
         endHour: parsedEndHour,
-      });
+      }, abortController.signal);
 
       if (clientDisconnected || req.socket?.destroyed) {
         return;
@@ -167,15 +172,28 @@ export class TilesController {
         return res.status(HttpStatus.NO_CONTENT).send();
       }
 
+      if (tile.status === 'busy') {
+        res.set({
+          [TILE_STATUS_HEADER]: 'busy',
+          'Cache-Control': 'no-store',
+        });
+        return res.status(HttpStatus.TOO_MANY_REQUESTS).send();
+      }
+
+      if (tile.status === 'cancelled') {
+        return;
+      }
+
       if (!tile.tile || tile.tile.length === 0) {
         return res.status(HttpStatus.NO_CONTENT).send();
       }
 
       return res.send(tile.tile);
-    } catch {
+    } catch (error) {
       if (clientDisconnected || req.socket?.destroyed) {
         return;
       }
+      this.logger.error(`Error generating tile: ${error}`);
       throw new HttpException(
         'Error generating tile',
         HttpStatus.INTERNAL_SERVER_ERROR

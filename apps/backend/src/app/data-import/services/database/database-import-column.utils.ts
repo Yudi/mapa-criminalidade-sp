@@ -13,6 +13,7 @@ export interface CsvColumnMatch {
   columnMapping: Map<string, string>;
   mappedColumns: string[];
   unmatchedColumns: string[];
+  duplicateTargetColumns: string[];
 }
 
 export function applyColumnTypeOverrides(
@@ -116,30 +117,51 @@ export function matchCsvColumnsToTableColumns(
   const columnMapping = new Map<string, string>();
   const mappedColumns: string[] = [];
   const unmatchedColumns: string[] = [];
+  const duplicateTargetColumns: string[] = [];
+  const reservedDbColumns = new Set<string>();
 
   for (const csvCol of csvColumns) {
+    const normalizedCsvCol = StringUtils.normalizeColumnName(csvCol);
     let matchingDbCol =
-      actualColumns.find((dbCol) => dbCol === csvCol) ?? null;
+      actualColumns.find(
+        (dbCol) => dbCol === csvCol && !reservedDbColumns.has(dbCol)
+      ) ?? null;
 
     if (!matchingDbCol) {
       matchingDbCol =
         actualColumns.find(
-          (dbCol) => StringUtils.normalizeColumnName(dbCol) === csvCol
+          (dbCol) =>
+            StringUtils.normalizeColumnName(dbCol) === normalizedCsvCol &&
+            !reservedDbColumns.has(dbCol)
         ) ?? null;
     }
 
     if (!matchingDbCol) {
       matchingDbCol =
         actualColumns.find(
-          (dbCol) => dbCol.toLowerCase() === csvCol.toLowerCase()
+          (dbCol) =>
+            dbCol.toLowerCase() === csvCol.toLowerCase() &&
+            !reservedDbColumns.has(dbCol)
         ) ?? null;
     }
 
     if (matchingDbCol) {
+      reservedDbColumns.add(matchingDbCol);
       columnMapping.set(csvCol, matchingDbCol);
       mappedColumns.push(`${csvCol}->${matchingDbCol}`);
       logger.verbose(`Mapped CSV "${csvCol}" -> DB "${matchingDbCol}"`);
     } else {
+      const alreadyMapped = actualColumns.find(
+        (dbCol) =>
+          StringUtils.normalizeColumnName(dbCol) === normalizedCsvCol ||
+          dbCol.toLowerCase() === csvCol.toLowerCase()
+      );
+      if (alreadyMapped) {
+        duplicateTargetColumns.push(alreadyMapped);
+        logger.warn(
+          `CSV column "${csvCol}" would map to already-used DB column "${alreadyMapped}"`
+        );
+      }
       unmatchedColumns.push(csvCol);
       logger.verbose(`No match for CSV column "${csvCol}"`);
     }
@@ -149,5 +171,6 @@ export function matchCsvColumnsToTableColumns(
     columnMapping,
     mappedColumns,
     unmatchedColumns,
+    duplicateTargetColumns,
   };
 }

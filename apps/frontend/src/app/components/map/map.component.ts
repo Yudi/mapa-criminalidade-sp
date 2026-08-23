@@ -64,6 +64,7 @@ const CLIENT_CLUSTER_MIN_ZOOM = 16;
 const CLUSTER_DISTANCE_PX = 44;
 const CLUSTER_MIN_DISTANCE_PX = 28;
 const TILE_LAYER_UPDATE_DEBOUNCE_MS = 200;
+const TILE_SOURCE_CACHE_SIZE = 256;
 export interface MapBounds {
   minLon: number;
   minLat: number;
@@ -115,6 +116,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
   private tileRequestCancellation$ = new Subject<void>();
   olMap: OlMap | null = null;
   private tileLayer: VectorTileLayer | null = null;
+  private tileSource: VectorTileSource | null = null;
 
   private moveEndListenerKey: EventsKey | null = null;
   private tileLoadEndListenerKey: EventsKey | null = null;
@@ -196,6 +198,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       }
       this.tileLayer.dispose();
       this.tileLayer = null;
+      this.tileSource = null;
     }
 
     this.disposeClusterLayer();
@@ -338,57 +341,76 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.tileLoadEndListenerKey = null;
     }
 
-    if (this.tileLayer) {
-      this.olMap.removeLayer(this.tileLayer);
-      this.tileLayer.getSource()?.clear();
-      this.tileLayer.dispose();
-    }
-
     const filters = this.currentFilters();
 
     // Don't show layer if no categories are selected
     if (!filters.categories || filters.categories.length === 0) {
-      this.tileLayer = null;
+      if (this.tileLayer) {
+        this.olMap.removeLayer(this.tileLayer);
+        this.tileLayer.getSource()?.clear();
+      }
       return;
     }
 
     const tileUrl = this.vectorTileService.buildTileUrl(filters);
-
-    const source = new VectorTileSource({
+    const tileLoadFunction = this.createTileLoadFunction(
+      tileLayerVersion,
+      this.tileRequestCancellation$
+    );
+    const existingSource = this.tileSource;
+    const source = existingSource ?? new VectorTileSource({
       format: new MVTFormat({
         // Don't use idProperty - we need num_bo as a regular property for click handling
         layers: ['occurrences'], // Must match the layer name in ST_AsMVT
       }),
       url: tileUrl,
       maxZoom: MAX_CRIME_TILE_ZOOM,
-      cacheSize: 512,
+      cacheSize: TILE_SOURCE_CACHE_SIZE,
       transition: 0,
-      tileLoadFunction: this.createTileLoadFunction(
-        tileLayerVersion,
-        this.tileRequestCancellation$
-      ),
+      tileLoadFunction,
     });
+
+    this.tileSource = source;
+    if (existingSource) {
+      // The source is intentionally reused between filter changes. Clear its
+      // old tile entries and replace the loader so stale requests are tied to
+      // the new cancellation/version boundary.
+      source.setUrl(tileUrl);
+      source.setTileLoadFunction(tileLoadFunction);
+      source.clear();
+    }
 
     this.tileLoadEndListenerKey = source.on('tileloadend', () => {
       this.scheduleVisibleClusterRefresh(tileLayerVersion);
     });
 
-    this.tileLayer = new VectorTileLayer({
-      source,
-      style: createOccurrenceStyleFunction(
-        this.activeCategories(),
-        (category) => this.markersService.markerChooser(category)
-      ),
-      declutter: false,
-      renderMode: 'hybrid',
-      preload: 0,
-      minZoom: MIN_CRIME_TILE_ZOOM,
-      maxZoom: LAYER_MAX_ZOOM,
-    });
+    if (!this.tileLayer) {
+      this.tileLayer = new VectorTileLayer({
+        source,
+        style: createOccurrenceStyleFunction(
+          this.activeCategories(),
+          (category) => this.markersService.markerChooser(category)
+        ),
+        declutter: false,
+        renderMode: 'hybrid',
+        preload: 0,
+        minZoom: MIN_CRIME_TILE_ZOOM,
+        maxZoom: LAYER_MAX_ZOOM,
+      });
+    } else {
+      this.tileLayer.setStyle(
+        createOccurrenceStyleFunction(
+          this.activeCategories(),
+          (category) => this.markersService.markerChooser(category)
+        )
+      );
+    }
 
     this.tileLayer.set(MAP_INTERACTIVE_LAYER_PROPERTY, true);
     this.clusterLayer = this.createClusterLayer(this.activeCategories());
-    this.olMap.addLayer(this.tileLayer);
+    if (!this.olMap.getLayers().getArray().includes(this.tileLayer)) {
+      this.olMap.addLayer(this.tileLayer);
+    }
     this.olMap.addLayer(this.clusterLayer);
     this.scheduleVisibleClusterRefresh(tileLayerVersion);
   }
@@ -410,6 +432,18 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       onTimeout: (version) => this.openTileTimeoutDialog(version),
       shouldMarkTileError: (version) =>
         !this.isDestroyed && version === this.tileLayerVersion,
+      isCancelled: () =>
+        this.isDestroyed || tileLayerVersion !== this.tileLayerVersion,
+      onError: (error) => {
+        if (error.kind !== 'cancelled') {
+          console.warn('[MapComponent] Vector tile load failed', {
+            kind: error.kind,
+            status: error.status,
+            url: error.tileUrl,
+            tileLayerVersion,
+          });
+        }
+      },
     });
   }
 
@@ -438,9 +472,18 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
         })
         .afterClosed()
         .pipe(take(1))
-        .subscribe(() => {
-          this.tileTimeoutDialogOpen = false;
+        .subscribe({
+          next: () => {
+            this.tileTimeoutDialogOpen = false;
+          },
+          error: (error: unknown) => {
+            this.tileTimeoutDialogOpen = false;
+            console.error('[MapComponent] Tile timeout dialog failed', error);
+          },
         });
+    }).catch((error: unknown) => {
+      this.tileTimeoutDialogOpen = false;
+      console.error('[MapComponent] Tile timeout dialog chunk failed', error);
     });
   }
 

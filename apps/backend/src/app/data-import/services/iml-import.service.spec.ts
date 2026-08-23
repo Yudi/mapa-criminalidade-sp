@@ -1,4 +1,5 @@
 import { DataCategory } from '../types/data-import.types';
+import * as path from 'path';
 import { CsvProcessingService } from './csv-processing.service';
 import { DatabaseService } from './database.service';
 import { FileOperationsService } from './file-operations.service';
@@ -33,13 +34,21 @@ describe('ImlImportService', () => {
           const months = args[args.indexOf('--months') + 1]
             .split(',')
             .map(Number);
+          const outputDir = args[args.indexOf('--output-dir') + 1];
           return Promise.resolve({
             stdout: JSON.stringify({
               year,
+              status: 'complete',
+              expectedMonths: months.length,
+              succeededMonths: months.length,
+              failedMonths: [],
               files: months.map((month) => ({
                 month,
                 recordCount: 10,
-                outputPath: `/tmp/iml_${year}_${month}.csv`,
+                outputPath: path.join(
+                  outputDir,
+                  `registro_obitos_iml_${year}_${String(month).padStart(2, '0')}.csv`
+                ),
               })),
             }),
             stderr: '',
@@ -49,6 +58,7 @@ describe('ImlImportService', () => {
     } as unknown as PythonToolService;
 
     fileOperationsService = {
+      sweepStaleDirectories: jest.fn().mockResolvedValue(undefined),
       ensureDirectory: jest.fn().mockResolvedValue(undefined),
       cleanup: jest.fn().mockResolvedValue(undefined),
       calculateFileHash: jest
@@ -127,7 +137,18 @@ describe('ImlImportService', () => {
     ).toHaveBeenCalledTimes(1);
     expect(
       csvProcessingService.importSingleCsvFileReplacingImlMonth
-    ).toHaveBeenCalledWith('/tmp/iml_2026_3.csv', category, 2026, 3);
+    ).toHaveBeenCalledWith(
+      path.join(
+        process.cwd(),
+        'temp',
+        'iml',
+        '2026',
+        'registro_obitos_iml_2026_03.csv'
+      ),
+      category,
+      2026,
+      3
+    );
   });
 
   it('processes a scheduled month only when its hash changed', async () => {
@@ -145,18 +166,42 @@ describe('ImlImportService', () => {
     ).toHaveBeenCalledTimes(1);
     expect(
       csvProcessingService.importSingleCsvFileReplacingImlMonth
-    ).toHaveBeenCalledWith('/tmp/iml_2026_5.csv', category, 2026, 5);
+    ).toHaveBeenCalledWith(
+      path.join(
+        process.cwd(),
+        'temp',
+        'iml',
+        '2026',
+        'registro_obitos_iml_2026_05.csv'
+      ),
+      category,
+      2026,
+      5
+    );
   });
 
-  it('imports successful scraper files before reporting missing months', async () => {
+  it('imports successful scraper files and skips failed external months', async () => {
     jest.mocked(pythonToolService.runAssetScript).mockResolvedValue({
       stdout: JSON.stringify({
         year: 2026,
+        status: 'partial',
+        expectedMonths: 3,
+        succeededMonths: 1,
+        failedMonths: [
+          '2026-05: request timed out',
+          '2026-06: invalid response',
+        ],
         files: [
           {
             month: 4,
             recordCount: 10,
-            outputPath: '/tmp/iml_2026_4.csv',
+            outputPath: path.join(
+              process.cwd(),
+              'temp',
+              'iml',
+              '2026',
+              'registro_obitos_iml_2026_04.csv'
+            ),
           },
         ],
       }),
@@ -166,16 +211,25 @@ describe('ImlImportService', () => {
       .mocked(fileOperationsService.calculateFileHash)
       .mockResolvedValue('changed-hash');
 
-    await expect(service.importCategory(category)).rejects.toThrow(
-      'Scraper did not return 2026-05'
-    );
+    await expect(service.importCategory(category)).resolves.toBe(1);
 
     expect(
       csvProcessingService.importSingleCsvFileReplacingImlMonth
     ).toHaveBeenCalledTimes(1);
     expect(
       csvProcessingService.importSingleCsvFileReplacingImlMonth
-    ).toHaveBeenCalledWith('/tmp/iml_2026_4.csv', category, 2026, 4);
+    ).toHaveBeenCalledWith(
+      path.join(
+        process.cwd(),
+        'temp',
+        'iml',
+        '2026',
+        'registro_obitos_iml_2026_04.csv'
+      ),
+      category,
+      2026,
+      4
+    );
   });
 
   it('extends IML into the current year without requesting future months', async () => {

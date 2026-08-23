@@ -1,7 +1,9 @@
 //! CSV data cleaner for handling malformed values.
 //!
-//! This module provides functionality to clean CSV data based on column types,
-//! handling malformed values, Excel errors, and format inconsistencies.
+//! The cleaner keeps the permissive source-data conversions used by the
+//! project, but makes every parser failure and quality conversion observable
+//! through a bounded rejection file and a manifest written atomically with the
+//! cleaned CSV.
 
 use crate::logger::Logger;
 use crate::text_normalizer::normalize_column_name;
@@ -10,10 +12,24 @@ use crate::value_cleaners::{
     clean_date_value, clean_general_value, clean_integer_value, clean_numeric_value,
     clean_time_value,
 };
-
-use rayon::prelude::*;
+use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+
+const MAX_REJECTION_BYTES: u64 = 8 * 1024 * 1024;
+
+#[derive(Debug, Serialize)]
+pub struct CleanReport {
+    pub source_rows: usize,
+    pub accepted_rows: usize,
+    pub rejected_rows: usize,
+    pub invalid_values: usize,
+    pub coerced_values: usize,
+    pub columns: Vec<String>,
+    pub rejection_path: Option<String>,
+}
 
 /// CSV data cleaner for handling malformed values in different column types.
 pub struct CsvCleaner {
@@ -21,14 +37,13 @@ pub struct CsvCleaner {
 }
 
 impl CsvCleaner {
-    /// Create a new CSV cleaner instance.
     pub fn new(silent: bool) -> Self {
         Self {
             logger: Logger::new(silent),
         }
     }
 
-    /// Process and clean CSV file based on column types.
+    #[allow(dead_code)]
     pub fn clean_csv(
         &self,
         input_path: &str,
@@ -38,20 +53,41 @@ impl CsvCleaner {
         self.clean_csv_with_columns(input_path, output_path, column_types, None)
     }
 
-    /// Process and clean CSV file with column filtering and reordering.
+    pub fn clean_csv_with_report(
+        &self,
+        input_path: &str,
+        output_path: &str,
+        column_types: &HashMap<String, String>,
+        target_columns: Option<&[String]>,
+    ) -> Result<CleanReport, Box<dyn std::error::Error>> {
+        self.clean_csv_report(input_path, output_path, column_types, target_columns)
+    }
+
+    #[allow(dead_code)]
     pub fn clean_csv_with_columns(
         &self,
         input_path: &str,
         output_path: &str,
         column_types: &HashMap<String, String>,
-        _target_columns: Option<&[String]>,
+        target_columns: Option<&[String]>,
     ) -> Result<usize, Box<dyn std::error::Error>> {
+        Ok(self
+            .clean_csv_report(input_path, output_path, column_types, target_columns)?
+            .accepted_rows)
+    }
+
+    fn clean_csv_report(
+        &self,
+        input_path: &str,
+        output_path: &str,
+        column_types: &HashMap<String, String>,
+        target_columns: Option<&[String]>,
+    ) -> Result<CleanReport, Box<dyn std::error::Error>> {
         self.logger.processing(&format!(
             "Cleaning CSV data: {} -> {}",
             input_path, output_path
         ));
 
-        // First pass: read all data to detect and handle duplicate columns
         let mut reader = csv::ReaderBuilder::new()
             .delimiter(b';')
             .quote(b'"')
@@ -59,38 +95,78 @@ impl CsvCleaner {
             .double_quote(true)
             .flexible(false)
             .from_path(input_path)?;
-
         let original_headers = reader.headers()?.clone();
+        if original_headers.is_empty() {
+            return Err("CSV has no header row".into());
+        }
 
-        // Read all records into memory for duplicate column comparison
-        let all_records: Vec<csv::StringRecord> = reader.records().filter_map(|r| r.ok()).collect();
-
-        // Detect duplicate columns and determine which to keep
+        let (deduped_headers, deduped_indices) =
+            self.handle_duplicate_columns(&original_headers);
         let (final_headers, column_indices) =
-            self.handle_duplicate_columns(&original_headers, &all_records);
+            self.select_target_columns(&deduped_headers, &deduped_indices, target_columns)?;
 
-        // Now write the cleaned output
-        let mut writer = csv::WriterBuilder::new()
-            .delimiter(b';')
-            .quote_style(csv::QuoteStyle::Necessary)
-            .quote(b'"')
-            .escape(b'"')
-            .double_quote(true)
-            .from_path(output_path)?;
+        let output_path = Path::new(output_path);
+        let output_temporary_path = temporary_path(output_path, "cleaned");
+        let rejection_path = appended_path(output_path, ".rejected.csv");
+        let temporary_rejection_path = temporary_path(&rejection_path, "rejected");
+        let manifest_path = appended_path(output_path, ".manifest.json");
+        let temporary_manifest_path = temporary_path(&manifest_path, "manifest");
 
-        writer.write_record(&final_headers)?;
+        let result = (|| -> Result<CleanReport, Box<dyn std::error::Error>> {
+            let output_file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&output_temporary_path)?;
+            let mut writer = csv::WriterBuilder::new()
+                .delimiter(b';')
+                .quote_style(csv::QuoteStyle::Necessary)
+                .quote(b'"')
+                .escape(b'"')
+                .double_quote(true)
+                .from_writer(output_file);
+            writer.write_record(&final_headers)?;
 
-        let mut processed_rows = 0;
-        let mut cleaned_values = 0;
+            let rejection_file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temporary_rejection_path)?;
+            let mut rejection_writer = csv::WriterBuilder::new()
+                .delimiter(b';')
+                .quote_style(csv::QuoteStyle::Necessary)
+                .from_writer(rejection_file);
+            rejection_writer.write_record(["row", "reason"])?;
 
-        for record in &all_records {
-            let mut cleaned_record = Vec::new();
+            let mut source_rows = 0;
+            let mut accepted_rows = 0;
+            let mut rejected_rows = 0;
+            let mut invalid_values = 0;
+            let mut coerced_values = 0;
+            let mut rejection_bytes = 0_u64;
 
-            for &col_idx in &column_indices {
-                let value = record.get(col_idx).unwrap_or("");
-                let cleaned_value = if let Some(original_header) =
-                    original_headers.get(col_idx)
-                {
+            for (record_index, result) in reader.records().enumerate() {
+                source_rows += 1;
+                let record = match result {
+                    Ok(record) => record,
+                    Err(error) => {
+                        rejected_rows += 1;
+                        if rejection_bytes < MAX_REJECTION_BYTES {
+                            let reason = format!("{}", error);
+                            rejection_bytes += reason.len() as u64;
+                            rejection_writer.write_record([
+                                (record_index + 2).to_string(),
+                                reason,
+                            ])?;
+                        }
+                        continue;
+                    }
+                };
+
+                let mut cleaned_record = Vec::with_capacity(column_indices.len());
+                for &col_idx in &column_indices {
+                    let value = record.get(col_idx).unwrap_or("");
+                    let original_header = original_headers
+                        .get(deduped_indices[col_idx])
+                        .ok_or("CSV column index is out of bounds")?;
                     let normalized_header = normalize_column_name(original_header);
                     let default_type = "text".to_string();
                     let db_type = column_types
@@ -99,211 +175,139 @@ impl CsvCleaner {
                         .unwrap_or(&default_type);
                     let corrected_type =
                         correct_column_type(original_header, db_type, Some(value));
-
-                    let cleaned =
-                        self.clean_value_by_type(value, &corrected_type, original_header);
-                    if cleaned != value {
-                        cleaned_values += 1;
+                    let cleaned = self.clean_value_by_type(value, &corrected_type, original_header);
+                    if !value.trim().is_empty() && cleaned.trim().is_empty() {
+                        invalid_values += 1;
+                    } else if cleaned != value {
+                        coerced_values += 1;
                     }
-                    cleaned
-                } else {
-                    value.to_string()
-                };
+                    cleaned_record.push(cleaned);
+                }
 
-                cleaned_record.push(cleaned_value);
+                writer.write_record(&cleaned_record)?;
+                accepted_rows += 1;
             }
 
-            writer.write_record(&cleaned_record)?;
-            processed_rows += 1;
+            writer.flush()?;
+            let output_file = writer.into_inner()?;
+            output_file.sync_all()?;
+            drop(output_file);
+            rejection_writer.flush()?;
+            let rejection_file = rejection_writer.into_inner()?;
+            rejection_file.sync_all()?;
+            drop(rejection_file);
+            fs::rename(&output_temporary_path, output_path)?;
 
-            if processed_rows % 10000 == 0 {
-                self.logger.progress(&format!(
-                    "Processed {} rows, cleaned {} values",
-                    processed_rows, cleaned_values
-                ));
-            }
+            let rejection_path_value = if rejected_rows > 0 {
+                fs::rename(&temporary_rejection_path, &rejection_path)?;
+                Some(rejection_path.display().to_string())
+            } else {
+                let _ = fs::remove_file(&temporary_rejection_path);
+                let _ = fs::remove_file(&rejection_path);
+                None
+            };
+
+            let report = CleanReport {
+                source_rows,
+                accepted_rows,
+                rejected_rows,
+                invalid_values,
+                coerced_values,
+                columns: final_headers.clone(),
+                rejection_path: rejection_path_value,
+            };
+            let manifest = serde_json::to_vec_pretty(&report)?;
+            let mut manifest_file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temporary_manifest_path)?;
+            manifest_file.write_all(&manifest)?;
+            manifest_file.sync_all()?;
+            drop(manifest_file);
+            fs::rename(&temporary_manifest_path, &manifest_path)?;
+
+            self.logger.success(&format!(
+                "CSV cleaning complete: {} accepted, {} rejected rows, {} invalid values",
+                accepted_rows, rejected_rows, invalid_values
+            ));
+            Ok(report)
+        })();
+
+        if result.is_err() {
+            let _ = fs::remove_file(&output_temporary_path);
+            let _ = fs::remove_file(&temporary_rejection_path);
+            let _ = fs::remove_file(&temporary_manifest_path);
         }
-
-        writer.flush()?;
-
-        self.logger.success(&format!(
-            "CSV cleaning complete: {} rows processed, {} values cleaned",
-            processed_rows, cleaned_values
-        ));
-
-        Ok(processed_rows)
+        result
     }
 
-    /// Handle duplicate columns by comparing their data.
-    /// Returns the final headers and the column indices to include.
-    /// - If duplicate columns have identical data, only keep one.
-    /// - If duplicate columns have different data, keep both with suffix.
+    fn select_target_columns(
+        &self,
+        headers: &[String],
+        indices: &[usize],
+        target_columns: Option<&[String]>,
+    ) -> Result<(Vec<String>, Vec<usize>), Box<dyn std::error::Error>> {
+        let Some(target_columns) = target_columns else {
+            return Ok((headers.to_vec(), indices.to_vec()));
+        };
+
+        let normalized_targets: Vec<String> = target_columns
+            .iter()
+            .map(|column| normalize_column_name(column))
+            .collect();
+        let mut selected_headers = Vec::with_capacity(target_columns.len());
+        let mut selected_indices = Vec::with_capacity(target_columns.len());
+        for target in normalized_targets {
+            let position = headers
+                .iter()
+                .position(|header| normalize_column_name(header) == target)
+                .ok_or_else(|| format!("Required target column '{}' is missing", target))?;
+            selected_headers.push(headers[position].clone());
+            selected_indices.push(indices[position]);
+        }
+        if selected_indices.len() != headers.len() {
+            return Err("CSV source columns do not exactly match target columns".into());
+        }
+        Ok((selected_headers, selected_indices))
+    }
+
     fn handle_duplicate_columns(
         &self,
         original_headers: &csv::StringRecord,
-        all_records: &[csv::StringRecord],
     ) -> (Vec<String>, Vec<usize>) {
-        let mut normalized_to_indices: HashMap<String, Vec<usize>> = HashMap::new();
-
-        // Group columns by normalized name
-        for (idx, header) in original_headers.iter().enumerate() {
-            let normalized = normalize_column_name(header).to_uppercase();
-            normalized_to_indices
-                .entry(normalized)
-                .or_default()
-                .push(idx);
-        }
-
-        let mut final_headers = Vec::new();
-        let mut column_indices = Vec::new();
-        let mut processed_indices = std::collections::HashSet::new();
-
-        for (idx, header) in original_headers.iter().enumerate() {
-            if processed_indices.contains(&idx) {
-                continue;
-            }
-
+        let mut seen = HashMap::<String, usize>::new();
+        let mut final_headers = Vec::with_capacity(original_headers.len());
+        let mut column_indices = Vec::with_capacity(original_headers.len());
+        for (index, header) in original_headers.iter().enumerate() {
             let normalized = normalize_column_name(header);
-            let upper = normalized.to_uppercase();
-            let indices = normalized_to_indices.get(&upper).unwrap();
-
-            if indices.len() == 1 {
-                final_headers.push(normalized);
-                column_indices.push(idx);
-                processed_indices.insert(idx);
+            let base = if normalized.is_empty() {
+                format!("COLUMN_{}", index + 1)
             } else {
-                let first_idx = indices[0];
-                let mut all_identical = true;
-                let mut diff_indices = Vec::new();
-
-                for &other_idx in &indices[1..] {
-                    let data_matches =
-                        self.columns_have_identical_data(all_records, first_idx, other_idx);
-                    if !data_matches {
-                        all_identical = false;
-                        diff_indices.push(other_idx);
-                    }
-                }
-
-                if all_identical {
-                    self.logger.info(&format!(
-                        "Duplicate column \"{}\" found {} times with identical data - keeping only one",
-                        normalized, indices.len()
-                    ));
-                    final_headers.push(normalized);
-                    column_indices.push(first_idx);
-                    for &i in indices {
-                        processed_indices.insert(i);
-                    }
-                } else {
-                    self.logger.warn(&format!(
-                        "Duplicate column \"{}\" found with DIFFERENT data - keeping all with suffixes",
-                        normalized
-                    ));
-                    final_headers.push(normalized.clone());
-                    column_indices.push(first_idx);
-                    processed_indices.insert(first_idx);
-                    let mut suffix = 2;
-                    for &other_idx in &indices[1..] {
-                        let suffixed_name = format!("{}_{}", normalized, suffix);
-                        final_headers.push(suffixed_name);
-                        column_indices.push(other_idx);
-                        processed_indices.insert(other_idx);
-                        suffix += 1;
-                    }
-                }
-            }
+                normalized
+            };
+            let count = seen.entry(base.clone()).or_insert(0);
+            *count += 1;
+            final_headers.push(if *count == 1 {
+                base
+            } else {
+                format!("{}_{}", base, count)
+            });
+            column_indices.push(index);
         }
-
         (final_headers, column_indices)
     }
 
-    /// Check if two columns have identical data across all records.
-    /// Uses parallel processing with early exit for large datasets.
-    ///
-    /// # Implementation Details:
-    /// - Uses an AtomicBool as a "found difference" flag shared across threads
-    /// - Each thread checks the flag before processing each chunk
-    /// - When any thread finds a difference, it sets the flag and other threads exit early
-    /// - Memory efficient: processes data in place without copying
-    fn columns_have_identical_data(
-        &self,
-        records: &[csv::StringRecord],
-        col1_idx: usize,
-        col2_idx: usize,
-    ) -> bool {
-        // For small datasets, use sequential comparison (thread overhead not worth it)
-        if records.len() < 10_000 {
-            return self.columns_have_identical_data_sequential(records, col1_idx, col2_idx);
-        }
-
-        // Shared atomic flag for early exit across all threads
-        // When any thread finds a difference, it sets this to true
-        let found_difference = AtomicBool::new(false);
-
-        // Process in parallel chunks with early exit
-        // par_chunks divides the data without copying
-        records
-            .par_chunks(5_000) // Process 5000 rows per chunk
-            .try_for_each(|chunk| {
-                if found_difference.load(Ordering::Relaxed) {
-                    return Err(()); // Stop this thread
-                }
-
-                for record in chunk {
-                    if found_difference.load(Ordering::Relaxed) {
-                        return Err(());
-                    }
-
-                    let val1 = record.get(col1_idx).unwrap_or("").trim();
-                    let val2 = record.get(col2_idx).unwrap_or("").trim();
-
-                    if val1 != val2 {
-                        found_difference.store(true, Ordering::Relaxed);
-                        return Err(());
-                    }
-                }
-                Ok(())
-            })
-            .is_ok() // Ok = no differences found, Err = difference found
-    }
-
-    /// Sequential comparison for small datasets (avoids thread overhead).
-    #[inline]
-    fn columns_have_identical_data_sequential(
-        &self,
-        records: &[csv::StringRecord],
-        col1_idx: usize,
-        col2_idx: usize,
-    ) -> bool {
-        for record in records {
-            let val1 = record.get(col1_idx).unwrap_or("").trim();
-            let val2 = record.get(col2_idx).unwrap_or("").trim();
-            if val1 != val2 {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Clean a value based on its column type.
     fn clean_value_by_type(&self, value: &str, col_type: &str, header: &str) -> String {
         let normalized_type = col_type.to_lowercase();
-
         match normalized_type.as_str() {
             t if t.contains("double precision")
                 || t.contains("real")
                 || t.contains("float")
-                || t.contains("numeric") =>
-            {
-                clean_numeric_value(value, &self.logger)
-            }
+                || t.contains("numeric") => clean_numeric_value(value, &self.logger),
             t if t.contains("bigint")
                 || t.contains("integer")
                 || t.contains("smallint")
-                || t.contains("int") =>
-            {
-                // Check if it's a ZIP code column that should remain as string
+                || t.contains("int") => {
                 let header_lower = header.to_lowercase();
                 if header_lower.contains("cep")
                     || header_lower.contains("postal")
@@ -321,17 +325,31 @@ impl CsvCleaner {
     }
 }
 
+fn temporary_path(path: &Path, stage: &str) -> PathBuf {
+    path.with_extension(format!(
+        "{}.{}.{}.part",
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or("tmp"),
+        stage,
+        std::process::id()
+    ))
+}
+
+fn appended_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_os_string();
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
-    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_cleaner_creation() {
         let _cleaner = CsvCleaner::new(true);
-        // Just verify it doesn't panic
     }
 
     #[test]
@@ -340,17 +358,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let input_path = std::env::temp_dir().join(format!(
-            "cleaner_input_{}.csv",
-            suffix
-        ));
-        let output_path = std::env::temp_dir().join(format!(
-            "cleaner_output_{}.csv",
-            suffix
-        ));
+        let input_path = std::env::temp_dir().join(format!("cleaner_input_{}.csv", suffix));
+        let output_path = std::env::temp_dir().join(format!("cleaner_output_{}.csv", suffix));
 
         fs::write(&input_path, "\"QTDE (GRAMAS)\"\n\"12,5\"\n").unwrap();
-
         let mut column_types = HashMap::new();
         column_types.insert("QTDE_GRAMAS".to_string(), "numeric".to_string());
 
@@ -368,6 +379,40 @@ mod tests {
         assert!(output.contains("12.5"));
 
         let _ = fs::remove_file(input_path);
-        let _ = fs::remove_file(output_path);
+        let _ = fs::remove_file(&output_path);
+        let _ = fs::remove_file(appended_path(&output_path, ".manifest.json"));
+    }
+
+    #[test]
+    fn rejects_a_malformed_row_and_keeps_valid_rows() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let input_path = std::env::temp_dir().join(format!("cleaner_dirty_input_{}.csv", suffix));
+        let output_path =
+            std::env::temp_dir().join(format!("cleaner_dirty_output_{}.csv", suffix));
+
+        fs::write(&input_path, "A;B\n1;2\nbad;row;extra\n3;4\n").unwrap();
+        let report = CsvCleaner::new(true)
+            .clean_csv_with_report(
+                input_path.to_str().unwrap(),
+                output_path.to_str().unwrap(),
+                &HashMap::new(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(report.source_rows, 3);
+        assert_eq!(report.accepted_rows, 2);
+        assert_eq!(report.rejected_rows, 1);
+        assert_eq!(fs::read_to_string(&output_path).unwrap(), "A;B\n1;2\n3;4\n");
+        assert!(appended_path(&output_path, ".manifest.json").exists());
+        assert!(appended_path(&output_path, ".rejected.csv").exists());
+
+        let _ = fs::remove_file(input_path);
+        let _ = fs::remove_file(&output_path);
+        let _ = fs::remove_file(appended_path(&output_path, ".manifest.json"));
+        let _ = fs::remove_file(appended_path(&output_path, ".rejected.csv"));
     }
 }

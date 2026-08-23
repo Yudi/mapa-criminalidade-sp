@@ -271,7 +271,15 @@ export class CsvProcessingService {
       }
 
       try {
-        await this.fileOperationsService.cleanup(preparedCsvFile.transformedPath);
+        await Promise.all([
+          this.fileOperationsService.cleanup(preparedCsvFile.transformedPath),
+          this.fileOperationsService.cleanup(
+            `${preparedCsvFile.transformedPath}.manifest.json`
+          ),
+          this.fileOperationsService.cleanup(
+            `${preparedCsvFile.transformedPath}.rejected.csv`
+          ),
+        ]);
       } catch (error) {
         this.logger.warn(
           `Failed to cleanup transformed CSV file ${preparedCsvFile.transformedPath}:`,

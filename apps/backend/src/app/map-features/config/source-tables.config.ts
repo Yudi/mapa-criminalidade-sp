@@ -35,6 +35,15 @@ function optionalString(
   return undefined;
 }
 
+function requiredSourceId(row: Record<string, unknown>): number {
+  const sourceId = parseSourceInteger(row.id);
+  if (sourceId === null || sourceId < 1) {
+    throw new Error('Source row is missing a valid positive id');
+  }
+
+  return sourceId;
+}
+
 const celularesConfig: SourceTableConfig = {
   tablePattern: 'celulares',
   recordType: 'celular',
@@ -52,7 +61,7 @@ const celularesConfig: SourceTableConfig = {
     tableName: string
   ): CelularRecord => ({
     type: 'celular',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     rubrica: optionalString(row, 'RUBRICA'),
     descr_modo_objeto: optionalString(row, 'DESCR_MODO_OBJETO'),
@@ -81,7 +90,7 @@ const veiculosConfig: SourceTableConfig = {
     tableName: string
   ): VeiculoRecord => ({
     type: 'veiculo',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     rubrica: optionalString(row, 'RUBRICA'),
     descr_ocorrencia: optionalString(row, 'DESCR_OCORRENCIA_VEICULO'),
@@ -110,7 +119,7 @@ const objetosConfig: SourceTableConfig = {
     tableName: string
   ): ObjetoRecord => ({
     type: 'objeto',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     rubrica: optionalString(row, 'RUBRICA'),
     descr_modo_objeto: optionalString(row, 'DESCR_MODO_OBJETO'),
@@ -147,7 +156,7 @@ const dadosCriminaisConfig: SourceTableConfig = {
     tableName: string
   ): DadosCriminaisRecord => ({
     type: 'dados_criminais',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     rubrica: optionalString(row, 'RUBRICA'),
     natureza_apurada: optionalString(row, 'NATUREZA_APURADA'),
@@ -172,7 +181,7 @@ const produtividadeArmasConfig: SourceTableConfig = {
     tableName: string
   ): ProdutividadeArmasRecord => ({
     type: 'produtividade_armas',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     descricao_apresentacao: optionalString(row, 'DESCRICAO_APRESENTACAO'),
     natureza_apurada: optionalString(row, 'NATUREZA_APURADA'),
@@ -200,7 +209,7 @@ const produtividadeEntorpecentesConfig: SourceTableConfig = {
     tableName: string
   ): ProdutividadeEntorpecentesRecord => ({
     type: 'produtividade_entorpecentes',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     descricao_apresentacao: optionalString(row, 'DESCRICAO_APRESENTACAO'),
     natureza_apurada: optionalString(row, 'NATUREZA_APURADA'),
@@ -226,7 +235,7 @@ const produtividadeVeiculosConfig: SourceTableConfig = {
     tableName: string
   ): ProdutividadeVeiculosRecord => ({
     type: 'produtividade_veiculos',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     descricao_apresentacao: optionalString(row, 'DESCRICAO_APRESENTACAO'),
     natureza_apurada: optionalString(row, 'NATUREZA_APURADA'),
@@ -257,7 +266,7 @@ const produtividadePessoasConfig: SourceTableConfig = {
     tableName: string
   ): ProdutividadePessoaRecord => ({
     type: 'produtividade_pessoa',
-    source_id: parseSourceInteger(row.id) ?? 0,
+    source_id: requiredSourceId(row),
     source_table: tableName,
     descricao_apresentacao: optionalString(row, 'DESCRICAO_APRESENTACAO'),
     natureza_apurada: optionalString(row, 'NATUREZA_APURADA'),
@@ -332,11 +341,27 @@ export function getSourceTableConfig(
   tableName: string
 ): SourceTableConfig | null {
   for (const config of SOURCE_TABLE_CONFIGS) {
-    if (tableName.startsWith(config.tablePattern)) {
+    const allowedPrefixes =
+      config.tablePattern === 'produtividade_entorpecentes'
+        ? [
+            'produtividade_entorpecentes_apreensao',
+            'produtividade_entorpecentes_gramas',
+          ]
+        : [config.tablePattern];
+
+    if (allowedPrefixes.some((prefix) => matchesSourceTable(prefix, tableName))) {
       return config;
     }
   }
   return null;
+}
+
+function matchesSourceTable(prefix: string, tableName: string): boolean {
+  const escapedPattern = prefix.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&'
+    );
+  return new RegExp(`^${escapedPattern}_[0-9]{4}$`).test(tableName);
 }
 export function isMapFeaturesSourceTable(tableName: string): boolean {
   return getSourceTableConfig(tableName) !== null;

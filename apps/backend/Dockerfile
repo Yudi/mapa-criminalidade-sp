@@ -52,8 +52,8 @@ RUN apk add --no-cache ca-certificates dumb-init postgresql-client python3 py3-p
     && python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /tmp/python-requirements.txt \
     && rm /tmp/python-requirements.txt \
-    && addgroup -S app \
-    && adduser -S app -G app \
+    && addgroup -S -g 10001 app \
+    && adduser -S -u 10001 -G app app \
     && mkdir -p /app/temp /app/uploads
 
 COPY --from=production-deps --chown=app:app /workspace/node_modules ./node_modules
@@ -64,6 +64,11 @@ COPY --from=rust-builder /usr/src/dataset-handling/target/release/dataset-handli
 
 RUN chmod +x /usr/local/bin/dataset-handling \
     && chown -R app:app /app
+
+# Keep the API/import worker out of the root account.  The /app/temp and
+# /app/uploads directories are created above with app ownership; deployment
+# bind mounts must be provisioned for uid/gid 10001/10001 as well.
+USER app
 
 EXPOSE 8080
 

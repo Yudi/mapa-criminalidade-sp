@@ -5,6 +5,7 @@ import { StringUtils } from '../utils/string.utils';
 import { DatabaseService } from './database.service';
 import { RustToolService } from './rust-tool.service';
 import { getErrorMessage } from '../../shared/error.utils';
+import { readCsvHeaderColumns } from './database/database-import-file.utils';
 @Injectable()
 export class CsvTransformationService {
   private readonly logger = new Logger(CsvTransformationService.name);
@@ -14,76 +15,28 @@ export class CsvTransformationService {
     private readonly rustToolService: RustToolService
   ) {}
   async checkIfHeadersNeedNormalization(csvPath: string): Promise<boolean> {
-    const fs = require('fs');
-    const readline = require('readline');
-
-    const fileStream = fs.createReadStream(csvPath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    try {
-      for await (const line of rl as AsyncIterable<string>) {
-        const headers = line
-          .split(';')
-          .map((col) => col.trim().replace(/"/g, ''));
-        rl.close();
-
-        return headers.some(
-          (header) => StringUtils.normalizeColumnName(header) !== header
-        );
-      }
-    } catch (error) {
-      rl.close();
-      throw error;
-    }
-
-    return false;
+    const headers = await readCsvHeaderColumns(csvPath);
+    return headers.some(
+      (header) => StringUtils.normalizeColumnName(header) !== header
+    );
   }
   async transformCsvForDatabase(
     csvPath: string,
     tableName: string,
     columnTypeOverrides: Record<string, string> = {}
   ): Promise<string> {
-    const path = require('path');
-    const { execFile } = require('child_process');
-    const { promisify } = require('util');
     const fs = require('fs').promises;
-
-    const execFileAsync = promisify(execFile);
 
     this.logger.debug(
       `Using Rust prepare command for CSV transformation: ${csvPath}`
     );
 
-    const needsHeaderNormalization = await this.checkIfHeadersNeedNormalization(
-      csvPath
-    );
-
-    if (!needsHeaderNormalization) {
-      // Quick check - if headers don't need normalization, maybe we don't need transformation
-      const columnInfo = await this.databaseService.getTableColumnInfo(
-        tableName
-      );
-      const hasSpecialColumns = columnInfo.some(
-        (col) => this.isSpecialColumnType(col.data_type)
-      );
-      const hasSpecialOverrideColumns = Object.values(columnTypeOverrides).some(
-        (columnType) => this.isSpecialColumnType(columnType)
-      );
-
-      if (!hasSpecialColumns && !hasSpecialOverrideColumns) {
-        this.logger.debug(
-          'No transformations needed, using original CSV file'
-        );
-        return csvPath;
-      }
-    }
+    // External CSVs are not trusted even when every database column is text.
+    // Always run the row-tolerant preparation pass so malformed records are
+    // rejected individually before PostgreSQL COPY sees the file.
+    const transformedCsvPath = this.createTransformedCsvPath(csvPath);
 
     try {
-      const transformedCsvPath = this.createTransformedCsvPath(csvPath);
-
       this.logger.debug(
         'Getting database column types for accurate transformation'
       );
@@ -107,13 +60,6 @@ export class CsvTransformationService {
         'Cleaning CSV data using Rust prepare command with intelligent type correction'
       );
 
-      const datasetHandlingPath = path.resolve(
-        process.cwd(),
-        'dataset-handling',
-        'target',
-        'release',
-        'dataset-handling'
-      );
       const prepareArgs = [
         'prepare',
         '--input',
@@ -125,18 +71,14 @@ export class CsvTransformationService {
       ];
 
       this.logger.debug(
-        `Running prepare command: ${datasetHandlingPath} ${prepareArgs.join(
+        `Running prepare command with configured Rust binary: ${prepareArgs.join(
           ' '
         )}`
       );
       const { stdout: prepareStdout, stderr: prepareStderr } =
-        await this.rustToolService.runWithDatasetHandlingSlot<{
-          stdout: string;
-          stderr: string;
-        }>(() =>
-          execFileAsync(datasetHandlingPath, prepareArgs, {
-            maxBuffer: 64 * 1024 * 1024,
-          }) as Promise<{ stdout: string; stderr: string }>
+        await this.rustToolService.runDatasetHandlingCommand(
+          prepareArgs,
+          this.getPrepareTimeoutMs()
         );
 
       if (prepareStdout) {
@@ -146,39 +88,50 @@ export class CsvTransformationService {
         this.logger.warn(`Prepare warnings: ${prepareStderr.trim()}`);
       }
 
-      try {
-        await fs.access(transformedCsvPath);
-        const stats = await fs.stat(transformedCsvPath);
-        this.logger.debug(
-          `CSV transformation completed: ${transformedCsvPath} (${stats.size} bytes)`
-        );
-
-        if (stats.size < 10) {
+      await fs.access(transformedCsvPath).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
           throw new Error(
-            `Transformed CSV file is too small (${stats.size} bytes), likely corrupted or empty`
+            `Transformed CSV file was not created: ${transformedCsvPath}`
           );
         }
+        throw error;
+      });
+      const stats = await fs.stat(transformedCsvPath);
+      this.logger.debug(
+        `CSV transformation completed: ${transformedCsvPath} (${stats.size} bytes)`
+      );
 
-        return transformedCsvPath;
-      } catch {
+      const manifestPath = `${transformedCsvPath}.manifest.json`;
+      const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
+        sourceRows?: unknown;
+        acceptedRows?: unknown;
+        rejectedRows?: unknown;
+      };
+      if (
+        !Number.isInteger(manifest.sourceRows) ||
+        !Number.isInteger(manifest.acceptedRows) ||
+        !Number.isInteger(manifest.rejectedRows) ||
+        (manifest.acceptedRows as number) <= 0 ||
+        (manifest.sourceRows as number) !==
+          (manifest.acceptedRows as number) + (manifest.rejectedRows as number)
+      ) {
         throw new Error(
-          `Transformed CSV file was not created: ${transformedCsvPath}`
+          `Rust preparation manifest is invalid for ${transformedCsvPath}`
         );
       }
+
+      return transformedCsvPath;
     } catch (error) {
       const errorMessage = getErrorMessage(error);
       this.logger.error(`Rust CSV transformation failed: ${errorMessage}`);
+      await Promise.allSettled([
+        fs.rm(transformedCsvPath, { force: true }),
+        fs.rm(`${transformedCsvPath}.manifest.json`, { force: true }),
+        fs.rm(`${transformedCsvPath}.rejected.csv`, { force: true }),
+      ]);
 
-      const datasetHandlingPath = path.resolve(
-        process.cwd(),
-        'dataset-handling',
-        'target',
-        'release',
-        'dataset-handling'
-      );
-      this.logger.error(
-        `Dataset handling tool path: ${datasetHandlingPath}`
-      );
+      const datasetHandlingPath = this.rustToolService.getRustBinaryPath();
+      this.logger.error(`Dataset handling tool path: ${datasetHandlingPath}`);
       this.logger.error(`Input CSV path: ${csvPath}`);
 
       try {
@@ -206,6 +159,15 @@ export class CsvTransformationService {
         `CSV transformation failed: ${errorMessage}. This may be due to data format issues that need to be resolved.`
       );
     }
+  }
+
+  private getPrepareTimeoutMs(): number {
+    const configured = Number(
+      process.env.DATA_IMPORT_CSV_PREPARE_TIMEOUT_MS ?? 20 * 60 * 1000
+    );
+    return Number.isFinite(configured) && configured > 0
+      ? Math.min(configured, 60 * 60 * 1000)
+      : 20 * 60 * 1000;
   }
 
   private createTransformedCsvPath(csvPath: string): string {

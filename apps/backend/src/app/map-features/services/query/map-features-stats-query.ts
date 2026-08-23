@@ -30,6 +30,7 @@ import {
   toPeriodStatsFromJson,
 } from './map-features-result-mappers';
 import { SqlParam } from './map-features-tile-query';
+import { MapFeaturesStatsBulkhead } from './map-features-stats-bulkhead';
 
 type CacheLoader = <T>(
   scope: string,
@@ -68,6 +69,8 @@ type CategoryStatsRow = {
 };
 
 export class MapFeaturesStatsQuery {
+  private readonly bulkhead = new MapFeaturesStatsBulkhead();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly getCachedJson: CacheLoader
@@ -76,7 +79,7 @@ export class MapFeaturesStatsQuery {
   async getCategories(
     params?: MapFeaturesFilterParams
   ): Promise<MapFeaturesCategoryStats[]> {
-    return await this.getCachedJson(
+    return await this.getStats(
       'categories',
       normalizeMapFeaturesFilterParams(params),
       getMapFeaturesStatsCacheTtl(params),
@@ -104,7 +107,7 @@ export class MapFeaturesStatsQuery {
     startHour?: number,
     endHour?: number
   ): Promise<MapFeaturesCategoryStats[]> {
-    return await this.getCachedJson(
+    return await this.getStats(
       'categories-location',
       {
         longitude,
@@ -151,7 +154,7 @@ export class MapFeaturesStatsQuery {
   async getPeriods(
     params?: MapFeaturesFilterParams
   ): Promise<MapFeaturesPeriodStats[]> {
-    return await this.getCachedJson(
+    return await this.getStats(
       'periods',
       normalizeMapFeaturesFilterParams(params),
       getMapFeaturesStatsCacheTtl(params),
@@ -192,7 +195,7 @@ export class MapFeaturesStatsQuery {
   async getCategoryPeriodStats(
     params?: MapFeaturesFilterParams
   ): Promise<MapFeaturesCategoryPeriodStats> {
-    return await this.getCachedJson(
+    return await this.getStats(
       'category-period-stats',
       normalizeMapFeaturesFilterParams(params),
       getMapFeaturesStatsCacheTtl(params),
@@ -292,7 +295,7 @@ export class MapFeaturesStatsQuery {
   }
 
   async getCharts(params?: MapFeaturesFilterParams): Promise<MapFeatureCharts> {
-    return await this.getCachedJson(
+    return await this.getStats(
       'charts',
       normalizeMapFeaturesFilterParams(params),
       MAP_FEATURES_CACHE_TTL_SECONDS.CHARTS,
@@ -373,7 +376,7 @@ export class MapFeaturesStatsQuery {
   }
 
   async getCount(params?: MapFeaturesFilterParams): Promise<number> {
-    return await this.getCachedJson(
+    return await this.getStats(
       'count',
       normalizeMapFeaturesFilterParams(params),
       getMapFeaturesStatsCacheTtl(params),
@@ -430,6 +433,17 @@ export class MapFeaturesStatsQuery {
       },
       orderBy: { source_table: 'asc' },
     });
+  }
+
+  private async getStats<T>(
+    scope: string,
+    payload: unknown,
+    ttlSeconds: number,
+    load: () => Promise<T>
+  ): Promise<T> {
+    return await this.getCachedJson(scope, payload, ttlSeconds, () =>
+      this.bulkhead.run(load)
+    );
   }
 }
 

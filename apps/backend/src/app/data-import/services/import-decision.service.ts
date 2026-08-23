@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as crypto from 'node:crypto';
+import * as path from 'node:path';
 
 import {
   DataCategory,
@@ -13,7 +15,7 @@ import { DatabaseService } from './database.service';
 import { MetadataService } from './metadata.service';
 import { getErrorMessage } from '../../shared/error.utils';
 
-type FileCheck = { hash: string; size: number };
+export type FileCheck = { hash: string; size: number; filePath: string };
 export type FileCheckCache = Map<string, Promise<FileCheck>>;
 
 @Injectable()
@@ -30,7 +32,8 @@ export class ImportDecisionService {
     year: number,
     fileCheckCache: FileCheckCache = new Map()
   ): Promise<ImportDecision> {
-    const currentYear = new Date().getFullYear();
+    const { year: currentYear, month: currentMonth } =
+      this.getBusinessDateParts(new Date());
     const tableName = DataCategoryConfig.getTableName(category, year);
 
     const tableExists = await this.databaseService.checkTableExists(tableName);
@@ -66,6 +69,7 @@ export class ImportDecisionService {
         category,
         year,
         currentYear,
+        currentMonth,
         existingMetadata,
         fileCheckCache
       );
@@ -101,11 +105,13 @@ export class ImportDecisionService {
       };
     } catch (error) {
       this.logger.warn(
-        `Could not check file hash for ${category.name} ${year}: ${getErrorMessage(error)}`
+        `Could not verify current source for ${category.name} ${year}: ${getErrorMessage(
+          error
+        )}`
       );
       return {
         shouldImport: false,
-        reason: 'Could not verify file for current year',
+        reason: 'Could not verify file for current year; source skipped',
       };
     }
   }
@@ -118,17 +124,24 @@ export class ImportDecisionService {
     category: DataCategory,
     year: number,
     currentYear: number,
+    currentMonth: number,
     existingMetadata: FileMetadata | null,
     fileCheckCache: FileCheckCache
   ): Promise<ImportDecision> {
     if (!existingMetadata) {
       return {
-        shouldImport: false,
-        reason: `${year} data already exists in database; skipping historical refresh despite missing metadata`,
+        shouldImport: true,
+        reason: `${year} data has rows but no trusted import metadata`,
       };
     }
 
-    if (!this.shouldRefreshPreviousYearForDelayedReporting(year, currentYear)) {
+    if (
+      !this.shouldRefreshPreviousYearForDelayedReporting(
+        year,
+        currentYear,
+        currentMonth
+      )
+    ) {
       return {
         shouldImport: false,
         reason: `${year} data already exists in database; historical refresh skipped`,
@@ -149,17 +162,29 @@ export class ImportDecisionService {
    */
   private shouldRefreshPreviousYearForDelayedReporting(
     year: number,
-    currentYear: number
+    currentYear: number,
+    currentMonth: number
   ): boolean {
-    const currentMonth = this.getCurrentMonth();
-
     return (
       year === currentYear - 1 && (currentMonth === 0 || currentMonth === 1)
     );
   }
 
-  private getCurrentMonth(): number {
-    return new Date().getMonth();
+  private getBusinessDateParts(now: Date): { year: number; month: number } {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: 'numeric',
+    }).formatToParts(now);
+    const year = Number(parts.find((part) => part.type === 'year')?.value);
+    const month =
+      Number(parts.find((part) => part.type === 'month')?.value) - 1;
+
+    if (!Number.isInteger(year) || !Number.isInteger(month)) {
+      throw new Error('Could not resolve the São Paulo business date');
+    }
+
+    return { year, month };
   }
   private async verifyFileChanges(
     category: DataCategory,
@@ -192,11 +217,13 @@ export class ImportDecisionService {
       };
     } catch (error) {
       this.logger.warn(
-        `Could not verify file hash for ${category.name} ${year}: ${getErrorMessage(error)}`
+        `Could not verify historical source for ${category.name} ${year}: ${getErrorMessage(
+          error
+        )}`
       );
       return {
         shouldImport: false,
-        reason: `Could not verify file for ${year}`,
+        reason: `Could not verify file for ${year}; source skipped`,
       };
     }
   }
@@ -209,7 +236,6 @@ export class ImportDecisionService {
       shouldImport: boolean;
       reason: string;
     }> = [];
-
     for (const year of category.years) {
       try {
         const { shouldImport, reason } = await this.shouldImportData(
@@ -227,7 +253,7 @@ export class ImportDecisionService {
         results.push({
           year,
           shouldImport: false,
-          reason: `Check failed: ${getErrorMessage(error)}`,
+          reason: `Check failed; source skipped: ${getErrorMessage(error)}`,
         });
       }
     }
@@ -244,7 +270,15 @@ export class ImportDecisionService {
       return existing;
     }
 
-    const check = this.fileOperationsService.downloadAndHash(url);
+    const filePath = path.join(
+      process.cwd(),
+      'temp',
+      'decision-cache',
+      `${crypto.createHash('sha256').update(url).digest('hex')}.download`
+    );
+    const check = this.fileOperationsService
+      .downloadFileAndHash(url, filePath)
+      .then((result) => ({ ...result, filePath }));
     fileCheckCache.set(url, check);
     return check;
   }

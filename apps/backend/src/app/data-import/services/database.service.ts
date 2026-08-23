@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { promises as fs } from 'fs';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -25,6 +26,7 @@ import {
 } from './database/database-import-column.utils';
 import {
   convertToPostgresSharedPath,
+  countCsvDataRows,
   POSTGRES_SHARED_IMPORT_PATH,
   readCsvHeaderColumns,
 } from './database/database-import-file.utils';
@@ -512,7 +514,12 @@ export class DatabaseService {
     this.logger.verbose(`CSV columns: ${csvColumns.join(', ')}`);
     this.logger.verbose(`DB columns: ${actualColumns.join(', ')}`);
 
-    const { columnMapping, mappedColumns, unmatchedColumns } =
+    const {
+      columnMapping,
+      mappedColumns,
+      unmatchedColumns,
+      duplicateTargetColumns,
+    } =
       matchCsvColumnsToTableColumns(csvColumns, actualColumns, this.logger);
 
     this.logger.debug(
@@ -527,6 +534,14 @@ export class DatabaseService {
       );
     }
 
+    if (duplicateTargetColumns.length > 0) {
+      throw new Error(
+        `CSV columns map to duplicate database columns for ${tableName}: ${[
+          ...new Set(duplicateTargetColumns),
+        ].join(', ')}`
+      );
+    }
+
     if (columnMapping.size === 0) {
       throw new Error(
         `No matching columns found between CSV and table ${tableName}. ` +
@@ -535,6 +550,8 @@ export class DatabaseService {
       );
     }
     const dbColumnsToUse = Array.from(columnMapping.values());
+    const sourceRowCount = await countCsvDataRows(csvFilePath);
+    await this.verifyCsvPreparationManifest(csvFilePath, sourceRowCount);
 
     const copyQuery = buildCopyCsvSql(
       this.rawTable(tableName),
@@ -550,7 +567,10 @@ export class DatabaseService {
     try {
       await db.$executeRawUnsafe(copyQuery);
       const countAfter = await this.getTableRecordCount(tableName, db);
-      const recordCount = countAfter - countBefore;
+      const recordCount = sourceRowCount;
+      if (countAfter < 0 || countBefore < 0) {
+        throw new Error('Invalid database row count during CSV reconciliation');
+      }
       const importTime = Date.now() - startTime;
 
       this.logger.log(
@@ -588,7 +608,9 @@ export class DatabaseService {
           );
         }
         if (errorWhere) {
-          this.logger.error(`Problematic data: ${errorWhere}`);
+          this.logger.error(
+            `Problematic data sample (truncated): ${errorWhere.slice(0, 500)}`
+          );
         }
       }
 
@@ -643,6 +665,38 @@ export class DatabaseService {
 
   private rawTable(tableName: string): string {
     return qualifiedTableName(tableName);
+  }
+
+  private async verifyCsvPreparationManifest(
+    csvFilePath: string,
+    acceptedRows: number
+  ): Promise<void> {
+    const manifestPath = `${csvFilePath}.manifest.json`;
+    let content: string;
+    try {
+      content = await fs.readFile(manifestPath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+
+    const manifest = JSON.parse(content) as {
+      sourceRows?: unknown;
+      acceptedRows?: unknown;
+      rejectedRows?: unknown;
+    };
+    if (
+      !Number.isInteger(manifest.sourceRows) ||
+      !Number.isInteger(manifest.acceptedRows) ||
+      !Number.isInteger(manifest.rejectedRows) ||
+      (manifest.sourceRows as number) !==
+        (manifest.acceptedRows as number) + (manifest.rejectedRows as number) ||
+      (manifest.acceptedRows as number) !== acceptedRows
+    ) {
+      throw new Error(
+        `CSV preparation reconciliation failed for ${csvFilePath}`
+      );
+    }
   }
 
   private validateImlTableName(tableName: string): void {

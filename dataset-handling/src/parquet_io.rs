@@ -11,14 +11,15 @@ use std::path::Path;
 use std::sync::Arc;
 
 const DEFAULT_BATCH_SIZE: usize = 8_192;
-type StringRows = Vec<Vec<String>>;
-type ParquetStringRows = (Vec<String>, StringRows);
 
-pub fn write_string_rows_to_parquet(
+pub fn write_string_rows_to_parquet_iter<I>(
     output_path: &Path,
     headers: &[String],
-    rows: &[Vec<String>],
-) -> Result<(), Box<dyn Error>> {
+    rows: I,
+) -> Result<usize, Box<dyn Error>>
+where
+    I: IntoIterator<Item = Vec<String>>,
+{
     let file = File::create(output_path)?;
     let fields: Vec<Field> = headers
         .iter()
@@ -30,13 +31,19 @@ pub fn write_string_rows_to_parquet(
         .build();
     let mut writer = ArrowWriter::try_new(file, Arc::clone(&schema), Some(props))?;
 
-    for chunk in rows.chunks(DEFAULT_BATCH_SIZE) {
+    let mut chunk: Vec<Vec<String>> = Vec::with_capacity(DEFAULT_BATCH_SIZE);
+    let mut row_count = 0;
+    for row in rows {
+        chunk.push(row);
+        if chunk.len() < DEFAULT_BATCH_SIZE {
+            continue;
+        }
         let mut builders: Vec<StringBuilder> = headers
             .iter()
             .map(|_| StringBuilder::with_capacity(chunk.len(), 1024))
             .collect();
 
-        for row in chunk {
+        for row in &chunk {
             for (column_index, builder) in builders.iter_mut().enumerate() {
                 match row.get(column_index).map(|value| value.trim()) {
                     Some(value) if !value.is_empty() => builder.append_value(value),
@@ -51,10 +58,36 @@ pub fn write_string_rows_to_parquet(
             .collect();
         let batch = RecordBatch::try_new(Arc::clone(&schema), arrays)?;
         writer.write(&batch)?;
+        row_count += chunk.len();
+        chunk.clear();
+    }
+
+    if !chunk.is_empty() {
+        let mut builders: Vec<StringBuilder> = headers
+            .iter()
+            .map(|_| StringBuilder::with_capacity(chunk.len(), 1024))
+            .collect();
+
+        for row in &chunk {
+            for (column_index, builder) in builders.iter_mut().enumerate() {
+                match row.get(column_index).map(|value| value.trim()) {
+                    Some(value) if !value.is_empty() => builder.append_value(value),
+                    _ => builder.append_null(),
+                }
+            }
+        }
+
+        let arrays: Vec<ArrayRef> = builders
+            .into_iter()
+            .map(|mut builder| Arc::new(builder.finish()) as ArrayRef)
+            .collect();
+        let batch = RecordBatch::try_new(Arc::clone(&schema), arrays)?;
+        writer.write(&batch)?;
+        row_count += chunk.len();
     }
 
     writer.close()?;
-    Ok(())
+    Ok(row_count)
 }
 
 pub fn read_parquet_headers(input_path: &Path) -> Result<Vec<String>, Box<dyn Error>> {
@@ -66,34 +99,6 @@ pub fn read_parquet_headers(input_path: &Path) -> Result<Vec<String>, Box<dyn Er
         .iter()
         .map(|field| field.name().to_string())
         .collect())
-}
-
-pub fn read_parquet_string_rows(
-    input_path: &Path,
-) -> Result<ParquetStringRows, Box<dyn Error>> {
-    let file = File::open(input_path)?;
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-    let headers = builder
-        .schema()
-        .fields()
-        .iter()
-        .map(|field| field.name().to_string())
-        .collect::<Vec<_>>();
-    let reader = builder.with_batch_size(DEFAULT_BATCH_SIZE).build()?;
-    let mut rows = Vec::new();
-
-    for batch_result in reader {
-        let batch = batch_result?;
-        for row_index in 0..batch.num_rows() {
-            let mut row = Vec::with_capacity(batch.num_columns());
-            for column_index in 0..batch.num_columns() {
-                row.push(array_value_to_string(batch.column(column_index), row_index));
-            }
-            rows.push(row);
-        }
-    }
-
-    Ok((headers, rows))
 }
 
 pub fn for_each_parquet_batch<F>(input_path: &Path, mut callback: F) -> Result<(), Box<dyn Error>>

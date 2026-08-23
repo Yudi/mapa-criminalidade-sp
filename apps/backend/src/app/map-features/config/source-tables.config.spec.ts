@@ -1,4 +1,5 @@
 import {
+  getSourceTableConfig,
   OCCURRENCE_COLUMN_MAPPINGS,
   SOURCE_TABLE_CONFIGS,
 } from './source-tables.config';
@@ -118,5 +119,21 @@ describe('source table config', () => {
       source_id: 42,
       quantidade_gramas: 1234.56,
     });
+  });
+
+  it('accepts only anchored source table names with a four-digit year', () => {
+    expect(getSourceTableConfig('dados_criminais_2026')).toBeDefined();
+    expect(getSourceTableConfig('dados_criminais_2026_backup')).toBeNull();
+    expect(getSourceTableConfig('dados_criminais_evil_2026')).toBeNull();
+  });
+
+  it('fails explicitly instead of collapsing missing source ids to zero', () => {
+    const config = SOURCE_TABLE_CONFIGS.find(
+      (sourceConfig) => sourceConfig.tablePattern === 'celulares'
+    );
+
+    expect(() =>
+      config?.extractRecord({}, 'celulares_2026')
+    ).toThrow('Source row is missing a valid positive id');
   });
 });

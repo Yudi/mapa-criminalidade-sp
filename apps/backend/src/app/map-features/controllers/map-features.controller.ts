@@ -23,6 +23,7 @@ import {
   parseLocationQuery,
   parseOptionalHourQuery,
   parseOptionalIntegerQuery,
+  normalizeLookup,
   parseStringListQuery,
   validateDateFilters,
   validateHourFilters,
@@ -89,7 +90,7 @@ export class MapFeaturesController {
     @Query('minLat') minLat?: string,
     @Query('maxLon') maxLon?: string,
     @Query('maxLat') maxLat?: string,
-    @Query('periods') periods?: string,
+    @Query('periods') periods?: string | string[],
     @Query('startHour') startHour?: string,
     @Query('endHour') endHour?: string
   ) {
@@ -133,7 +134,7 @@ export class MapFeaturesController {
     @Query('radius') radius: string,
     @Query('before') before?: string,
     @Query('after') after?: string,
-    @Query('periods') periods?: string,
+    @Query('periods') periods?: string | string[],
     @Query('startHour') startHour?: string,
     @Query('endHour') endHour?: string
   ) {
@@ -178,10 +179,11 @@ export class MapFeaturesController {
     @Query('delegacia') delegacia?: string
   ) {
     const anoBo = parseOptionalIntegerQuery(ano, 'ano');
+    const lookup = normalizeLookup(undefined, numBo, anoBo, delegacia);
     const features = await this.queryService.getFeaturesByBo(
-      numBo.trim(),
-      anoBo,
-      delegacia?.trim()
+      lookup.numBo,
+      lookup.anoBo,
+      lookup.delegacia ?? undefined
     );
 
     if (features.length === 0) {
@@ -209,6 +211,7 @@ export class MapFeaturesController {
   }
 
   @Get('etl/status')
+  @UseGuards(DevelopmentOnlyGuard)
   @ApiOperation({ summary: 'Get ETL processing status' })
   async getEtlStatus() {
     return await this.queryService.getEtlStatus();

@@ -9,21 +9,8 @@
 use crate::types::{ColumnAnalysis, NumericStats};
 
 /// Configuration for type inference behavior.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TypeInferenceConfig {
-    /// Whether to be conservative with SMALLINT detection
-    pub conservative_smallint: bool,
-    /// Maximum sample count for confident SMALLINT
-    pub smallint_max_rows: usize,
-}
-
-impl Default for TypeInferenceConfig {
-    fn default() -> Self {
-        Self {
-            conservative_smallint: true,
-            smallint_max_rows: 100000,
-        }
-    }
 }
 
 /// Determine the optimal PostgreSQL type for a column based on its analysis.
@@ -103,22 +90,10 @@ fn is_identifier_column(normalized_name: &str) -> bool {
 /// Determine the appropriate integer type based on value range.
 fn determine_integer_type(
     stats: Option<&NumericStats>,
-    column: &ColumnAnalysis,
-    config: &TypeInferenceConfig,
+    _column: &ColumnAnalysis,
+    _config: &TypeInferenceConfig,
 ) -> String {
     if let Some(stats) = stats {
-        if config.conservative_smallint {
-            // Be very conservative with SMALLINT - need enough data to be confident
-            let is_highly_confident_smallint = stats.min_value >= 0.0
-                && stats.max_value <= 10000.0
-                && column.non_null_count() >= 20
-                && column.total_count < config.smallint_max_rows;
-
-            if is_highly_confident_smallint {
-                return "SMALLINT".to_string();
-            }
-        }
-
         if stats.min_value >= -2_147_483_648.0 && stats.max_value <= 2_147_483_647.0 {
             "INT".to_string()
         } else {

@@ -122,6 +122,12 @@ fn apply_numeric_cleaning(value: &str) -> String {
 
 /// Try to extract numeric parts more aggressively from malformed values.
 fn extract_numeric_aggressively(value: &str) -> Option<String> {
+    if value
+        .chars()
+        .any(|character| !(character.is_ascii_digit() || matches!(character, '-' | '.' | ',')))
+    {
+        return None;
+    }
     EXTRACT_NUMERIC.captures(value).map(|captures| {
         let integer = captures.get(1).unwrap().as_str();
         match captures.get(2) {

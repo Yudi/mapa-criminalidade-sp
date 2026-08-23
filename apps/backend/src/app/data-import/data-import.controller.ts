@@ -35,6 +35,7 @@ export class DataImportController {
   ) {}
 
   @Get('status')
+  @UseGuards(DevelopmentOnlyGuard)
   @ApiOperation({
     summary: 'Get import status',
     description:

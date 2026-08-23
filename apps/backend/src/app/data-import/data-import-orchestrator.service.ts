@@ -10,7 +10,10 @@ import { RustToolService } from './services/rust-tool.service';
 import { MetadataService } from './services/metadata.service';
 import { ParquetProcessingService } from './services/parquet-processing.service';
 import { ImportDecisionService } from './services/import-decision.service';
-import type { FileCheckCache } from './services/import-decision.service';
+import type {
+  FileCheck,
+  FileCheckCache,
+} from './services/import-decision.service';
 import { ImportStatusService } from './services/import-status.service';
 import { getErrorMessage } from '../shared/error.utils';
 import { ImlImportService } from './services/iml-import.service';
@@ -108,18 +111,25 @@ export class DataImportService {
       `Auto-import: ${targets.length} category/year target(s) need updates`
     );
 
-    await this.importTargetsOptimized(targets);
     try {
-      await this.imlImportService.importWithIntelligentLogic();
-    } catch (error) {
-      this.logger.warn(
-        `Low-priority IML import failed after primary imports completed: ${getErrorMessage(
-          error
-        )}`
-      );
+      await this.importTargetsOptimized(targets, fileCheckCache);
+      try {
+        await this.imlImportService.importWithIntelligentLogic();
+      } catch (error) {
+        this.logger.warn(
+          `Low-priority IML import failed after primary imports completed: ${getErrorMessage(
+            error
+          )}`
+        );
+      }
+    } finally {
+      await this.cleanupFileCheckCache(fileCheckCache);
     }
   }
-  private async importTargetsOptimized(targets: ImportTarget[]): Promise<void> {
+  private async importTargetsOptimized(
+    targets: ImportTarget[],
+    fileCheckCache: FileCheckCache = new Map()
+  ): Promise<void> {
     if (targets.length === 0) return;
 
     await this.tempDirReady;
@@ -177,7 +187,8 @@ export class DataImportService {
             group.url,
             group.year,
             group.categories,
-            ioLimiter
+            ioLimiter,
+            await fileCheckCache.get(group.url)
           );
           return {
             success: true,
@@ -204,10 +215,17 @@ export class DataImportService {
     );
 
     if (failureCount > 0) {
-      const failedUrls = groupResults
+      const failedGroups = groupResults
         .filter((result) => !result.success)
-        .map((result) => result.url);
-      this.logger.warn(`Failed URLs: ${failedUrls.join(', ')}`);
+        .map(
+          (result) =>
+            `${result.url}: ${result.error ?? 'unknown import failure'}`
+        );
+      this.logger.warn(
+        `Skipped ${failureCount}/${groupResults.length} failed external source file group(s): ${failedGroups.join(
+          '; '
+        )}`
+      );
     }
 
     this.logger.log(
@@ -383,11 +401,13 @@ export class DataImportService {
     url: string,
     year: number,
     categories: DataCategory[],
-    ioLimiter: ImportIoLimiter
+    ioLimiter: ImportIoLimiter,
+    prefetchedFile?: FileCheck
   ): Promise<void> {
     const primaryCategory = categories[0];
     const fileName = `${primaryCategory.tablePrefix}_${year}.xlsx`;
-    const filePath = path.join(this.tempDir, fileName);
+    const filePath =
+      prefetchedFile?.filePath ?? path.join(this.tempDir, fileName);
 
     this.logger.log(
       `Downloading ${fileName} for ${
@@ -400,23 +420,22 @@ export class DataImportService {
 
     try {
       // Download attempts are timed out inside FileOperationsService.
-      const downloadStart = Date.now();
-      await ioLimiter(() =>
-        this.fileOperationsService.downloadFile(url, filePath)
-      );
-      const downloadTime = Date.now() - downloadStart;
-
-      this.logger.log(
-        `Download completed in ${(downloadTime / 1000).toFixed(1)}s`
-      );
-
-      // Hash and size checks are awaited directly so cleanup cannot overlap them.
-      [fileHash, fileSize] = await ioLimiter(() =>
-        Promise.all([
-          this.fileOperationsService.calculateFileHash(filePath),
-          this.fileOperationsService.getFileSize(filePath),
-        ])
-      );
+      if (prefetchedFile) {
+        fileHash = prefetchedFile.hash;
+        fileSize = prefetchedFile.size;
+        this.logger.log(`Reusing verified source payload for ${fileName}`);
+      } else {
+        const downloadStart = Date.now();
+        const downloaded = await ioLimiter(() =>
+          this.fileOperationsService.downloadFileAndHash(url, filePath)
+        );
+        fileHash = downloaded.hash;
+        fileSize = downloaded.size;
+        const downloadTime = Date.now() - downloadStart;
+        this.logger.log(
+          `Download completed in ${(downloadTime / 1000).toFixed(1)}s`
+        );
+      }
 
       this.logger.log(
         `Downloaded ${fileName} (${(fileSize / 1024 / 1024).toFixed(
@@ -588,6 +607,25 @@ export class DataImportService {
       this.logger.error(
         `Failed to process ${fileName}: 0/${categories.length} categories successful`
       );
+    }
+  }
+
+  private async cleanupFileCheckCache(
+    fileCheckCache: FileCheckCache
+  ): Promise<void> {
+    const checks = await Promise.allSettled(fileCheckCache.values());
+    for (const check of checks) {
+      if (check.status === 'fulfilled') {
+        await this.fileOperationsService
+          .cleanup(check.value.filePath)
+          .catch((error) =>
+            this.logger.warn(
+              `Failed to clean verified source payload: ${this.getErrorMessage(
+                error
+              )}`
+            )
+          );
+      }
     }
   }
 }

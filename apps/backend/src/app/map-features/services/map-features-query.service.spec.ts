@@ -295,8 +295,8 @@ describe('MapFeaturesQueryService', () => {
     });
 
     expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
-      maxWait: 30_000,
-      timeout: 31_000,
+      maxWait: 60_000,
+      timeout: 61_000,
     });
     expect(executeRawUnsafe).toHaveBeenNthCalledWith(
       1,
@@ -304,7 +304,7 @@ describe('MapFeaturesQueryService', () => {
     );
     expect(executeRawUnsafe).toHaveBeenNthCalledWith(
       2,
-      "SET LOCAL statement_timeout = '30000ms'"
+      "SET LOCAL statement_timeout = '60000ms'"
     );
     expect(executeRawUnsafe).toHaveBeenNthCalledWith(
       3,

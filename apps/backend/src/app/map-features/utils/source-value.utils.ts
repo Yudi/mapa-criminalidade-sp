@@ -1,7 +1,9 @@
 const ISO_DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
-const ISO_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T]/;
-const BRAZILIAN_DATE_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/;
+const ISO_DATE_TIME_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](\d{2}):?(\d{2}))?$/;
+const BRAZILIAN_DATE_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 const BRAZILIAN_DASH_DATE_PATTERN = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
+const SOURCE_NUMBER_PATTERN = /^[+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:\.\d{3})+[,]\d+)$/;
 const EXCEL_SERIAL_MIN = 41275;
 const EXCEL_SERIAL_MAX = 73050;
 
@@ -24,6 +26,10 @@ export function parseSourceNumber(value: unknown): number | null {
     return null;
   }
 
+  if (!SOURCE_NUMBER_PATTERN.test(text.replace(/\s+/g, ''))) {
+    return null;
+  }
+
   const normalized = normalizeDecimalText(text);
   const parsed = Number(normalized);
 
@@ -32,7 +38,7 @@ export function parseSourceNumber(value: unknown): number | null {
 
 export function parseSourceInteger(value: unknown): number | null {
   const parsed = parseSourceNumber(value);
-  return parsed === null ? null : Math.trunc(parsed);
+  return parsed !== null && Number.isInteger(parsed) ? parsed : null;
 }
 
 export function parseSourceBooleanFlag(value: unknown): boolean | undefined {
@@ -73,6 +79,21 @@ export function parseSourceDate(value: unknown): Date | null {
 
   const isoDateTimeMatch = ISO_DATE_TIME_PATTERN.exec(text);
   if (isoDateTimeMatch) {
+    const hour = Number(isoDateTimeMatch[4]);
+    const minute = Number(isoDateTimeMatch[5]);
+    const second = Number(isoDateTimeMatch[6] ?? 0);
+    const offsetHour = Number(isoDateTimeMatch[7] ?? 0);
+    const offsetMinute = Number(isoDateTimeMatch[8] ?? 0);
+    if (
+      hour > 23 ||
+      minute > 59 ||
+      second > 59 ||
+      offsetHour > 23 ||
+      offsetMinute > 59
+    ) {
+      return null;
+    }
+
     return createUtcDate(
       Number(isoDateTimeMatch[1]),
       Number(isoDateTimeMatch[2]),
@@ -95,8 +116,7 @@ export function parseSourceDate(value: unknown): Date | null {
     return excelSerialDate;
   }
 
-  const parsedDate = new Date(text);
-  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+  return null;
 }
 
 export function formatSourceDateOnly(value: unknown): string | undefined {

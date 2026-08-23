@@ -28,8 +28,8 @@ describe('MapFeaturesVectorTileQuery', () => {
     );
 
     expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
-      maxWait: 30_000,
-      timeout: 31_000,
+      maxWait: 60_000,
+      timeout: 61_000,
     });
     expect(executeRawUnsafe).toHaveBeenNthCalledWith(
       1,
@@ -64,5 +64,53 @@ describe('MapFeaturesVectorTileQuery', () => {
         tile: null,
       }
     );
+  });
+
+  it('uses the shared cancellable pool path for disconnected tile requests', async () => {
+    const executeCancelableReadOnlyQuery = jest
+      .fn()
+      .mockResolvedValue([{ mvt: Buffer.from([4, 5]) }]);
+    const prisma = {
+      executeCancelableReadOnlyQuery,
+      $transaction: jest.fn(),
+    } as unknown as PrismaService;
+    const tileQuery = new MapFeaturesVectorTileQuery(prisma);
+    const controller = new AbortController();
+
+    await expect(
+      tileQuery.getTile({ z: 12, x: 100, y: 200 }, controller.signal)
+    ).resolves.toEqual({ status: 'ok', tile: Buffer.from([4, 5]) });
+    expect(executeCancelableReadOnlyQuery).toHaveBeenCalledWith(
+      expect.stringContaining('public.occurrences'),
+      expect.any(Array),
+      controller.signal
+    );
+  });
+
+  it('passes comma-containing filters to SQL as JSON arrays', async () => {
+    const queryRawUnsafe = jest.fn().mockResolvedValue([]);
+    const transaction = jest.fn().mockImplementation(async (operation) =>
+      operation({
+        $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
+        $queryRawUnsafe: queryRawUnsafe,
+      })
+    );
+    const tileQuery = new MapFeaturesVectorTileQuery({
+      $transaction: transaction,
+    } as unknown as PrismaService);
+
+    await tileQuery.getTile({
+      z: 12,
+      x: 100,
+      y: 200,
+      categories: ['Roubo, furto e perda'],
+      periods: ['Noite, madrugada'],
+    });
+
+    const json = queryRawUnsafe.mock.calls[0][4] as string;
+    expect(JSON.parse(json)).toMatchObject({
+      categories: ['Roubo, furto e perda'],
+      periods: ['Noite, madrugada'],
+    });
   });
 });

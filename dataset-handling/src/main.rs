@@ -228,7 +228,12 @@ fn run_convert(args: ConvertArgs) -> Result<(), Box<dyn Error>> {
         "parquet" => converter::OutputFormat::Parquet,
         _ => converter::OutputFormat::Csv,
     };
-    converter::convert_excel(excel_path, output_dir, output_format)?;
+    converter::convert_excel(
+        excel_path,
+        output_dir,
+        output_format,
+        args.sheet.as_deref(),
+    )?;
     Ok(())
 }
 
@@ -263,12 +268,20 @@ fn run_prepare(args: PrepareArgs) -> Result<(), Box<dyn Error>> {
     }
 
     let csv_cleaner = cleaner::CsvCleaner::new(args.silent);
-    let rows_processed = csv_cleaner.clean_csv(&args.input, &args.output, &column_types)?;
+    let report = csv_cleaner.clean_csv_with_report(
+        &args.input,
+        &args.output,
+        &column_types,
+        None,
+    )?;
+    if report.accepted_rows == 0 {
+        return Err("CSV preparation produced no accepted data rows".into());
+    }
 
     if !args.silent {
         eprintln!(
-            "CSV preparation complete: {} rows processed",
-            rows_processed
+            "CSV preparation complete: {} accepted rows, {} rejected rows",
+            report.accepted_rows, report.rejected_rows
         );
     }
 

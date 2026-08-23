@@ -9,6 +9,20 @@ import {
 import { buildBoWhere } from './map-features-query-sql';
 import { MapFeaturesSourceRecordHydrator } from './map-features-source-record-hydrator';
 
+export const MAX_DETAIL_RESULTS = 500;
+export const MAX_DETAIL_HYDRATION_CONCURRENCY = 8;
+
+export class AmbiguousMapFeatureLookupError extends Error {
+  readonly code = 'MAP_FEATURE_LOOKUP_AMBIGUOUS';
+
+  constructor() {
+    super(
+      'More than one occurrence matches this BO. Supply the year and registration police unit.'
+    );
+    this.name = 'AmbiguousMapFeatureLookupError';
+  }
+}
+
 export class MapFeaturesDetailQuery {
   constructor(
     private readonly prisma: PrismaService,
@@ -25,11 +39,14 @@ export class MapFeaturesDetailQuery {
 
     const results = await this.prisma.mapFeature.findMany({
       where,
-      orderBy: { data_ocorrencia: 'desc' },
+      orderBy: [{ data_ocorrencia: 'desc' }, { id: 'asc' }],
+      take: MAX_DETAIL_RESULTS,
     });
 
-    return await Promise.all(
-      results.map((row) => this.sourceHydrator.hydrate(mapPrismaFeature(row)))
+    return await mapWithConcurrency(
+      results,
+      MAX_DETAIL_HYDRATION_CONCURRENCY,
+      (row) => this.sourceHydrator.hydrate(mapPrismaFeature(row))
     );
   }
 
@@ -42,7 +59,8 @@ export class MapFeaturesDetailQuery {
 
     const results = await this.prisma.mapFeature.findMany({
       where,
-      orderBy: { data_ocorrencia: 'desc' },
+      orderBy: [{ data_ocorrencia: 'desc' }, { id: 'asc' }],
+      take: MAX_DETAIL_RESULTS,
       select: {
         id: true,
         num_bo: true,
@@ -76,12 +94,20 @@ export class MapFeaturesDetailQuery {
     anoBo?: number,
     delegacia?: string | null
   ): Promise<MapFeature | null> {
-    const [feature] = await this.getFeaturesByBo(
-      numBo,
-      anoBo,
-      delegacia ?? undefined
-    );
-    return feature ?? null;
+    const results = await this.prisma.mapFeature.findMany({
+      where: buildBoWhere(numBo, anoBo, delegacia ?? undefined),
+      orderBy: [{ data_ocorrencia: 'desc' }, { id: 'asc' }],
+      take: 2,
+    });
+
+    if (results.length > 1) {
+      throw new AmbiguousMapFeatureLookupError();
+    }
+
+    const [feature] = results;
+    return feature
+      ? await this.sourceHydrator.hydrate(mapPrismaFeature(feature))
+      : null;
   }
 
   async getFeatureById(id: string): Promise<MapFeature | null> {
@@ -91,4 +117,29 @@ export class MapFeaturesDetailQuery {
 
     return row ? await this.sourceHydrator.hydrate(mapPrismaFeature(row)) : null;
   }
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= values.length) return;
+      results[index] = await mapper(values[index]);
+    }
+  };
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(Math.max(1, concurrency), values.length) },
+      () => worker()
+    )
+  );
+  return results;
 }

@@ -1,5 +1,15 @@
 import { Service, inject } from '@angular/core';
-import { Observable, of, shareReplay, take, catchError, map } from 'rxjs';
+import {
+  Observable,
+  defer,
+  finalize,
+  map,
+  of,
+  shareReplay,
+  take,
+  tap,
+  throwError,
+} from 'rxjs';
 import {
   GroupedOccurrence,
   CategoryInfo,
@@ -19,6 +29,7 @@ import {
 } from '@mapa-criminalidade/shared-types';
 import { DateService } from './date.service';
 import { GraphqlClientService } from './graphql-client.service';
+import { BoundedTtlLruCache } from './bounded-cache';
 import {
   GROUPED_OCCURRENCE_BY_BO_QUERY,
   MAP_FEATURES_CATEGORIES_FOR_LOCATION_QUERY,
@@ -35,21 +46,20 @@ import {
 export class OccurrencesService {
   private dateService = inject(DateService);
   private graphql = inject(GraphqlClientService);
-  private cache = new Map<string, Observable<unknown>>();
-  private metadataCache$: Observable<MapFeaturesMetadata> | null = null;
+  private readonly cache = new BoundedTtlLruCache<unknown>({
+    maxEntries: 96,
+    ttlMs: 5 * 60_000,
+  });
+  private readonly inFlight = new Map<string, Observable<unknown>>();
+
   getTileMetadata(): Observable<MapFeaturesMetadata> {
-    if (!this.metadataCache$) {
-      this.metadataCache$ = this.graphql
+    return this.cachedRequest('metadata', () =>
+      this.graphql
         .request<MapFeaturesMetadataQuery>({
           query: MAP_FEATURES_METADATA_QUERY,
         })
-        .pipe(
-          map((data) => data.mapFeaturesMetadata),
-          take(1),
-          shareReplay(1)
-        );
-    }
-    return this.metadataCache$;
+        .pipe(map((data) => data.mapFeaturesMetadata))
+    );
   }
   getCategoryPeriodStatsForBounds(
     minLon: number,
@@ -63,10 +73,9 @@ export class OccurrencesService {
     endHour?: number
   ): Observable<MapFeaturesCategoryPeriodStats> {
     if (
-      minLon === undefined ||
-      minLat === undefined ||
-      maxLon === undefined ||
-      maxLat === undefined
+      ![minLon, minLat, maxLon, maxLat].every(Number.isFinite) ||
+      minLon > maxLon ||
+      minLat > maxLat
     ) {
       return of({ categories: [], periods: [] });
     }
@@ -85,50 +94,30 @@ export class OccurrencesService {
       bounds: { minLon, minLat, maxLon, maxLat },
     };
 
-    const cacheKey = `category-period-stats-${JSON.stringify(filter)}`;
-    const cached = this.cache.get(cacheKey) as
-      | Observable<MapFeaturesCategoryPeriodStats>
-      | undefined;
-    if (cached) return cached;
-
-    const request = this.graphql
-      .request<
-        MapFeaturesCategoryPeriodStatsQuery,
-        { filter: MapFeatureFilterInput }
-      >({
-        query: MAP_FEATURES_CATEGORY_PERIOD_STATS_QUERY,
-        variables: { filter },
-      })
-      .pipe(
-        map((data) => data.mapFeaturesCategoryPeriodStats),
-        take(1),
-        shareReplay(1)
-      );
-
-    this.cache.set(cacheKey, request);
-    return request;
+    const cacheKey = this.filterCacheKey('category-period-stats', filter);
+    return this.cachedRequest(cacheKey, () =>
+      this.graphql
+        .request<
+          MapFeaturesCategoryPeriodStatsQuery,
+          { filter: MapFeatureFilterInput }
+        >({
+          query: MAP_FEATURES_CATEGORY_PERIOD_STATS_QUERY,
+          variables: { filter },
+        })
+        .pipe(map((data) => data.mapFeaturesCategoryPeriodStats))
+    );
   }
 
   getChartsForBounds(filter: MapFeatureFilterInput): Observable<MapFeatureCharts> {
-    const cacheKey = `charts-bounds-${JSON.stringify(filter)}`;
-    const cached = this.cache.get(cacheKey) as
-      | Observable<MapFeatureCharts>
-      | undefined;
-    if (cached) return cached;
-
-    const request = this.graphql
-      .request<MapFeaturesChartsQuery, { filter: MapFeatureFilterInput }>({
-        query: MAP_FEATURES_CHARTS_QUERY,
-        variables: { filter },
-      })
-      .pipe(
-        map((data) => data.mapFeaturesCharts),
-        take(1),
-        shareReplay(1)
-      );
-
-    this.cache.set(cacheKey, request);
-    return request;
+    const cacheKey = this.filterCacheKey('charts-bounds', filter);
+    return this.cachedRequest(cacheKey, () =>
+      this.graphql
+        .request<MapFeaturesChartsQuery, { filter: MapFeatureFilterInput }>({
+          query: MAP_FEATURES_CHARTS_QUERY,
+          variables: { filter },
+        })
+        .pipe(map((data) => data.mapFeaturesCharts))
+    );
   }
 
   /**
@@ -141,7 +130,11 @@ export class OccurrencesService {
     before?: string,
     after?: string
   ): Observable<CategoryInfo[]> {
-    if (!lat || !lon || !radius) {
+    if (
+      ![lat, lon, radius].every(Number.isFinite) ||
+      radius < 1 ||
+      radius > 10_000
+    ) {
       return of([]);
     }
 
@@ -149,13 +142,6 @@ export class OccurrencesService {
       ? this.dateService.formatYYYYMMDD(before)
       : '';
     const formattedAfter = after ? this.dateService.formatYYYYMMDD(after) : '';
-    const cacheKey = `categories-${lat}-${lon}-${radius}-${formattedBefore}-${formattedAfter}`;
-
-    const cached = this.cache.get(cacheKey) as
-      | Observable<CategoryInfo[]>
-      | undefined;
-    if (cached) return cached;
-
     const input: MapFeatureLocationInput = {
       latitude: lat,
       longitude: lon,
@@ -164,117 +150,155 @@ export class OccurrencesService {
       afterDate: formattedAfter || undefined,
     };
 
-    const request = this.graphql
-      .request<
-        MapFeaturesCategoriesForLocationQuery,
-        { input: MapFeatureLocationInput }
-      >({
-        query: MAP_FEATURES_CATEGORIES_FOR_LOCATION_QUERY,
-        variables: { input },
-      })
-      .pipe(
-        map((data) => data.mapFeaturesCategoriesForLocation),
-        take(1),
-        shareReplay(1)
-      );
-
-    this.cache.set(cacheKey, request);
-    return request;
+    const cacheKey = this.filterCacheKey('categories', input);
+    return this.cachedRequest(cacheKey, () =>
+      this.graphql
+        .request<
+          MapFeaturesCategoriesForLocationQuery,
+          { input: MapFeatureLocationInput }
+        >({
+          query: MAP_FEATURES_CATEGORIES_FOR_LOCATION_QUERY,
+          variables: { input },
+        })
+        .pipe(map((data) => data.mapFeaturesCategoriesForLocation))
+    );
   }
   getOccurrencesByNumBo(numBo: string): Observable<GroupedOccurrence | null> {
-    const cacheKey = `by-num-bo-${numBo}`;
-    const cached = this.cache.get(cacheKey) as
-      | Observable<GroupedOccurrence | null>
-      | undefined;
-    if (cached) return cached;
+    const normalizedNumBo = numBo.trim();
+    if (!normalizedNumBo) {
+      return throwError(() => new Error('Número do BO inválido'));
+    }
 
-    const request = this.graphql
-      .request<
-        GroupedOccurrenceByBoQuery,
-        { input: MapFeatureLookupInput }
-      >({
-        query: GROUPED_OCCURRENCE_BY_BO_QUERY,
-        variables: { input: { numBo } },
-      })
-      .pipe(
-        map((data) => parseGroupedOccurrence(data.groupedOccurrenceByBo)),
-        take(1),
-        shareReplay(1),
-        catchError(() => of(null))
-      );
-
-    this.cache.set(cacheKey, request);
-    return request;
+    return this.cachedRequest(`by-num-bo-${normalizedNumBo}`, () =>
+      this.graphql
+        .request<
+          GroupedOccurrenceByBoQuery,
+          { input: MapFeatureLookupInput }
+        >({
+          query: GROUPED_OCCURRENCE_BY_BO_QUERY,
+          variables: { input: { numBo: normalizedNumBo } },
+        })
+        .pipe(map((data) => parseGroupedOccurrence(data.groupedOccurrenceByBo)))
+    );
   }
   getOccurrencesByNumBoAndYear(
     numBo: string,
     anoBo: number
   ): Observable<GroupedOccurrence | null> {
-    const cacheKey = `by-num-bo-year-${numBo}-${anoBo}`;
-    const cached = this.cache.get(cacheKey) as
-      | Observable<GroupedOccurrence | null>
-      | undefined;
-    if (cached) return cached;
+    const normalizedNumBo = numBo.trim();
+    if (!normalizedNumBo || !Number.isSafeInteger(anoBo)) {
+      return throwError(() => new Error('Identificador do BO inválido'));
+    }
 
-    const request = this.graphql
-      .request<
-        GroupedOccurrenceByBoQuery,
-        { input: MapFeatureLookupInput }
-      >({
-        query: GROUPED_OCCURRENCE_BY_BO_QUERY,
-        variables: { input: { numBo, anoBo } },
-      })
-      .pipe(
-        map((data) => parseGroupedOccurrence(data.groupedOccurrenceByBo)),
-        take(1),
-        shareReplay(1),
-        catchError(() => of(null))
-      );
-
-    this.cache.set(cacheKey, request);
-    return request;
+    return this.cachedRequest(`by-num-bo-year-${normalizedNumBo}-${anoBo}`, () =>
+      this.graphql
+        .request<
+          GroupedOccurrenceByBoQuery,
+          { input: MapFeatureLookupInput }
+        >({
+          query: GROUPED_OCCURRENCE_BY_BO_QUERY,
+          variables: { input: { numBo: normalizedNumBo, anoBo } },
+        })
+        .pipe(map((data) => parseGroupedOccurrence(data.groupedOccurrenceByBo)))
+    );
   }
   getFullFeature(
     numBo: string,
     anoBo: number,
     delegacia?: string | null
   ): Observable<MapFeatureResponse | null> {
-    const cacheKey = `full-feature-${numBo}-${anoBo}-${delegacia ?? ''}`;
-    const cached = this.cache.get(cacheKey) as
-      | Observable<MapFeatureResponse | null>
-      | undefined;
-    if (cached) return cached;
+    const normalizedNumBo = numBo.trim();
+    if (!normalizedNumBo || !Number.isSafeInteger(anoBo)) {
+      return throwError(() => new Error('Identificador do BO inválido'));
+    }
 
     const input: MapFeatureLookupInput = {
-      numBo,
+      numBo: normalizedNumBo,
       anoBo,
-      delegacia: delegacia ?? null,
+      delegacia: delegacia?.trim() || null,
     };
 
-    const request = this.graphql
-      .request<MapFeatureFullQuery, { input: MapFeatureLookupInput }>({
-        query: MAP_FEATURE_FULL_QUERY,
-        variables: { input },
-      })
-      .pipe(
-        map((data) => parseMapFeatureResponse(data.mapFeatureFull)),
-        take(1),
-        shareReplay(1),
-        catchError(() => of(null))
-      );
-
-    this.cache.set(cacheKey, request);
-    return request;
+    return this.cachedRequest(
+      this.filterCacheKey('full-feature', input),
+      () =>
+        this.graphql
+          .request<MapFeatureFullQuery, { input: MapFeatureLookupInput }>({
+            query: MAP_FEATURE_FULL_QUERY,
+            variables: { input },
+          })
+          .pipe(map((data) => parseMapFeatureResponse(data.mapFeatureFull)))
+    );
   }
   clearCache(): void {
     this.cache.clear();
-    this.metadataCache$ = null;
+    this.inFlight.clear();
   }
   clearCacheByPrefix(prefix: string): void {
-    for (const key of this.cache.keys()) {
-      if (key.startsWith(prefix)) {
-        this.cache.delete(key);
-      }
+    this.cache.deleteByPrefix(prefix);
+    for (const key of this.inFlight.keys()) {
+      if (key.startsWith(prefix)) this.inFlight.delete(key);
     }
   }
+
+  private cachedRequest<T>(
+    cacheKey: string,
+    factory: () => Observable<T>
+  ): Observable<T> {
+    const cached = this.cache.get(cacheKey);
+    if (cached !== undefined) return of(cached as T);
+
+    const pending = this.inFlight.get(cacheKey) as Observable<T> | undefined;
+    if (pending) return pending;
+
+    const request = defer(factory).pipe(
+      take(1),
+      tap((value) => this.cache.set(cacheKey, value)),
+      finalize(() => {
+        if (this.inFlight.get(cacheKey) === request) {
+          this.inFlight.delete(cacheKey);
+        }
+      }),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+    this.inFlight.set(cacheKey, request);
+    return request;
+  }
+
+  private filterCacheKey(prefix: string, value: unknown): string {
+    return `${prefix}-${stableFilterKey(value)}`;
+  }
+}
+
+const CACHE_BOUNDS_PRECISION = 100;
+
+function stableFilterKey(value: unknown): string {
+  if (!value || typeof value !== 'object') return JSON.stringify(value);
+
+  if (Array.isArray(value)) {
+    return JSON.stringify(
+      [...value].map((item) => stableFilterKey(item)).sort()
+    );
+  }
+
+  const record = value as Record<string, unknown>;
+  const normalized = Object.keys(record)
+    .sort()
+    .reduce<Record<string, unknown>>((result, key) => {
+      const current = record[key];
+      if (key === 'minLon' || key === 'maxLon' || key === 'minLat' || key === 'maxLat') {
+        result[key] =
+          typeof current === 'number'
+            ? Math.round(current * CACHE_BOUNDS_PRECISION) / CACHE_BOUNDS_PRECISION
+            : current;
+      } else if (Array.isArray(current)) {
+        result[key] = [...current].filter(Boolean).sort();
+      } else if (current && typeof current === 'object') {
+        result[key] = JSON.parse(stableFilterKey(current));
+      } else {
+        result[key] = current;
+      }
+      return result;
+    }, {});
+
+  return JSON.stringify(normalized);
 }

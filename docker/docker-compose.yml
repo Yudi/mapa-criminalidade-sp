@@ -11,8 +11,39 @@ x-database-logging: &database-logging
     max-size: '10m'
     max-file: '3'
 
+x-frontend-limits: &frontend-limits
+  cpus: '0.50'
+  mem_limit: 256m
+  mem_reservation: 128m
+  pids_limit: 128
+
+x-backend-limits: &backend-limits
+  cpus: '1.00'
+  mem_limit: 512m
+  mem_reservation: 256m
+  pids_limit: 256
+
+x-martin-limits: &martin-limits
+  cpus: '0.50'
+  mem_limit: 256m
+  mem_reservation: 128m
+  pids_limit: 128
+
+x-database-limits: &database-limits
+  cpus: '1.50'
+  mem_limit: 1g
+  mem_reservation: 512m
+  pids_limit: 256
+
+x-redis-limits: &redis-limits
+  cpus: '0.25'
+  mem_limit: 128m
+  mem_reservation: 64m
+  pids_limit: 64
+
 services:
   frontend:
+    <<: *frontend-limits
     build:
       context: ..
       dockerfile: apps/frontend/Dockerfile
@@ -48,20 +79,23 @@ services:
     restart: unless-stopped
 
   backend:
+    <<: *backend-limits
     build:
       context: ..
       dockerfile: apps/backend/Dockerfile
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres?schema=public
-      REDIS_URL: redis://redis-queue:6379
-      REDIS_CACHE_URL: redis://redis-cache:6379
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis-queue:6379/0}
+      REDIS_CACHE_URL: ${REDIS_CACHE_URL:-redis://redis-cache:6379/0}
       NODE_OPTIONS: --max-old-space-size=256
       PRISMA_POOL_MAX: 3
       MAP_FEATURES_ETL_BATCH_SIZE: 2000
       PORT: 8080
-      ALLOWED_ORIGINS: https://criminalidade.yudi.com.br
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://criminalidade.yudi.com.br}
+      READINESS_CHECK_RUNTIME_DEPS: 'true'
+      ENABLE_MANUAL_DATA_IMPORT: ${ENABLE_MANUAL_DATA_IMPORT:-false}
     volumes:
-      - /media/nvme-data/docker/mapa-criminalidade/shared_import_data:/app/temp # Shared volume for COPY operations
+      - /media/nvme-data/docker/mapa-criminalidade/shared_import_data:/app/temp:rw # Provision for uid/gid 10001/10001 before startup.
     networks:
       - backend
       - traefik
@@ -100,10 +134,11 @@ services:
     restart: unless-stopped
 
   martin:
+    <<: *martin-limits
     image: ghcr.io/maplibre/martin:1.10.1
     command: ['--config', '/config/config.yaml']
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      DATABASE_URL: ${MARTIN_DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres}
     volumes:
       - ./martin_config:/config
     networks:
@@ -119,10 +154,10 @@ services:
       - 'traefik.http.routers.criminalidade-martin.entrypoints=web, websecure'
       - 'traefik.http.routers.criminalidade-martin.service=criminalidade-martin-svc'
       - 'traefik.http.routers.criminalidade-martin.middlewares=criminalidade-martin-ratelimit,criminalidade-martin-inflight,criminalidade-martin-cache'
-      - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.average=2400'
+      - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.average=6000'
       - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.period=1m'
-      - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.burst=4800'
-      - 'traefik.http.middlewares.criminalidade-martin-inflight.inflightreq.amount=200'
+      - 'traefik.http.middlewares.criminalidade-martin-ratelimit.ratelimit.burst=12000'
+      - 'traefik.http.middlewares.criminalidade-martin-inflight.inflightreq.amount=16'
       - 'traefik.http.middlewares.criminalidade-martin-cache.headers.customresponseheaders.Cache-Control=public,max-age=3600,stale-while-revalidate=86400'
       - 'traefik.http.routers.criminalidade-martin.tls=true'
       - 'traefik.http.routers.criminalidade-martin.tls.certResolver=letsencrypt'
@@ -135,12 +170,13 @@ services:
     restart: unless-stopped
 
   backend-migrate:
+    <<: *backend-limits
     build:
       context: ..
       dockerfile: apps/backend/Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres?schema=public
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres?schema=public}
     command:
       - sh
       - -c
@@ -154,12 +190,13 @@ services:
     logging: *default-logging
 
   db:
+    <<: *database-limits
     image: postgis/postgis:18-3.6-alpine
     container_name: postgis_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     command:
       [
         'postgres',
@@ -204,7 +241,7 @@ services:
         '-c',
         'auto_explain.sample_rate=0.1',
         '-c',
-        'log_temp_files=0',
+        'log_temp_files=${POSTGRES_LOG_TEMP_FILES_KB:-65536}',
         '-c',
         'log_lock_waits=on',
         '-c',
@@ -230,6 +267,7 @@ services:
     shm_size: '512mb'
 
   redis-queue:
+    <<: *redis-limits
     image: redis:7-alpine
     command:
       [
@@ -253,6 +291,7 @@ services:
     restart: unless-stopped
 
   redis-cache:
+    <<: *redis-limits
     image: redis:7-alpine
     command:
       [

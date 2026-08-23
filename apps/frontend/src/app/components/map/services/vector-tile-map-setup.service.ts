@@ -1,5 +1,6 @@
 import { inject, Service } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import Map from 'ol/Map';
@@ -34,6 +35,7 @@ const SERVER_CLUSTER_COUNT_PROPERTY = 'cluster_count';
 @Service()
 export class VectorTileMapSetupService {
   private readonly dialog = inject(MatDialog);
+  private readonly snackBar = inject(MatSnackBar);
   private readonly markersService = inject(MapMarkersService);
 
   private spreadLayer: VectorLayer<VectorSource<Feature<Point>>> | null = null;
@@ -85,7 +87,20 @@ export class VectorTileMapSetupService {
       );
 
       if (clusterFeature) {
-        void this.handleClusterFeatureClick(olMap, clusterFeature);
+        void this.handleClusterFeatureClick(olMap, clusterFeature).catch(
+          (error: unknown) => {
+            console.error(
+              '[VectorTileMapSetupService] Error opening cluster',
+              error
+            );
+            this.clearSpreadLayer(olMap);
+            this.snackBar.open(
+              'Não foi possível abrir este agrupamento. Tente novamente.',
+              'Fechar',
+              { duration: 5000 }
+            );
+          }
+        );
         return;
       }
 
@@ -474,16 +489,28 @@ export class VectorTileMapSetupService {
   }
 
   private async openFeatureDialog(data: FeatureDetailDialogData): Promise<void> {
-    const { FeatureDetailDialogComponent } = await import(
-      '../components/feature-detail-dialog/feature-detail-dialog.component'
-    );
+    try {
+      const { FeatureDetailDialogComponent } = await import(
+        '../components/feature-detail-dialog/feature-detail-dialog.component'
+      );
 
-    this.dialog.open(FeatureDetailDialogComponent, {
-      data,
-      width: '700px',
-      maxWidth: '90vw',
-      maxHeight: '90vh',
-      panelClass: 'feature-detail-dialog',
-    });
+      this.dialog.open(FeatureDetailDialogComponent, {
+        data,
+        width: '700px',
+        maxWidth: '90vw',
+        maxHeight: '90vh',
+        panelClass: 'feature-detail-dialog',
+      });
+    } catch (error) {
+      console.error(
+        '[VectorTileMapSetupService] Error loading feature detail dialog',
+        error
+      );
+      this.snackBar.open(
+        'Não foi possível carregar os detalhes. Tente novamente.',
+        'Fechar',
+        { duration: 5000 }
+      );
+    }
   }
 }

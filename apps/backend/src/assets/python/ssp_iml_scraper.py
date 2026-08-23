@@ -4,6 +4,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -11,6 +12,8 @@ import unicodedata
 from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
+from tempfile import SpooledTemporaryFile
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import requests
@@ -55,6 +58,8 @@ OUTPUT_COLUMNS = [
     "DELEGACIA_REGISTRO_NORMALIZED",
 ]
 
+DEFAULT_MAX_EXPORT_BYTES = 128 * 1024 * 1024
+
 
 class HiddenFieldsParser(HTMLParser):
     def __init__(self) -> None:
@@ -83,6 +88,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--delay-seconds", type=float, default=1.0)
     parser.add_argument("--timeout-seconds", type=float, default=180.0)
+    parser.add_argument(
+        "--max-response-bytes", type=int, default=DEFAULT_MAX_EXPORT_BYTES
+    )
     return parser.parse_args()
 
 
@@ -124,19 +132,48 @@ def postback(
     return response
 
 
-def decode_export(content: bytes) -> list[dict[str, str]]:
-    text = content.decode("utf-16-le").lstrip("\ufeff")
-    reader = csv.DictReader(io.StringIO(text), delimiter="\t")
-    if reader.fieldnames != SOURCE_COLUMNS:
-        raise RuntimeError(
-            f"Unexpected IML export columns: {reader.fieldnames!r}"
-        )
+def decode_export_stream(
+    response: requests.Response, max_response_bytes: int
+):
+    content_length = response.headers.get("Content-Length")
+    if content_length:
+        try:
+            declared_length = int(content_length)
+        except ValueError as error:
+            raise RuntimeError("Export response has an invalid Content-Length") from error
+        if declared_length > max_response_bytes:
+            raise RuntimeError(
+                f"Export response exceeds {max_response_bytes} byte limit"
+            )
 
-    return [
-        {column: (row.get(column) or "").strip() for column in SOURCE_COLUMNS}
-        for row in reader
-        if any((row.get(column) or "").strip() for column in SOURCE_COLUMNS)
-    ]
+    total_size = 0
+    with SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b") as raw:
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            total_size += len(chunk)
+            if total_size > max_response_bytes:
+                raise RuntimeError(
+                    f"Export response exceeds {max_response_bytes} byte limit"
+                )
+            raw.write(chunk)
+        raw.seek(0)
+        text = io.TextIOWrapper(raw, encoding="utf-16-le", newline="")
+        reader = csv.DictReader(text, delimiter="\t")
+        if reader.fieldnames:
+            reader.fieldnames = [
+                field.lstrip("\ufeff") for field in reader.fieldnames
+            ]
+        if reader.fieldnames != SOURCE_COLUMNS:
+            raise RuntimeError(
+                f"Unexpected IML export columns: {reader.fieldnames!r}"
+            )
+        for row in reader:
+            normalized = {
+                column: (row.get(column) or "").strip() for column in SOURCE_COLUMNS
+            }
+            if any(normalized.values()):
+                yield normalized
 
 
 def validate_month_rows(
@@ -177,8 +214,11 @@ def scrape_months(
     months: list[int],
     delay_seconds: float,
     timeout_seconds: float,
-) -> dict[int, list[dict[str, str]]]:
-    rows_by_month: dict[int, list[dict[str, str]]] = {}
+    output_dir: Path,
+    max_response_bytes: int,
+) -> tuple[list[dict[str, int | str]], list[str]]:
+    files: list[dict[str, int | str]] = []
+    failures: list[str] = []
 
     with requests.Session() as session:
         session.headers["User-Agent"] = (
@@ -218,26 +258,49 @@ def scrape_months(
                         f"Export for {year}-{month:02} was not an Excel response"
                     )
 
-                month_rows = decode_export(export.content)
-                validate_month_rows(month_rows, year, month)
-                output_rows: list[dict[str, str]] = []
-                for row in month_rows:
-                    row["ANO_REFERENCIA"] = str(year)
-                    row["MES_REFERENCIA"] = str(month)
-                    row["NUM_BO_NORMALIZED"] = normalize_lookup_value(
-                        row["NumeroBO"]
-                    )
-                    row["DELEGACIA_REGISTRO_NORMALIZED"] = normalize_lookup_value(
-                        row["NomeDelegaciaOrigem"]
-                    )
-                    output_rows.append(row)
+                output_path = (
+                    output_dir / f"registro_obitos_iml_{year}_{month:02}.csv"
+                )
+                rejected_rows = 0
 
-                rows_by_month[month] = output_rows
+                def output_rows():
+                    nonlocal rejected_rows
+                    for row in decode_export_stream(export, max_response_bytes):
+                        entry_date = row["DataEntradaIML"]
+                        expected_suffix = f"/{month:02}/{year}"
+                        if entry_date and expected_suffix not in entry_date[:10]:
+                            rejected_rows += 1
+                            print(
+                                f"Skipping invalid row from {year}-{month:02}: "
+                                f"unexpected DataEntradaIML {entry_date!r}",
+                                file=sys.stderr,
+                            )
+                            continue
+                        row["ANO_REFERENCIA"] = str(year)
+                        row["MES_REFERENCIA"] = str(month)
+                        row["NUM_BO_NORMALIZED"] = normalize_lookup_value(
+                            row["NumeroBO"]
+                        )
+                        row["DELEGACIA_REGISTRO_NORMALIZED"] = normalize_lookup_value(
+                            row["NomeDelegaciaOrigem"]
+                        )
+                        yield row
+
+                record_count = write_csv(output_path, output_rows())
+                files.append(
+                    {
+                        "month": month,
+                        "recordCount": record_count,
+                        "rejectedRows": rejected_rows,
+                        "outputPath": str(output_path),
+                    }
+                )
                 print(
-                    f"Downloaded {year}-{month:02}: {len(month_rows)} records",
+                    f"Downloaded {year}-{month:02}: {record_count} records",
                     file=sys.stderr,
                 )
             except Exception as error:
+                failures.append(f"{year}-{month:02}: {error}")
                 print(
                     f"Failed to download {year}-{month:02}: {error}",
                     file=sys.stderr,
@@ -246,78 +309,77 @@ def scrape_months(
                 if delay_seconds > 0:
                     time.sleep(delay_seconds)
 
-    return rows_by_month
+    return files, failures
 
 
-def write_csv(output_path: Path, rows: list[dict[str, str]]) -> None:
+def write_csv(output_path: Path, rows) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = output_path.with_suffix(f"{output_path.suffix}.part")
+    temporary_path = output_path.with_name(
+        f"{output_path.name}.{os.getpid()}.{uuid4().hex}.part"
+    )
 
-    with temporary_path.open("w", encoding="utf-8", newline="") as output:
-        writer = csv.writer(
-            output,
-            delimiter=";",
-            quotechar='"',
-            quoting=csv.QUOTE_ALL,
-            lineterminator="\n",
-        )
-        writer.writerow(OUTPUT_COLUMNS)
-        for row in rows:
-            writer.writerow(
-                [
-                    row["DataEntradaIML"],
-                    row["AnoBO"],
-                    row["NumeroBO"],
-                    row["NomeDelegaciaOrigem"],
-                    row["NumeroLaudo"],
-                    row["AnoLaudo"],
-                    row["IdadeVitima"],
-                    row["TipoIdade"],
-                    row["Conclusao"],
-                    row["DeclaracaoObito"],
-                    row["CausaMortis"],
-                    row["ANO_REFERENCIA"],
-                    row["MES_REFERENCIA"],
-                    row["NUM_BO_NORMALIZED"],
-                    row["DELEGACIA_REGISTRO_NORMALIZED"],
-                ]
+    record_count = 0
+    try:
+        with temporary_path.open("w", encoding="utf-8", newline="") as output:
+            writer = csv.writer(
+                output,
+                delimiter=";",
+                quotechar='"',
+                quoting=csv.QUOTE_ALL,
+                lineterminator="\n",
             )
-
-    temporary_path.replace(output_path)
+            writer.writerow(OUTPUT_COLUMNS)
+            for row in rows:
+                writer.writerow(
+                    [
+                        row["DataEntradaIML"],
+                        row["AnoBO"],
+                        row["NumeroBO"],
+                        row["NomeDelegaciaOrigem"],
+                        row["NumeroLaudo"],
+                        row["AnoLaudo"],
+                        row["IdadeVitima"],
+                        row["TipoIdade"],
+                        row["Conclusao"],
+                        row["DeclaracaoObito"],
+                        row["CausaMortis"],
+                        row["ANO_REFERENCIA"],
+                        row["MES_REFERENCIA"],
+                        row["NUM_BO_NORMALIZED"],
+                        row["DELEGACIA_REGISTRO_NORMALIZED"],
+                    ]
+                )
+                record_count += 1
+            output.flush()
+            os.fsync(output.fileno())
+        temporary_path.replace(output_path)
+        return record_count
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def main() -> None:
     args = parse_arguments()
     months = parse_months(args.months)
     validate_requested_months(args.year, months)
-    rows_by_month = scrape_months(
+    files, failures = scrape_months(
         args.year,
         months,
         args.delay_seconds,
         args.timeout_seconds,
+        args.output_dir,
+        max(1, args.max_response_bytes),
     )
-    files = []
-    for month, rows in rows_by_month.items():
-        output_path = (
-            args.output_dir / f"registro_obitos_iml_{args.year}_{month:02}.csv"
-        )
-        write_csv(output_path, rows)
-        files.append(
-            {
-                "month": month,
-                "recordCount": len(rows),
-                "outputPath": str(output_path),
-            }
-        )
-
-    print(
-        json.dumps(
-            {
-                "year": args.year,
-                "files": files,
-            }
-        )
-    )
+    result = {
+        "year": args.year,
+        "status": "partial" if failures else "complete",
+        "expectedMonths": len(months),
+        "succeededMonths": len(files),
+        "failedMonths": failures,
+        "files": files,
+    }
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":

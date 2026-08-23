@@ -22,6 +22,6 @@ import { RedisCacheService } from '../shared/cache/redis-cache.service';
     ValidatorsService,
     DevelopmentOnlyGuard,
   ],
-  exports: [MapFeaturesQueryService, MapFeaturesEtlService],
+  exports: [MapFeaturesQueryService, MapFeaturesEtlService, RedisCacheService],
 })
 export class MapFeaturesModule {}

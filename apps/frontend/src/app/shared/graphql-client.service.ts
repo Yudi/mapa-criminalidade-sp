@@ -23,8 +23,7 @@ export class GraphqlClientService {
     return this.http
       .post<GraphQLResponse<TData>>(
         `${environment.apiUrl}/graphql`,
-        request,
-        { withCredentials: true }
+        request
       )
       .pipe(
         map((response) => {

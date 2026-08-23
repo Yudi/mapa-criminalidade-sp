@@ -25,6 +25,7 @@ import {
 import { getErrorMessage } from '../../shared/error.utils';
 import {
   AggregatedFeature,
+  createEtlAggregationQuality,
   MapFeaturesEtlAggregator,
   SourceTableCursor,
 } from './etl/map-features-etl-aggregator';
@@ -33,7 +34,7 @@ import {
 export class MapFeaturesEtlService {
   private readonly logger = new Logger(MapFeaturesEtlService.name);
   private readonly BATCH_SIZE = getMapFeaturesEtlBatchSize();
-  private readonly aggregator = new MapFeaturesEtlAggregator(this.logger);
+  private readonly aggregator = new MapFeaturesEtlAggregator();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -42,6 +43,7 @@ export class MapFeaturesEtlService {
   async runFullEtl(): Promise<{ processed: number; errors: string[] }> {
     this.logger.log('Starting full ETL for map_features...');
     const startTime = Date.now();
+    await this.ensureFutureTilePartitions();
 
     const sourceTables = await this.getSourceTables();
     this.logger.log(`Found ${sourceTables.length} source tables to process`);
@@ -75,6 +77,7 @@ export class MapFeaturesEtlService {
   }
   async runIncrementalEtl(): Promise<{ processed: number; errors: string[] }> {
     this.logger.log('Starting incremental ETL for map_features...');
+    await this.ensureFutureTilePartitions();
 
     const result = await this.prisma.dynamicTableMetadata.findMany({
       where: { needs_geom_update: true },
@@ -125,7 +128,11 @@ export class MapFeaturesEtlService {
 
     const processedCount = await this.runEtlTransaction(async (tx) => {
       await this.removeSourceTableFeatures(tableName, tx);
-      return await this.processSourceTable(tableName, tx, false);
+      const count = await this.processSourceTable(tableName, tx, false);
+      await tx.$executeRawUnsafe(
+        'SELECT public.refresh_map_features_date_range()'
+      );
+      return count;
     });
 
     await this.updateEtlStatus(tableName, 'completed', processedCount, null);
@@ -159,6 +166,9 @@ export class MapFeaturesEtlService {
     await tx.$executeRawUnsafe(
       `SET LOCAL idle_in_transaction_session_timeout = '${MAP_FEATURES_ETL_TRANSACTION_CONFIG.IDLE_TIMEOUT_MS}ms'`
     );
+    await tx.$executeRawUnsafe(
+      `SET LOCAL "mapa.defer_map_features_date_range_refresh" = 'on'`
+    );
   }
 
   private async invalidateReadCacheIfNeeded(
@@ -173,6 +183,12 @@ export class MapFeaturesEtlService {
       `Invalidated ${deleted} map feature cache entr${
         deleted === 1 ? 'y' : 'ies'
       } after refreshing ${refreshedTables} source table(s)`
+    );
+  }
+
+  private async ensureFutureTilePartitions(): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      'SELECT public.ensure_map_feature_tile_partitions(5)'
     );
   }
 
@@ -230,7 +246,7 @@ export class MapFeaturesEtlService {
     // Build SELECT query with all needed columns
     const selectColumns = buildSelectColumns(config, columnSet);
     const sortSelectColumns = buildSourceSortSelectColumns(config);
-    await this.createStagingTable(
+    const stagingQuality = await this.createStagingTable(
       tableName,
       selectColumns,
       sortSelectColumns,
@@ -242,6 +258,7 @@ export class MapFeaturesEtlService {
     let processedRows = 0;
     let cursor: SourceTableCursor | null = null;
     let carryover = new Map<string, AggregatedFeature>();
+    const aggregationQuality = createEtlAggregationQuality();
 
     while (true) {
       const cursorWhere = cursor
@@ -290,7 +307,8 @@ export class MapFeaturesEtlService {
         tableName,
         config,
         columnSet,
-        carryover
+        carryover,
+        aggregationQuality
       );
       const { completed, nextCarryover } =
         this.aggregator.splitFinalAggregatedFeature(aggregated);
@@ -307,6 +325,19 @@ export class MapFeaturesEtlService {
 
     const inserted = await this.upsertFeatures(carryover, db);
     processedCount += inserted;
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'map_features_etl_quality',
+        sourceTable: tableName,
+        sourceRows: stagingQuality.sourceRows,
+        processableRows: stagingQuality.processableRows,
+        rejectedBeforeAggregation:
+          stagingQuality.sourceRows - stagingQuality.processableRows,
+        ...aggregationQuality,
+        publishedFeatures: processedCount,
+      })
+    );
 
     if (updateStatus) {
       await this.updateEtlStatus(
@@ -326,7 +357,16 @@ export class MapFeaturesEtlService {
     sortSelectColumns: string,
     processableRowsWhere: string,
     db: DatabaseExecutor
-  ): Promise<void> {
+  ): Promise<{ sourceRows: number; processableRows: number }> {
+    const [quality] = await db.$queryRawUnsafe<
+      Array<{ source_rows: number; processable_rows: number }>
+    >(`
+      SELECT
+        COUNT(*)::integer AS source_rows,
+        COUNT(*) FILTER (WHERE ${processableRowsWhere})::integer AS processable_rows
+      FROM ${this.rawTable(tableName)}
+    `);
+
     await db.$executeRawUnsafe(
       `DROP TABLE IF EXISTS pg_temp.${ETL_STAGING_TABLE}`
     );
@@ -341,6 +381,10 @@ export class MapFeaturesEtlService {
       ON ${ETL_STAGING_TABLE} (${ETL_STAGING_SORT_COLUMNS.join(', ')})
     `);
     await db.$executeRawUnsafe(`ANALYZE ${ETL_STAGING_TABLE}`);
+    return {
+      sourceRows: Number(quality?.source_rows ?? 0),
+      processableRows: Number(quality?.processable_rows ?? 0),
+    };
   }
   private async upsertFeatures(
     features: Map<string, AggregatedFeature>,

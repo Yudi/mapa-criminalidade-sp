@@ -10,22 +10,51 @@ type RequestLike = {
   method?: string;
   path?: string;
   url?: string;
+  ip?: string;
+  socket?: { remoteAddress?: string };
 };
 
 @Injectable()
 export class DevelopmentOnlyGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    if (process.env['NODE_ENV'] === 'development') {
-      return true;
-    }
-
     const request = this.getRequest(context);
     const operation = request
       ? `${request.method ?? 'REQUEST'} ${request.path ?? request.url ?? ''}`
       : context.getHandler().name;
 
-    throw new ForbiddenException(
-      `${operation} is available only outside production`
+    if (
+      process.env['NODE_ENV'] !== 'development' ||
+      !this.isLoopbackRequest(request)
+    ) {
+      throw new ForbiddenException(
+        `${operation} is available only from local development`
+      );
+    }
+
+    if (
+      request?.method &&
+      request.method !== 'GET' &&
+      process.env['ENABLE_MANUAL_DATA_IMPORT'] !== 'true'
+    ) {
+      throw new ForbiddenException(
+        `${operation} requires ENABLE_MANUAL_DATA_IMPORT=true`
+      );
+    }
+
+    return true;
+  }
+
+  private isLoopbackRequest(request: RequestLike | undefined): boolean {
+    if (!request) return false;
+
+    const remoteAddress = request.socket?.remoteAddress ?? request.ip;
+    if (!remoteAddress) return false;
+
+    return (
+      remoteAddress === '::1' ||
+      remoteAddress === '0:0:0:0:0:0:0:1' ||
+      remoteAddress === '127.0.0.1' ||
+      remoteAddress.startsWith('::ffff:127.0.0.1')
     );
   }
 

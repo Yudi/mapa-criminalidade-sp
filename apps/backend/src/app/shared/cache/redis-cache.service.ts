@@ -11,6 +11,18 @@ const DEFAULT_REDIS_DB = 0;
 const DEFAULT_CONNECT_TIMEOUT_MS = 1_000;
 const RECONNECT_DELAY_MS = 5_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
+const CIRCUIT_OPEN_MS = 30_000;
+
+export type RedisCacheHealth = {
+  status: 'ready' | 'degraded' | 'disabled';
+  hits: number;
+  misses: number;
+  errors: number;
+  writes: number;
+  deletes: number;
+  lastLatencyMs: number;
+  lastErrorAt: string | null;
+};
 
 @Injectable()
 export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
@@ -19,6 +31,14 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly redis = this.enabled ? this.createRedis() : null;
   private connectionPromise: Promise<void> | null = null;
   private hasLoggedUnavailable = false;
+  private circuitOpenUntil = 0;
+  private hits = 0;
+  private misses = 0;
+  private errors = 0;
+  private writes = 0;
+  private deletes = 0;
+  private lastLatencyMs = 0;
+  private lastErrorAt: Date | null = null;
 
   async onModuleInit(): Promise<void> {
     if (!this.redis) return;
@@ -38,28 +58,44 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getJson<T>(key: string): Promise<T | null> {
-    if (!(await this.ensureReady())) return null;
+    const startedAt = Date.now();
+    if (!(await this.ensureReady())) {
+      this.misses++;
+      this.observeLatency(startedAt);
+      return null;
+    }
 
     try {
       const value = await this.redis?.get(key);
+      if (value) this.hits++;
+      else this.misses++;
+      this.observeLatency(startedAt);
       return value ? (JSON.parse(value) as T) : null;
     } catch (error) {
+      this.errors++;
+      this.observeLatency(startedAt);
       this.logCommandError('read', key, error);
       return null;
     }
   }
 
   async setJson<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+    const startedAt = Date.now();
     if (!(await this.ensureReady())) return;
 
     try {
       await this.redis?.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+      this.writes++;
+      this.observeLatency(startedAt);
     } catch (error) {
+      this.errors++;
+      this.observeLatency(startedAt);
       this.logCommandError('write', key, error);
     }
   }
 
   async deleteByPrefix(prefix: string): Promise<number> {
+    const startedAt = Date.now();
     if (!(await this.ensureReady())) return 0;
 
     const redis = this.redis;
@@ -84,18 +120,34 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
           deleted += await redis.del(...keys);
         }
       } while (cursor !== '0');
+      this.deletes++;
+      this.observeLatency(startedAt);
     } catch (error) {
+      this.errors++;
+      this.observeLatency(startedAt);
       this.logCommandError('delete', pattern, error);
     }
 
     return deleted;
   }
 
+  async getHealth(): Promise<RedisCacheHealth> {
+    if (!this.redis) {
+      return this.health('disabled');
+    }
+
+    const ready = await this.ensureReady();
+    return this.health(ready ? 'ready' : 'degraded');
+  }
+
   private async ensureReady(): Promise<boolean> {
     if (!this.redis) return false;
 
+    if (Date.now() < this.circuitOpenUntil) return false;
+
     if (this.isReady()) {
       this.hasLoggedUnavailable = false;
+      this.circuitOpenUntil = 0;
       return true;
     }
 
@@ -112,6 +164,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       .connect()
       .then(() => undefined)
       .catch((error: Error) => {
+        this.circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
         if (!this.hasLoggedUnavailable) {
           this.logger.warn(`Redis cache connection failed: ${error.message}`);
           this.hasLoggedUnavailable = true;
@@ -168,7 +221,26 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
     key: string,
     error: unknown
   ): void {
+    this.circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
+    this.lastErrorAt = new Date();
     const message = error instanceof Error ? error.message : String(error);
     this.logger.warn(`Redis cache ${action} failed for ${key}: ${message}`);
+  }
+
+  private health(status: RedisCacheHealth['status']): RedisCacheHealth {
+    return {
+      status,
+      hits: this.hits,
+      misses: this.misses,
+      errors: this.errors,
+      writes: this.writes,
+      deletes: this.deletes,
+      lastLatencyMs: this.lastLatencyMs,
+      lastErrorAt: this.lastErrorAt?.toISOString() ?? null,
+    };
+  }
+
+  private observeLatency(startedAt: number): void {
+    this.lastLatencyMs = Math.max(0, Date.now() - startedAt);
   }
 }

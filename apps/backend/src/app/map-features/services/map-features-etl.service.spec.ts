@@ -148,6 +148,10 @@ describe('MapFeaturesEtlService', () => {
       3,
       "SET LOCAL idle_in_transaction_session_timeout = '120000ms'"
     );
+    expect(executeRawUnsafe).toHaveBeenNthCalledWith(
+      4,
+      `SET LOCAL "mapa.defer_map_features_date_range_refresh" = 'on'`
+    );
   });
 
   it('invalidates map feature read caches after refreshed source tables', async () => {

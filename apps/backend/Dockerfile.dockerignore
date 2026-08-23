@@ -9,6 +9,9 @@ dist
 node_modules
 tmp
 temp
+dataset-handling/target/
+.nx/
+.angular/
 
 .DS_Store
 *.log
@@ -22,3 +25,8 @@ docker
 apps/*
 !apps/backend
 !apps/backend/**
+
+# Runtime imports are bind-mounted in deployment and must never enter the
+# image context, even though the backend source tree is otherwise included.
+apps/backend/temp/
+apps/backend/uploads/

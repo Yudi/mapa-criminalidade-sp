@@ -10,7 +10,7 @@ import {
 import { GraphqlClientService } from './graphql-client.service';
 import { MAP_FEATURES_METADATA_QUERY } from './map-features.graphql';
 
-const TILE_SCHEMA_VERSION = 'v1';
+const TILE_SCHEMA_VERSION = 'v2';
 
 export type { TileMetadata, TileFilterParams };
 export interface ExtendedTileFilterParams extends TileFilterParams {
@@ -44,13 +44,15 @@ export class VectorTileService {
     );
     if (categories && categories.length > 0) {
       queryParams.push(
-        `categories=${encodeURIComponent(categories.join(','))}`
+        `categories=${encodeURIComponent(JSON.stringify(categories))}`
       );
     }
 
     const periods = this.normalizeList(params?.periods);
     if (periods.length > 0) {
-      queryParams.push(`periods=${encodeURIComponent(periods.join(','))}`);
+      queryParams.push(
+        `periods=${encodeURIComponent(JSON.stringify(periods))}`
+      );
     }
 
     if (params?.startHour !== undefined && params.endHour !== undefined) {

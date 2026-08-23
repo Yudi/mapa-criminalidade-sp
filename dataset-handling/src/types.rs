@@ -49,6 +49,9 @@ pub struct ColumnAnalysis {
     pub unique_count: usize,
     /// Numeric statistics if the column is numeric
     pub numeric_stats: Option<NumericStats>,
+    /// Number of non-null values that did not parse as numeric.
+    #[serde(default)]
+    pub numeric_invalid_count: usize,
     /// Whether ALL non-null values match TIME format
     #[serde(default)]
     pub all_time_format: bool,
@@ -77,6 +80,7 @@ impl ColumnAnalysis {
             max_length: 0,
             unique_count: 0,
             numeric_stats: None,
+            numeric_invalid_count: 0,
             all_time_format: true,
             all_date_format: true,
             all_timestamp_format: true,
@@ -113,6 +117,8 @@ pub struct ChunkNumericStats {
     pub is_integer: bool,
     /// Critical: tracks if ALL values in this chunk are numeric
     pub all_numeric: bool,
+    pub numeric_count: usize,
+    pub non_numeric_count: usize,
 }
 
 impl ChunkNumericStats {
@@ -123,6 +129,8 @@ impl ChunkNumericStats {
             max_value: value,
             is_integer: value.fract() == 0.0,
             all_numeric: true,
+            numeric_count: 1,
+            non_numeric_count: 0,
         }
     }
 
@@ -133,6 +141,8 @@ impl ChunkNumericStats {
             max_value: 0.0,
             is_integer: false,
             all_numeric: false,
+            numeric_count: 0,
+            non_numeric_count: 1,
         }
     }
 
@@ -143,11 +153,13 @@ impl ChunkNumericStats {
         if value.fract() != 0.0 {
             self.is_integer = false;
         }
+        self.numeric_count += 1;
     }
 
     /// Mark as containing non-numeric values.
     pub fn mark_non_numeric(&mut self) {
         self.all_numeric = false;
+        self.non_numeric_count += 1;
     }
 }
 
@@ -174,6 +186,8 @@ pub struct ChunkStats {
     pub has_non_null_values: bool,
     /// Whether ANY value in this chunk matches a ZIP code pattern
     pub has_zip_code_pattern: bool,
+    /// HyperLogLog registers for bounded, mergeable cardinality estimates.
+    pub unique_registers: [u8; 64],
 }
 
 impl ChunkStats {
@@ -192,6 +206,7 @@ impl ChunkStats {
             all_timestamp_format: true,
             has_non_null_values: false,
             has_zip_code_pattern: false,
+            unique_registers: [0; 64],
         }
     }
 
@@ -221,6 +236,40 @@ impl ChunkStats {
         match &mut self.numeric_stats {
             Some(stats) => stats.mark_non_numeric(),
             None => self.numeric_stats = Some(ChunkNumericStats::new_non_numeric()),
+        }
+    }
+
+    pub fn record_unique(&mut self, value: &str) {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        let hash = hasher.finish();
+        let bucket = (hash & 63) as usize;
+        let remaining = hash >> 6;
+        let rank = (remaining.leading_zeros() + 1).min(u8::MAX as u32) as u8;
+        self.unique_registers[bucket] = self.unique_registers[bucket].max(rank);
+    }
+
+    pub fn unique_estimate(&self) -> usize {
+        let m = self.unique_registers.len() as f64;
+        let sum = self
+            .unique_registers
+            .iter()
+            .map(|rank| 2_f64.powi(-i32::from(*rank)))
+            .sum::<f64>();
+        let alpha = 0.709;
+        let estimate = alpha * m * m / sum.max(f64::MIN_POSITIVE);
+        let empty_registers = self
+            .unique_registers
+            .iter()
+            .filter(|rank| **rank == 0)
+            .count();
+        if estimate <= 2.5 * m && empty_registers > 0 {
+            (m * (m / empty_registers as f64).ln()).round() as usize
+        } else {
+            estimate.round() as usize
         }
     }
 

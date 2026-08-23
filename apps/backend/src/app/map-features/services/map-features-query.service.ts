@@ -45,8 +45,11 @@ export class MapFeaturesQueryService {
     this.tileQuery = new MapFeaturesVectorTileQuery(prisma);
   }
 
-  async getTile(params: MapFeaturesTileParams): Promise<MapFeatureTileResult> {
-    return await this.tileQuery.getTile(params);
+  async getTile(
+    params: MapFeaturesTileParams,
+    signal?: AbortSignal
+  ): Promise<MapFeatureTileResult> {
+    return await this.tileQuery.getTile(params, signal);
   }
 
   async invalidateReadCache(): Promise<number> {
