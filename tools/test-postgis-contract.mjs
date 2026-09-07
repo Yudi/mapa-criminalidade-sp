@@ -52,7 +52,7 @@ try {
       (id, num_bo, ano_bo, delegacia, latitude, longitude, location_hash, geom,
        category, rubrica_for_styling, data_ocorrencia, source_tables, feature_data)
       VALUES ($1, 'SHARED-BO', 2026, 'DP', -23.55, $2, $3,
-        ST_SetSRID(ST_MakePoint($2, -23.55), 4326), $4, $4, '2026-03-01',
+        ST_SetSRID(ST_MakePoint(($2::numeric)::double precision, (-23.55)::double precision), 4326), $4, $4, '2026-03-01',
         ARRAY['celulares_2026'], $5::jsonb)`,
     [id, -46.63 + index * 0.00001, `location-${index}`, index ? 'Roubo' : 'Furto', JSON.stringify({ records: [], occurrence: {}, location: {}, all_rubricas: [index ? 'Roubo' : 'Furto'] })]);
   }
