@@ -88,6 +88,7 @@ export interface OccurrenceStats {
   dateRange: DateRange;
 }
 export interface OccurrenceTileMetadata {
+  datasetRevision?: string;
   format: string;
   minZoom: number;
   maxZoom: number;

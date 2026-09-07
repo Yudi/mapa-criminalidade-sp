@@ -5,6 +5,8 @@ import {
   MAX_FILTER_ITEM_LENGTH,
   MAX_FILTER_LIST_ITEMS,
   parseStringListQuery,
+  parseOptionalIntegerQuery,
+  parseOptionalNumberQuery,
   normalizeLookup,
   validateBounds,
   validateDateFilters,
@@ -74,5 +76,18 @@ describe('map feature request limits', () => {
     expect(() => normalizeLookup({ numBo: '123', anoBo: 1799 })).toThrow(
       BadRequestException
     );
+  });
+});
+
+describe('scalar query transport values', () => {
+  it.each([['8', '9'], {}, null, 8])('rejects non-string input %j as a bad request', (value) => {
+    expect(() => parseOptionalIntegerQuery(value, 'hour')).toThrow(BadRequestException);
+    expect(() => parseOptionalNumberQuery(value, 'longitude')).toThrow(BadRequestException);
+  });
+  it('preserves optional and valid scalar parsing', () => {
+    expect(parseOptionalIntegerQuery(undefined, 'hour')).toBeUndefined();
+    expect(parseOptionalNumberQuery(' ', 'longitude')).toBeUndefined();
+    expect(parseOptionalIntegerQuery(' 8 ', 'hour')).toBe(8);
+    expect(parseOptionalNumberQuery('-46.5', 'longitude')).toBe(-46.5);
   });
 });

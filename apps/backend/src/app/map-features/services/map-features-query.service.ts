@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisCacheService } from '../../shared/cache/redis-cache.service';
 import {
@@ -31,7 +31,7 @@ export class MapFeaturesQueryService {
     private readonly prisma: PrismaService,
     @Optional() cache?: RedisCacheService
   ) {
-    this.cacheCoordinator = new MapFeaturesQueryCacheCoordinator(cache);
+    this.cacheCoordinator = new MapFeaturesQueryCacheCoordinator(cache, () => this.getDatasetRevision());
     const sourceHydrator = new MapFeaturesSourceRecordHydrator(
       prisma,
       process.env.MAP_FEATURES_HYDRATE_MISSING_SOURCE_RECORDS === 'true'
@@ -43,6 +43,14 @@ export class MapFeaturesQueryService {
       this.cacheCoordinator.getJson.bind(this.cacheCoordinator)
     );
     this.tileQuery = new MapFeaturesVectorTileQuery(prisma);
+  }
+
+  async getDatasetRevision(): Promise<string> {
+    const [row] = await this.prisma.$queryRawUnsafe<{ revision: string }[]>(
+      'SELECT revision::text FROM public.map_dataset_revision WHERE singleton = TRUE'
+    );
+    if (!row) throw new Error('Dataset revision is missing');
+    return row.revision;
   }
 
   async getTile(
@@ -130,6 +138,15 @@ export class MapFeaturesQueryService {
 
   async getFeatureById(id: string): Promise<MapFeature | null> {
     return await this.detailQuery.getFeatureById(id);
+  }
+
+  async getImlEnrichment(feature: MapFeature): Promise<{ records: ImlRecord[]; unavailable: boolean }> {
+    try {
+      return { records: await this.getImlRecordsByBo(feature.num_bo, feature.ano_bo, feature.delegacia), unavailable: false };
+    } catch (error) {
+      new Logger(MapFeaturesQueryService.name).warn(`IML enrichment unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      return { records: [], unavailable: true };
+    }
   }
 
   async getImlRecordsByBo(

@@ -6,6 +6,7 @@ import {
   quoteLiteral,
 } from '../../../prisma/sql.utils';
 import { ImlRecord } from '../../types/map-features.types';
+import { parseSourceDate } from '../../utils/source-value.utils';
 import { normalizeImlLookupValue } from './map-features-query-sql';
 
 export async function getImlRecordsByBo(
@@ -77,23 +78,15 @@ export async function getImlRecordsByBo(
     `SELECT * FROM (${selects.join(
       ' UNION ALL '
     )}) AS iml_records
-    ORDER BY
-      CASE
-        WHEN data_entrada_iml ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
-          THEN to_timestamp(data_entrada_iml, 'DD/MM/YYYY HH24:MI:SS')
-        WHEN data_entrada_iml ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}$'
-          THEN to_timestamp(data_entrada_iml, 'DD/MM/YYYY HH24:MI')
-        WHEN data_entrada_iml ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
-          THEN to_timestamp(data_entrada_iml, 'DD/MM/YYYY')
-        ELSE NULL
-      END NULLS LAST,
-      source_table,
+    ORDER BY source_table,
       source_id`,
     normalizeImlLookupValue(numBo),
     String(anoBo),
     normalizeImlLookupValue(delegacia)
   );
 
+  // The raw date is dirty text. Never cast it inside an otherwise valid detail query.
+  rows.sort((left, right) => imlDateOrder(left.data_entrada_iml) - imlDateOrder(right.data_entrada_iml));
   return rows.map((row) => ({
     sourceId: Number(row.source_id),
     sourceTable: row.source_table,
@@ -109,4 +102,15 @@ export async function getImlRecordsByBo(
     declaracaoObito: row.declaracao_obito,
     causaMortis: row.causa_mortis,
   }));
+}
+
+function imlDateOrder(value: string | null): number {
+  const match = /^(\d{2}\/\d{2}\/\d{4})(?: (\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value ?? '');
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  const date = parseSourceDate(match[1]);
+  const hour = Number(match[2] ?? 0);
+  const minute = Number(match[3] ?? 0);
+  const second = Number(match[4] ?? 0);
+  if (!date || hour > 23 || minute > 59 || second > 59) return Number.MAX_SAFE_INTEGER;
+  return date.getTime() + (hour * 3600 + minute * 60 + second) * 1000;
 }

@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import OlMap from 'ol/Map';
 import { fromLonLat, toLonLat } from 'ol/proj';
@@ -56,11 +57,24 @@ import {
   getFeatureCoordinate,
   shouldIncludeClientClusterFeature,
 } from './utils/map-cluster.utils';
-import { createVectorTileLoadFunction } from './utils/map-tile-loader.utils';
+import {
+  createVectorTileLoadFunction,
+  TileCompleteness,
+  VectorTileLoadError,
+} from './utils/map-tile-loader.utils';
 const DEFAULT_ZOOM = 16;
 const MAP_MAX_ZOOM = 19;
 const LAYER_MAX_ZOOM = MAP_MAX_ZOOM + 1;
 const CLIENT_CLUSTER_MIN_ZOOM = 16;
+// OpenLayers treats minZoom as exclusive. The tile SQL switches from server
+// clusters to raw points at z=16. The tiny adjustment keeps the layer eligible
+// at the exact integer boundary without requesting tiles below z=10.
+const OPENLAYERS_ZOOM_EPSILON = 1e-6;
+export const TILE_LAYER_MIN_ZOOM =
+  MIN_CRIME_TILE_ZOOM - OPENLAYERS_ZOOM_EPSILON;
+// Client clustering can be visible during the half-zoom transition. Server
+// cluster features are excluded from its source, so there is no double render.
+export const CLIENT_CLUSTER_LAYER_MIN_ZOOM = CLIENT_CLUSTER_MIN_ZOOM - 1;
 const CLUSTER_DISTANCE_PX = 44;
 const CLUSTER_MIN_DISTANCE_PX = 28;
 const TILE_LAYER_UPDATE_DEBOUNCE_MS = 200;
@@ -77,6 +91,7 @@ type HourFilter = { enabled: boolean; startHour: number; endHour: number };
 
 @Component({
   selector: 'app-map',
+  imports: [MatButtonModule],
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -91,6 +106,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     before: string | null;
     after: string | null;
   }>();
+  readonly datasetRevision = input<string | null>(null);
   readonly periodFilter = input.required<string | null>();
   readonly hourFilter = input.required<HourFilter>();
 
@@ -133,6 +149,8 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
   private tileTimeoutDialogOpen = false;
   private clusterRefreshAnimationFrame: number | null = null;
   private tileLayerUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly tileError = signal<string | null>(null);
+  readonly tileCompleteness = signal(false);
 
   ngOnChanges(changes: SimpleChanges): void {
     // Skip map updates during SSR
@@ -147,6 +165,10 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     if (changes['dateFilters']) {
       this.handleDateFiltersChange();
+    }
+
+    if (changes['datasetRevision']) {
+      this.handleDatasetRevisionChange();
     }
 
     if (changes['periodFilter'] || changes['hourFilter']) {
@@ -284,6 +306,17 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     this.progressBarPercentage().set(-1);
   }
+
+  private handleDatasetRevisionChange(): void {
+    const revision = this.datasetRevision();
+    if (this.currentFilters().datasetRevision === revision) return;
+
+    this.currentFilters.set({
+      ...this.currentFilters(),
+      datasetRevision: revision ?? undefined,
+    });
+    this.scheduleTileLayerUpdate();
+  }
   private handlePeriodAndHourFiltersChange(): void {
     const period = this.periodFilter();
     const hour = this.hourFilter();
@@ -334,6 +367,8 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.tileLayerVersion++;
     const tileLayerVersion = this.tileLayerVersion;
     this.tileTimeoutDialogOpen = false;
+    this.tileError.set(null);
+    this.tileCompleteness.set(false);
     this.disposeClusterLayer();
 
     if (this.tileLoadEndListenerKey) {
@@ -394,7 +429,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
         declutter: false,
         renderMode: 'hybrid',
         preload: 0,
-        minZoom: MIN_CRIME_TILE_ZOOM,
+        minZoom: TILE_LAYER_MIN_ZOOM,
         maxZoom: LAYER_MAX_ZOOM,
       });
     } else {
@@ -430,11 +465,14 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       tileLayerVersion,
       cancellation$,
       onTimeout: (version) => this.openTileTimeoutDialog(version),
+      onCompleteness: (version, tileUrl, completeness) =>
+        this.recordTileCompleteness(version, tileUrl, completeness),
       shouldMarkTileError: (version) =>
         !this.isDestroyed && version === this.tileLayerVersion,
       isCancelled: () =>
         this.isDestroyed || tileLayerVersion !== this.tileLayerVersion,
       onError: (error) => {
+        this.handleTileLoadError(error, tileLayerVersion);
         if (error.kind !== 'cancelled') {
           console.warn('[MapComponent] Vector tile load failed', {
             kind: error.kind,
@@ -507,7 +545,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       ),
       declutter: true,
       zIndex: 100,
-      minZoom: CLIENT_CLUSTER_MIN_ZOOM,
+      minZoom: CLIENT_CLUSTER_LAYER_MIN_ZOOM,
       maxZoom: LAYER_MAX_ZOOM,
     });
 
@@ -522,6 +560,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     const clusterFeatureSource = this.clusterFeatureSource;
     if (!clusterFeatureSource) return;
 
+    const featuresToAdd: Feature<Point>[] = [];
     features.forEach((feature) => {
       if (!shouldIncludeClientClusterFeature(feature, activeCategories)) return;
 
@@ -532,10 +571,12 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       if (this.loadedClusterFeatureKeys.has(key)) return;
 
       this.loadedClusterFeatureKeys.add(key);
-      clusterFeatureSource.addFeature(
-        createClientClusterFeature(feature, coordinate)
-      );
+      featuresToAdd.push(createClientClusterFeature(feature, coordinate));
     });
+
+    if (featuresToAdd.length > 0) {
+      clusterFeatureSource.addFeatures(featuresToAdd);
+    }
   }
 
   private disposeClusterLayer(): void {
@@ -573,14 +614,69 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     });
   }
 
+  retryTileLoads(): void {
+    if (this.isDestroyed) return;
+
+    this.tileError.set(null);
+    this.tileCompleteness.set(false);
+    this.tileSource?.clear();
+    this.scheduleVisibleClusterRefresh(this.tileLayerVersion);
+  }
+
+  private handleTileLoadError(
+    error: VectorTileLoadError,
+    tileLayerVersion: number
+  ): void {
+    if (
+      this.isDestroyed ||
+      tileLayerVersion !== this.tileLayerVersion ||
+      error.kind === 'cancelled'
+    ) {
+      return;
+    }
+
+    if (error.kind === 'http' && error.status === 429) {
+      this.tileError.set(
+        'O servidor limitou o carregamento de uma parte do mapa. Tente novamente.'
+      );
+      return;
+    }
+
+    this.tileError.set(
+      'Não foi possível carregar uma parte do mapa. Tente novamente.'
+    );
+  }
+
+  private recordTileCompleteness(
+    tileLayerVersion: number,
+    _tileUrl: string,
+    completeness: TileCompleteness
+  ): void {
+    if (this.isDestroyed || tileLayerVersion !== this.tileLayerVersion) return;
+
+    if (completeness.truncated) this.tileCompleteness.set(true);
+  }
+
+  private updateVisibleTileCompleteness(features: FeatureLike[]): void {
+    this.tileCompleteness.set(
+      features.some((feature) => {
+        const truncated = feature.get('truncated');
+        return (
+          truncated === true ||
+          truncated === 1 ||
+          truncated === '1' ||
+          truncated === 'true'
+        );
+      })
+    );
+  }
+
   private refreshVisibleClusterFeatures(tileLayerVersion: number): void {
     if (
       this.isDestroyed ||
       tileLayerVersion !== this.tileLayerVersion ||
       !this.olMap ||
-      !this.tileLayer ||
-      !this.clusterFeatureSource ||
-      (this.olMap.getView().getZoom() ?? 0) < CLIENT_CLUSTER_MIN_ZOOM
+      !this.tileLayer
     ) {
       return;
     }
@@ -590,6 +686,14 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const extent = this.olMap.getView().calculateExtent(mapSize);
     const features = this.tileLayer.getFeaturesInExtent(extent);
+    this.updateVisibleTileCompleteness(features);
+
+    if (
+      !this.clusterFeatureSource ||
+      (this.olMap.getView().getZoom() ?? 0) < CLIENT_CLUSTER_LAYER_MIN_ZOOM
+    ) {
+      return;
+    }
 
     this.loadedClusterFeatureKeys.clear();
     this.clusterFeatureSource.clear(true);

@@ -21,7 +21,6 @@ import {
   createTextTypeMap,
   isRawSystemColumn,
   matchCsvColumnsToTableColumns,
-  normalizeColumnTypeOverrides,
   RAW_SOURCE_COLUMN_TYPE,
 } from './database/database-import-column.utils';
 import {
@@ -107,10 +106,15 @@ export class DatabaseService {
     tableName: string,
     db: DatabaseExecutor = this.prisma
   ): Promise<void> {
-    await db.dynamicTableMetadata.updateMany({
+    const result = await db.dynamicTableMetadata.updateMany({
       where: { table_name: tableName },
       data: { needs_geom_update: true },
     });
+    if (result.count !== 1) {
+      throw new Error(
+        `Could not mark ${tableName} for map-feature ETL: expected one metadata row, updated ${result.count}`
+      );
+    }
   }
   async markTableAsNonGeographic(tableName: string): Promise<void> {
     await this.prisma.dynamicTableMetadata.updateMany({
@@ -362,37 +366,31 @@ export class DatabaseService {
         this.logger.verbose(`Added raw text column: ${column}`);
       }
 
-      // Update metadata (optional - only if metadata table exists)
-      try {
-        const existingSourceColumns = existingColumns.filter(
-          (column) => !isRawSystemColumn(column)
-        );
-        const allColumns = [...existingSourceColumns, ...missingColumns];
-        const storageTypes = createTextTypeMap(allColumns);
-        const updatedLogicalTypes = { ...logicalTypes };
-        existingSourceColumns.forEach((column) => {
-          if (!updatedLogicalTypes[column]) {
-            updatedLogicalTypes[column] = RAW_SOURCE_COLUMN_TYPE;
-          }
-        });
+      const existingSourceColumns = existingColumns.filter(
+        (column) => !isRawSystemColumn(column)
+      );
+      const allColumns = [...existingSourceColumns, ...missingColumns];
+      const storageTypes = createTextTypeMap(allColumns);
+      const updatedLogicalTypes = { ...logicalTypes };
+      existingSourceColumns.forEach((column) => {
+        if (!updatedLogicalTypes[column]) {
+          updatedLogicalTypes[column] = RAW_SOURCE_COLUMN_TYPE;
+        }
+      });
 
-        const columnsJson = {
-          columns: allColumns,
-          types: storageTypes,
-          logicalTypes: updatedLogicalTypes,
-          originalColumns: sourceColumns,
-          schemaName: RAW_SCHEMA,
-          sourcePath: dataPath,
-          csvPath: dataPath,
-        };
+      const columnsJson = {
+        columns: allColumns,
+        types: storageTypes,
+        logicalTypes: updatedLogicalTypes,
+        originalColumns: sourceColumns,
+        schemaName: RAW_SCHEMA,
+        sourcePath: dataPath,
+        csvPath: dataPath,
+      };
 
-        // Set needs_geom_update = TRUE so DynamicTablesService will process geography
-        await this.upsertDynamicTableMetadata(tableName, columnsJson);
-      } catch (metadataError) {
-        this.logger.warn(
-          `Could not update table metadata (table may not exist): ${getErrorMessage(metadataError)}`
-        );
-      }
+      // Dynamic metadata is required for ETL discovery. If publication cannot
+      // record it, fail the import so a retry can repair the missing marker.
+      await this.upsertDynamicTableMetadata(tableName, columnsJson);
 
       this.logger.log(
         `Table ${tableName} updated with ${missingColumns.length} new columns`
@@ -467,26 +465,20 @@ export class DatabaseService {
     );
     await this.prisma.$executeRawUnsafe(createTableSQL);
 
-    // Track the table in dynamic_table_metadata (optional - only if metadata table exists)
-    try {
-      const columnsJson = {
-        columns,
-        types,
-        logicalTypes,
-        originalColumns: rawColumns, // Keep track of raw column names from the source file
-        processedColumns: columns, // Track the processed column names used in DB
-        schemaName: RAW_SCHEMA,
-        sourcePath: dataPath, // Track which source file this came from
-        csvPath: dataPath, // Backward-compatible metadata key for existing readers
-      };
+    const columnsJson = {
+      columns,
+      types,
+      logicalTypes,
+      originalColumns: rawColumns, // Keep track of raw column names from the source file
+      processedColumns: columns, // Track the processed column names used in DB
+      schemaName: RAW_SCHEMA,
+      sourcePath: dataPath, // Track which source file this came from
+      csvPath: dataPath, // Backward-compatible metadata key for existing readers
+    };
 
-      // Set needs_geom_update = TRUE so DynamicTablesService will process geography
-      await this.upsertDynamicTableMetadata(tableName, columnsJson);
-    } catch (metadataError) {
-      this.logger.warn(
-        `Could not track table metadata (table may not exist): ${getErrorMessage(metadataError)}`
-      );
-    }
+    // Dynamic metadata is required for ETL discovery. If publication cannot
+    // record it, fail the import so a retry can repair the missing marker.
+    await this.upsertDynamicTableMetadata(tableName, columnsJson);
 
     this.logger.log(
       `Table ${tableName} created with ${
@@ -504,7 +496,6 @@ export class DatabaseService {
     );
     const postgresFilePath = this.convertToPostgresPath(csvFilePath);
 
-    const countBefore = await this.getTableRecordCount(tableName, db);
     const actualColumns = await this.getTableColumns(tableName, db);
     const csvColumns = await readCsvHeaderColumns(csvFilePath);
 
@@ -550,8 +541,9 @@ export class DatabaseService {
       );
     }
     const dbColumnsToUse = Array.from(columnMapping.values());
-    const sourceRowCount = await countCsvDataRows(csvFilePath);
-    await this.verifyCsvPreparationManifest(csvFilePath, sourceRowCount);
+    const manifestRowCount = await this.verifyCsvPreparationManifest(csvFilePath);
+    const sourceRowCount =
+      manifestRowCount ?? (await countCsvDataRows(csvFilePath));
 
     const copyQuery = buildCopyCsvSql(
       this.rawTable(tableName),
@@ -565,12 +557,15 @@ export class DatabaseService {
     const startTime = Date.now();
 
     try {
-      await db.$executeRawUnsafe(copyQuery);
-      const countAfter = await this.getTableRecordCount(tableName, db);
-      const recordCount = sourceRowCount;
-      if (countAfter < 0 || countBefore < 0) {
-        throw new Error('Invalid database row count during CSV reconciliation');
+      const copiedRows = await db.$executeRawUnsafe(copyQuery);
+      if (!Number.isInteger(copiedRows) || copiedRows !== sourceRowCount) {
+        throw new Error(
+          `CSV COPY reconciliation failed for ${tableName}: expected ${sourceRowCount} rows, copied ${String(
+            copiedRows
+          )}`
+        );
       }
+      const recordCount = sourceRowCount;
       const importTime = Date.now() - startTime;
 
       this.logger.log(
@@ -638,22 +633,6 @@ export class DatabaseService {
     await db.$executeRawUnsafe(`TRUNCATE TABLE ${this.rawTable(tableName)}`);
   }
 
-  async applyColumnTypeOverridesToEmptyTable(
-    tableName: string,
-    columnTypeOverrides: Record<string, string>,
-    db: DatabaseExecutor = this.prisma
-  ): Promise<void> {
-    const overrides = normalizeColumnTypeOverrides(columnTypeOverrides);
-    if (overrides.size === 0) {
-      return;
-    }
-
-    await this.getTableRecordCount(tableName, db);
-    this.logger.debug(
-      `Keeping raw table ${tableName} as TEXT; ${overrides.size} logical type hints remain import-time cleanup hints`
-    );
-  }
-
   async runImportTransaction<T>(
     operation: (db: Prisma.TransactionClient) => Promise<T>
   ): Promise<T> {
@@ -669,14 +648,13 @@ export class DatabaseService {
 
   private async verifyCsvPreparationManifest(
     csvFilePath: string,
-    acceptedRows: number
-  ): Promise<void> {
+  ): Promise<number | undefined> {
     const manifestPath = `${csvFilePath}.manifest.json`;
     let content: string;
     try {
       content = await fs.readFile(manifestPath, 'utf8');
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
       throw error;
     }
 
@@ -690,13 +668,13 @@ export class DatabaseService {
       !Number.isInteger(manifest.acceptedRows) ||
       !Number.isInteger(manifest.rejectedRows) ||
       (manifest.sourceRows as number) !==
-        (manifest.acceptedRows as number) + (manifest.rejectedRows as number) ||
-      (manifest.acceptedRows as number) !== acceptedRows
+        (manifest.acceptedRows as number) + (manifest.rejectedRows as number)
     ) {
       throw new Error(
         `CSV preparation reconciliation failed for ${csvFilePath}`
       );
     }
+    return manifest.acceptedRows as number;
   }
 
   private validateImlTableName(tableName: string): void {

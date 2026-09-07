@@ -93,6 +93,8 @@ services:
       PORT: 8080
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://criminalidade.yudi.com.br}
       READINESS_CHECK_RUNTIME_DEPS: 'true'
+      GEOCODER_SEARCH_URL: ${GEOCODER_SEARCH_URL:-https://nominatim.openstreetmap.org/search}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
       ENABLE_MANUAL_DATA_IMPORT: ${ENABLE_MANUAL_DATA_IMPORT:-false}
     volumes:
       - /media/nvme-data/docker/mapa-criminalidade/shared_import_data:/app/temp:rw # Provision for uid/gid 10001/10001 before startup.
@@ -138,7 +140,7 @@ services:
     image: ghcr.io/maplibre/martin:1.10.1
     command: ['--config', '/config/config.yaml']
     environment:
-      DATABASE_URL: ${MARTIN_DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres}
+      DATABASE_URL: ${MARTIN_DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres?options=-c%20statement_timeout%3D30000%20-c%20plan_cache_mode%3Dforce_custom_plan%20-c%20work_mem%3D32MB}
     volumes:
       - ./martin_config:/config
     networks:

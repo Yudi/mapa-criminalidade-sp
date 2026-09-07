@@ -44,6 +44,7 @@ export function getClusterFeatureKey(
   coordinate: [number, number]
 ): string {
   return [
+    feature.get('feature_id') ?? '',
     feature.get('num_bo'),
     feature.get('ano_bo'),
     feature.get('delegacia') ?? '',
@@ -61,6 +62,7 @@ export function createClientClusterFeature(
   });
 
   clusterFeature.setProperties({
+    feature_id: feature.get('feature_id'),
     num_bo: feature.get('num_bo'),
     ano_bo: feature.get('ano_bo'),
     delegacia: feature.get('delegacia'),

@@ -345,11 +345,19 @@ export class CardComponent implements OnChanges, OnInit {
   }
 
   private emitHourFilter(): void {
-    if (!this.hourForm.valid) {
+    const formValue = this.hourForm.getRawValue();
+
+    if (!formValue.enabled) {
+      this.hourFilterEvent.emit({
+        enabled: false,
+        startHour: 0,
+        endHour: 23,
+      });
       return;
     }
 
-    const formValue = this.hourForm.getRawValue();
+    if (!this.hourForm.valid) return;
+
     const startHour = this.getHour(formValue.startTime);
     const endHour = this.getHour(formValue.endTime);
 

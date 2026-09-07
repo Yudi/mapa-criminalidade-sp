@@ -9,7 +9,7 @@ import type {
 } from '../types/map-features.types';
 
 describe('source table config', () => {
-  it('maps MDIP HORA_FATO into occurrence time metadata', () => {
+  it('includes HORA_FATO among shared occurrence-time aliases', () => {
     expect(OCCURRENCE_COLUMN_MAPPINGS.hora_ocorrencia).toContain('HORA_FATO');
   });
 
@@ -123,6 +123,8 @@ describe('source table config', () => {
 
   it('accepts only anchored source table names with a four-digit year', () => {
     expect(getSourceTableConfig('dados_criminais_2026')).toBeDefined();
+    expect(getSourceTableConfig('mdip')).toBeDefined();
+    expect(getSourceTableConfig('mdip_2026')).toBeNull();
     expect(getSourceTableConfig('dados_criminais_2026_backup')).toBeNull();
     expect(getSourceTableConfig('dados_criminais_evil_2026')).toBeNull();
   });

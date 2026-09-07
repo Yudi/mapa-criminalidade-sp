@@ -60,6 +60,53 @@ OUTPUT_COLUMNS = [
 
 DEFAULT_MAX_EXPORT_BYTES = 128 * 1024 * 1024
 
+REQUIRED_SOURCE_COLUMNS = {
+    "DataEntradaIML",
+    "AnoBO",
+    "NumeroBO",
+    "NomeDelegaciaOrigem",
+}
+
+
+def normalize_source_header(value: str) -> str:
+    without_accents = "".join(
+        character
+        for character in unicodedata.normalize("NFD", value)
+        if unicodedata.category(character) != "Mn"
+    )
+    return re.sub(r"[^A-Z0-9]+", "", without_accents.upper())
+
+
+SOURCE_COLUMN_BY_NORMALIZED = {
+    normalize_source_header(column): column for column in SOURCE_COLUMNS
+}
+
+
+def map_source_headers(fieldnames: list[str | None]) -> tuple[dict[str, int], list[str]]:
+    indexes: dict[str, int] = {}
+    unknown: list[str] = []
+    for index, raw_fieldname in enumerate(fieldnames):
+        fieldname = (raw_fieldname or "").lstrip("\ufeff").strip()
+        canonical = SOURCE_COLUMN_BY_NORMALIZED.get(
+            normalize_source_header(fieldname)
+        )
+        if canonical is None:
+            if fieldname:
+                unknown.append(fieldname)
+            continue
+        if canonical in indexes:
+            raise RuntimeError(
+                f"IML export contains duplicate compatible column: {canonical}"
+            )
+        indexes[canonical] = index
+
+    missing = sorted(REQUIRED_SOURCE_COLUMNS.difference(indexes))
+    if missing:
+        raise RuntimeError(
+            f"IML export is missing required columns: {', '.join(missing)}"
+        )
+    return indexes, unknown
+
 
 class HiddenFieldsParser(HTMLParser):
     def __init__(self) -> None:
@@ -109,12 +156,19 @@ def normalize_lookup_value(value: str) -> str:
     return re.sub(r"[^A-Z0-9]+", " ", without_accents.upper()).strip()
 
 
+def close_response(response: requests.Response) -> None:
+    close = getattr(response, "close", None)
+    if callable(close):
+        close()
+
+
 def postback(
     session: requests.Session,
     html: str,
     target: str,
     timeout_seconds: float,
     extra: dict[str, str] | None = None,
+    stream: bool = False,
 ) -> requests.Response:
     data = hidden_fields(html)
     data["__EVENTTARGET"] = target
@@ -127,63 +181,107 @@ def postback(
         data=data,
         headers={"Referer": URL},
         timeout=(15, timeout_seconds),
+        stream=stream,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except Exception:
+        close_response(response)
+        raise
     return response
 
 
 def decode_export_stream(
     response: requests.Response, max_response_bytes: int
 ):
-    content_length = response.headers.get("Content-Length")
-    if content_length:
-        try:
-            declared_length = int(content_length)
-        except ValueError as error:
-            raise RuntimeError("Export response has an invalid Content-Length") from error
-        if declared_length > max_response_bytes:
-            raise RuntimeError(
-                f"Export response exceeds {max_response_bytes} byte limit"
-            )
-
-    total_size = 0
-    with SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b") as raw:
-        for chunk in response.iter_content(chunk_size=64 * 1024):
-            if not chunk:
-                continue
-            total_size += len(chunk)
-            if total_size > max_response_bytes:
+    try:
+        content_length = response.headers.get("Content-Length")
+        if content_length:
+            try:
+                declared_length = int(content_length)
+            except ValueError as error:
+                raise RuntimeError(
+                    "Export response has an invalid Content-Length"
+                ) from error
+            if declared_length > max_response_bytes:
                 raise RuntimeError(
                     f"Export response exceeds {max_response_bytes} byte limit"
                 )
-            raw.write(chunk)
-        raw.seek(0)
-        text = io.TextIOWrapper(raw, encoding="utf-16-le", newline="")
-        reader = csv.DictReader(text, delimiter="\t")
-        if reader.fieldnames:
-            reader.fieldnames = [
-                field.lstrip("\ufeff") for field in reader.fieldnames
-            ]
-        if reader.fieldnames != SOURCE_COLUMNS:
-            raise RuntimeError(
-                f"Unexpected IML export columns: {reader.fieldnames!r}"
-            )
-        for row in reader:
-            normalized = {
-                column: (row.get(column) or "").strip() for column in SOURCE_COLUMNS
-            }
-            if any(normalized.values()):
-                yield normalized
+
+        total_size = 0
+        with SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b") as raw:
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                total_size += len(chunk)
+                if total_size > max_response_bytes:
+                    raise RuntimeError(
+                        f"Export response exceeds {max_response_bytes} byte limit"
+                    )
+                raw.write(chunk)
+            raw.seek(0)
+            text = io.TextIOWrapper(raw, encoding="utf-16-le", newline="")
+            reader = csv.reader(text, delimiter="\t")
+            fieldnames = next(reader, None)
+            if not fieldnames:
+                raise RuntimeError("IML export has no header row")
+            header_indexes, unknown_headers = map_source_headers(fieldnames)
+            if unknown_headers:
+                print(
+                    "Ignoring unknown IML export columns: "
+                    + ", ".join(unknown_headers),
+                    file=sys.stderr,
+                )
+            for values in reader:
+                normalized = {
+                    column: (
+                        values[index].strip()
+                        if index < len(values)
+                        else ""
+                    )
+                    for column, index in header_indexes.items()
+                }
+                normalized = {
+                    column: normalized.get(column, "") for column in SOURCE_COLUMNS
+                }
+                if any(normalized.values()):
+                    yield normalized
+    finally:
+        close_response(response)
+
+
+def parse_entry_date(value: str) -> datetime | None:
+    value = value.strip()
+    if not value:
+        return None
+
+    for date_format in (
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(value, date_format)
+        except ValueError:
+            continue
+    raise ValueError(f"Invalid DataEntradaIML date: {value!r}")
+
+
+def entry_date_matches_month(value: str, year: int, month: int) -> bool:
+    parsed = parse_entry_date(value)
+    return parsed is None or (parsed.year == year and parsed.month == month)
 
 
 def validate_month_rows(
     rows: list[dict[str, str]], year: int, month: int
 ) -> None:
-    expected_suffix = f"/{month:02}/{year}"
-
     for row in rows:
         entry_date = row["DataEntradaIML"]
-        if entry_date and expected_suffix not in entry_date[:10]:
+        try:
+            matches_month = entry_date_matches_month(entry_date, year, month)
+        except ValueError as error:
+            raise RuntimeError(str(error)) from error
+        if not matches_month:
             raise RuntimeError(
                 f"Export for {year}-{month:02} contained unexpected "
                 f"DataEntradaIML value: {entry_date!r}"
@@ -250,55 +348,67 @@ def scrape_months(
                     EXPORT_TARGET,
                     timeout_seconds,
                     {"ctl00$cphBody$hdfExport": token},
+                    stream=True,
                 )
+                try:
+                    content_type = export.headers.get("Content-Type", "").lower()
+                    if "application/vnd.ms-excel" not in content_type:
+                        raise RuntimeError(
+                            f"Export for {year}-{month:02} was not an Excel response"
+                        )
 
-                content_type = export.headers.get("Content-Type", "").lower()
-                if "application/vnd.ms-excel" not in content_type:
-                    raise RuntimeError(
-                        f"Export for {year}-{month:02} was not an Excel response"
+                    output_path = (
+                        output_dir / f"registro_obitos_iml_{year}_{month:02}.csv"
                     )
+                    rejected_rows = 0
 
-                output_path = (
-                    output_dir / f"registro_obitos_iml_{year}_{month:02}.csv"
-                )
-                rejected_rows = 0
-
-                def output_rows():
-                    nonlocal rejected_rows
-                    for row in decode_export_stream(export, max_response_bytes):
-                        entry_date = row["DataEntradaIML"]
-                        expected_suffix = f"/{month:02}/{year}"
-                        if entry_date and expected_suffix not in entry_date[:10]:
-                            rejected_rows += 1
-                            print(
-                                f"Skipping invalid row from {year}-{month:02}: "
-                                f"unexpected DataEntradaIML {entry_date!r}",
-                                file=sys.stderr,
+                    def output_rows():
+                        nonlocal rejected_rows
+                        for row in decode_export_stream(export, max_response_bytes):
+                            entry_date = row["DataEntradaIML"]
+                            try:
+                                matches_month = entry_date_matches_month(
+                                    entry_date, year, month
+                                )
+                            except ValueError as error:
+                                matches_month = False
+                                reason = str(error)
+                            else:
+                                reason = (
+                                    f"unexpected DataEntradaIML {entry_date!r}"
+                                )
+                            if not matches_month:
+                                rejected_rows += 1
+                                print(
+                                    f"Skipping invalid row from {year}-{month:02}: {reason}",
+                                    file=sys.stderr,
+                                )
+                                continue
+                            row["ANO_REFERENCIA"] = str(year)
+                            row["MES_REFERENCIA"] = str(month)
+                            row["NUM_BO_NORMALIZED"] = normalize_lookup_value(
+                                row["NumeroBO"]
                             )
-                            continue
-                        row["ANO_REFERENCIA"] = str(year)
-                        row["MES_REFERENCIA"] = str(month)
-                        row["NUM_BO_NORMALIZED"] = normalize_lookup_value(
-                            row["NumeroBO"]
-                        )
-                        row["DELEGACIA_REGISTRO_NORMALIZED"] = normalize_lookup_value(
-                            row["NomeDelegaciaOrigem"]
-                        )
-                        yield row
+                            row["DELEGACIA_REGISTRO_NORMALIZED"] = normalize_lookup_value(
+                                row["NomeDelegaciaOrigem"]
+                            )
+                            yield row
 
-                record_count = write_csv(output_path, output_rows())
-                files.append(
-                    {
-                        "month": month,
-                        "recordCount": record_count,
-                        "rejectedRows": rejected_rows,
-                        "outputPath": str(output_path),
-                    }
-                )
-                print(
-                    f"Downloaded {year}-{month:02}: {record_count} records",
-                    file=sys.stderr,
-                )
+                    record_count = write_csv(output_path, output_rows())
+                    files.append(
+                        {
+                            "month": month,
+                            "recordCount": record_count,
+                            "rejectedRows": rejected_rows,
+                            "outputPath": str(output_path),
+                        }
+                    )
+                    print(
+                        f"Downloaded {year}-{month:02}: {record_count} records",
+                        file=sys.stderr,
+                    )
+                finally:
+                    close_response(export)
             except Exception as error:
                 failures.append(f"{year}-{month:02}: {error}")
                 print(

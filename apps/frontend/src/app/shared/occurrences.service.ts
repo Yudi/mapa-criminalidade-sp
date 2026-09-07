@@ -15,7 +15,6 @@ import {
   CategoryInfo,
   GroupedOccurrenceByBoQuery,
   MapFeatureFilterInput,
-  MapFeatureFullQuery,
   MapFeatureLocationInput,
   MapFeatureLookupInput,
   MapFeatureResponse,
@@ -36,12 +35,16 @@ import {
   MAP_FEATURES_CATEGORY_PERIOD_STATS_QUERY,
   MAP_FEATURES_CHARTS_QUERY,
   MAP_FEATURES_METADATA_QUERY,
-  MAP_FEATURE_FULL_QUERY,
+  MAP_FEATURE_BY_ID_QUERY,
 } from './map-features.graphql';
 import {
   parseGroupedOccurrence,
   parseMapFeatureResponse,
 } from './schemas/map-feature-response.schema';
+
+interface MapFeatureByIdQuery {
+  mapFeatureById: MapFeatureResponse | null;
+}
 @Service()
 export class OccurrencesService {
   private dateService = inject(DateService);
@@ -203,30 +206,24 @@ export class OccurrencesService {
     );
   }
   getFullFeature(
-    numBo: string,
-    anoBo: number,
-    delegacia?: string | null
+    featureId: string
   ): Observable<MapFeatureResponse | null> {
-    const normalizedNumBo = numBo.trim();
-    if (!normalizedNumBo || !Number.isSafeInteger(anoBo)) {
-      return throwError(() => new Error('Identificador do BO inválido'));
+    const normalizedFeatureId = featureId.trim();
+    if (!normalizedFeatureId) {
+      return throwError(() => new Error('Identificador da ocorrência inválido'));
     }
 
-    const input: MapFeatureLookupInput = {
-      numBo: normalizedNumBo,
-      anoBo,
-      delegacia: delegacia?.trim() || null,
-    };
+    const input = { id: normalizedFeatureId };
 
     return this.cachedRequest(
       this.filterCacheKey('full-feature', input),
       () =>
         this.graphql
-          .request<MapFeatureFullQuery, { input: MapFeatureLookupInput }>({
-            query: MAP_FEATURE_FULL_QUERY,
-            variables: { input },
+          .request<MapFeatureByIdQuery, { id: string }>({
+            query: MAP_FEATURE_BY_ID_QUERY,
+            variables: { id: normalizedFeatureId },
           })
-          .pipe(map((data) => parseMapFeatureResponse(data.mapFeatureFull)))
+          .pipe(map((data) => parseMapFeatureResponse(data.mapFeatureById)))
     );
   }
   clearCache(): void {
@@ -269,8 +266,6 @@ export class OccurrencesService {
   }
 }
 
-const CACHE_BOUNDS_PRECISION = 100;
-
 function stableFilterKey(value: unknown): string {
   if (!value || typeof value !== 'object') return JSON.stringify(value);
 
@@ -285,12 +280,7 @@ function stableFilterKey(value: unknown): string {
     .sort()
     .reduce<Record<string, unknown>>((result, key) => {
       const current = record[key];
-      if (key === 'minLon' || key === 'maxLon' || key === 'minLat' || key === 'maxLat') {
-        result[key] =
-          typeof current === 'number'
-            ? Math.round(current * CACHE_BOUNDS_PRECISION) / CACHE_BOUNDS_PRECISION
-            : current;
-      } else if (Array.isArray(current)) {
+      if (Array.isArray(current)) {
         result[key] = [...current].filter(Boolean).sort();
       } else if (current && typeof current === 'object') {
         result[key] = JSON.parse(stableFilterKey(current));

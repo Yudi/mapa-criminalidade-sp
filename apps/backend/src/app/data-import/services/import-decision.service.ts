@@ -112,6 +112,7 @@ export class ImportDecisionService {
       return {
         shouldImport: false,
         reason: 'Could not verify file for current year; source skipped',
+        retryable: true,
       };
     }
   }
@@ -224,27 +225,41 @@ export class ImportDecisionService {
       return {
         shouldImport: false,
         reason: `Could not verify file for ${year}; source skipped`,
+        retryable: true,
       };
     }
   }
   async checkMultipleYears(
     category: DataCategory,
     fileCheckCache: FileCheckCache = new Map()
-  ): Promise<Array<{ year: number; shouldImport: boolean; reason: string }>> {
+  ): Promise<
+    Array<{
+      year: number;
+      shouldImport: boolean;
+      reason: string;
+      retryable?: boolean;
+    }>
+  > {
     const results: Array<{
       year: number;
       shouldImport: boolean;
       reason: string;
+      retryable?: boolean;
     }> = [];
     for (const year of category.years) {
       try {
-        const { shouldImport, reason } = await this.shouldImportData(
+        const { shouldImport, reason, retryable } = await this.shouldImportData(
           category,
           year,
           fileCheckCache
         );
         this.logger.log(`${category.name} ${year}: ${reason}`);
-        results.push({ year, shouldImport, reason });
+        results.push({
+          year,
+          shouldImport,
+          reason,
+          ...(retryable ? { retryable: true } : {}),
+        });
       } catch (error) {
         this.logger.error(
           `Error checking import requirements for ${category.name} ${year}:`,
@@ -254,6 +269,7 @@ export class ImportDecisionService {
           year,
           shouldImport: false,
           reason: `Check failed; source skipped: ${getErrorMessage(error)}`,
+          retryable: true,
         });
       }
     }

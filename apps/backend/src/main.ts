@@ -1,3 +1,4 @@
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -22,10 +23,12 @@ async function bootstrap() {
     isProduction ? prodOrigins : devOrigins
   );
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: logLevels,
   });
   app.enableShutdownHooks();
+  const trustedProxies = process.env.TRUSTED_PROXY_CIDRS?.split(',').map((value) => value.trim()).filter(Boolean);
+  if (trustedProxies?.length) app.set('trust proxy', trustedProxies);
 
   app.enableCors({
     origin: allowedOrigins,

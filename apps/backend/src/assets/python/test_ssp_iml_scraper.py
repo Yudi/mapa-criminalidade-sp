@@ -10,6 +10,32 @@ import ssp_iml_scraper as scraper
 
 
 class SspImlScraperTest(unittest.TestCase):
+    def test_export_postback_requests_a_streaming_response(self):
+        calls = []
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def close(self):
+                return None
+
+        class Session:
+            def post(self, *args, **kwargs):
+                calls.append(kwargs)
+                return Response()
+
+        response = scraper.postback(
+            Session(),
+            '<input type="hidden" name="__VIEWSTATE" value="token">',
+            "target",
+            1,
+            stream=True,
+        )
+
+        self.assertIsInstance(response, Response)
+        self.assertTrue(calls[0]["stream"])
+
     def test_normalize_lookup_value_is_stable_for_accents_and_punctuation(self):
         self.assertEqual(
             scraper.normalize_lookup_value("São José d'Além!"),
@@ -52,6 +78,59 @@ class SspImlScraperTest(unittest.TestCase):
                 )
             )
 
+    def test_decode_export_accepts_reordered_and_optional_columns(self):
+        fields = [
+            "\ufeffNumero BO",
+            "Data Entrada IML",
+            "AnoBO",
+            "NomeDelegaciaOrigem",
+            "NovaColuna",
+        ]
+        values = ["42", "01/03/2026", "2026", "Centro", "ignored"]
+        content = ("\t".join(fields) + "\n" + "\t".join(values) + "\n").encode(
+            "utf-16-le"
+        )
+        response = SimpleNamespace(
+            headers={"Content-Length": str(len(content))},
+            iter_content=lambda chunk_size: [content],
+            close=lambda: None,
+        )
+
+        row = list(scraper.decode_export_stream(response, len(content)))[0]
+        self.assertEqual(row["NumeroBO"], "42")
+        self.assertEqual(row["DataEntradaIML"], "01/03/2026")
+        self.assertEqual(row["AnoBO"], "2026")
+        self.assertEqual(row["NomeDelegaciaOrigem"], "Centro")
+        self.assertEqual(row["CausaMortis"], "")
+
+    def test_decode_export_rejects_missing_required_columns(self):
+        fields = ["DataEntradaIML", "AnoBO", "NumeroBO"]
+        content = ("\t".join(fields) + "\n").encode("utf-16-le")
+        response = SimpleNamespace(
+            headers={},
+            iter_content=lambda chunk_size: [content],
+            close=lambda: None,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "NomeDelegaciaOrigem"):
+            list(scraper.decode_export_stream(response, 1024))
+
+    def test_decode_export_closes_after_streaming_byte_limit_failure(self):
+        closed = []
+
+        class Response:
+            headers = {}
+
+            def iter_content(self, chunk_size):
+                yield b"x" * 8
+
+            def close(self):
+                closed.append(True)
+
+        with self.assertRaisesRegex(RuntimeError, "exceeds 4 byte limit"):
+            list(scraper.decode_export_stream(Response(), 4))
+        self.assertEqual(closed, [True])
+
     def test_validate_month_rows_rejects_rows_from_another_month(self):
         row = {column: "" for column in scraper.SOURCE_COLUMNS}
         row["DataEntradaIML"] = "31/03/2026"
@@ -59,6 +138,10 @@ class SspImlScraperTest(unittest.TestCase):
 
         row["DataEntradaIML"] = "01/04/2026"
         with self.assertRaises(RuntimeError):
+            scraper.validate_month_rows([row], 2026, 3)
+
+        row["DataEntradaIML"] = "32/03/2026"
+        with self.assertRaisesRegex(RuntimeError, "Invalid DataEntradaIML date"):
             scraper.validate_month_rows([row], 2026, 3)
 
     def test_write_csv_is_atomic_and_uses_the_public_contract(self):

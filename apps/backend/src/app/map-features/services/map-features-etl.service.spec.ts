@@ -48,6 +48,30 @@ describe('MapFeaturesEtlService', () => {
     };
   }
 
+  it('rejects an empty replacement of a previously published source before advancing revision', async () => {
+    const execute = jest.fn().mockResolvedValue(0);
+    const tx = {
+      $executeRawUnsafe: execute,
+      mapFeature: { findFirst: jest.fn().mockResolvedValue({ id: 'existing' }) },
+      mapFeaturesEtlStatus: { upsert: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn(async (operation: (value: unknown) => Promise<unknown>) => operation(tx)),
+      mapFeaturesEtlStatus: { upsert: jest.fn() },
+    } as unknown as PrismaService;
+    const service = createService(prisma);
+    const internals = service as unknown as {
+      refreshSourceTable(table: string): Promise<number>;
+      removeSourceTableFeatures(table: string, db: unknown): Promise<void>;
+      processSourceTable(table: string, db: unknown, update: boolean): Promise<number>;
+    };
+    jest.spyOn(internals, 'removeSourceTableFeatures').mockResolvedValue();
+    jest.spyOn(internals, 'processSourceTable').mockResolvedValue(0);
+    await expect(internals.refreshSourceTable('celulares_2026')).rejects.toThrow('Refusing to replace');
+    expect(execute.mock.calls.some(([sql]) => String(sql).includes('UPDATE public.map_dataset_revision'))).toBe(false);
+    expect(tx.mapFeaturesEtlStatus.upsert).not.toHaveBeenCalled();
+  });
+
   it('accepts dynamic table metadata with source columns', () => {
     const service = createValidator();
 
@@ -100,16 +124,14 @@ describe('MapFeaturesEtlService', () => {
     ).toContain('btrim("NUM_BO"::text)');
   });
 
-  it('removes only refreshed source-table records from merged features', () => {
+  it('delegates source removal to the shared SQL reconciliation function', () => {
     const sql = buildRemoveSourceTableFeaturesSql();
 
     expect(sql).toContain('UPDATE map_features');
     expect(sql).toContain('array_remove(source_tables, $1)');
-    expect(sql).toContain("record.value->>'source_table' <> $1");
+    expect(sql).toContain("public.map_features_merge_source_data(feature_data, '{}'::jsonb, $1)");
     expect(sql).toContain('source_tables @> ARRAY[$1]::text[]');
     expect(sql).toContain('cardinality(source_tables) > 1');
-    expect(sql).toContain("'celulares_count'");
-    expect(sql).toContain("'objetos_count'");
     expect(sql).not.toContain('DELETE FROM map_features');
   });
 

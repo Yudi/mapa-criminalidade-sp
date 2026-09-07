@@ -15,6 +15,7 @@ const TILE_SCHEMA_VERSION = 'v2';
 export type { TileMetadata, TileFilterParams };
 export interface ExtendedTileFilterParams extends TileFilterParams {
   categories?: string[];
+  datasetRevision?: string;
 }
 
 @Service()
@@ -29,6 +30,12 @@ export class VectorTileService {
     const queryParams = [
       `tileSchema=${encodeURIComponent(TILE_SCHEMA_VERSION)}`,
     ];
+
+    if (params?.datasetRevision) {
+      queryParams.push(
+        `datasetRevision=${encodeURIComponent(params.datasetRevision)}`
+      );
+    }
 
     if (params?.before) {
       queryParams.push(`before=${encodeURIComponent(params.before)}`);

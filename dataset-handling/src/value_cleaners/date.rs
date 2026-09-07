@@ -19,6 +19,10 @@ use crate::patterns::{is_excel_overflow, is_nao_informado, is_null_pattern, is_w
 ///
 /// A cleaned date string in YYYY-MM-DD format, or an empty string when invalid.
 ///
+/// This helper performs generic calendar normalization only. Occurrence-year
+/// eligibility is applied later by the occurrence projection, so historical
+/// birth dates are not discarded during raw import.
+///
 /// # Examples
 ///
 /// ```
@@ -99,11 +103,11 @@ mod tests {
         assert_eq!(clean_date_value("15/01/2024", &logger), "2024-01-15");
         assert_eq!(clean_date_value("17/10/2024", &logger), "2024-10-17");
         assert_eq!(clean_date_value("15-01-2024", &logger), "2024-01-15");
-        assert_eq!(clean_date_value("31/12/1999", &logger), "");
-        assert_eq!(clean_date_value("31/12/2012", &logger), "");
+        assert_eq!(clean_date_value("31/12/1999", &logger), "1999-12-31");
+        assert_eq!(clean_date_value("31/12/2012", &logger), "2012-12-31");
         assert_eq!(clean_date_value("01/01/2013", &logger), "2013-01-01");
-        assert_eq!(clean_date_value("0182-12-06", &logger), "");
-        assert_eq!(clean_date_value("41274", &logger), "");
+        assert_eq!(clean_date_value("0182-12-06", &logger), "0182-12-06");
+        assert_eq!(clean_date_value("41274", &logger), "2012-12-31");
         assert_eq!(clean_date_value("41275", &logger), "2013-01-01");
         assert_eq!(clean_date_value("44927", &logger), "2023-01-01");
         assert_eq!(clean_date_value("45292.0", &logger), "2024-01-01");

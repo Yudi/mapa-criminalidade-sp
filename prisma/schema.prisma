@@ -120,3 +120,10 @@ model MapFeaturesEtlStatus {
 
   @@map("map_features_etl_status")
 }
+
+model MapDatasetRevision {
+  singleton Boolean @id @default(true)
+  revision String @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  @@map("map_dataset_revision")
+}

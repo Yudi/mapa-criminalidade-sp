@@ -7,6 +7,7 @@ import { NEVER, of, throwError, Subject } from 'rxjs';
 import TileState from 'ol/TileState';
 import {
   createVectorTileLoadFunction,
+  TileCompleteness,
   VectorTileLoadError,
 } from './map-tile-loader.utils';
 
@@ -139,5 +140,76 @@ describe('createVectorTileLoadFunction', () => {
     );
     expect(errors[0]?.kind).toBe('decode');
     expect(setState).toHaveBeenCalledWith(TileState.ERROR);
+  });
+
+  it('exposes truncation metadata carried by MVT feature properties', async () => {
+    const { tile, setLoader, getFormat } = createTile();
+    const feature = {
+      get: vi.fn((name: string) =>
+        name === 'tile_total' ? 50_001 : name === 'truncated' ? 1 : undefined
+      ),
+    };
+    getFormat.mockReturnValue({
+      readFeatures: vi.fn(() => [feature]),
+    } as never);
+    const completeness: { tileUrl: string; value: TileCompleteness }[] = [];
+    const http = {
+      get: vi.fn(() =>
+        of(new HttpResponse({ status: 200, body: new ArrayBuffer(2) }))
+      ),
+    };
+
+    createVectorTileLoadFunction({
+      http: http as never,
+      tileLayerVersion: 1,
+      cancellation$: new Subject<void>(),
+      onTimeout: vi.fn(),
+      onCompleteness: (_version, tileUrl, value) =>
+        completeness.push({ tileUrl, value }),
+      shouldMarkTileError: () => true,
+    })(tile as never, '/tile');
+
+    await expect(setLoader.mock.calls[0][0]([], 1, {} as never)).resolves.toEqual([
+      feature,
+    ]);
+    expect(completeness).toEqual([
+      {
+        tileUrl: '/tile',
+        value: {
+          totalFeatures: 50_001,
+          returnedFeatures: 1,
+          truncated: true,
+        },
+      },
+    ]);
+  });
+
+  it('uses the returned feature count when completeness metadata is absent', async () => {
+    const { tile, setLoader, getFormat } = createTile();
+    const feature = { get: vi.fn(() => undefined) };
+    getFormat.mockReturnValue({
+      readFeatures: vi.fn(() => [feature]),
+    } as never);
+    const completeness: TileCompleteness[] = [];
+    const http = {
+      get: vi.fn(() =>
+        of(new HttpResponse({ status: 200, body: new ArrayBuffer(2) }))
+      ),
+    };
+
+    createVectorTileLoadFunction({
+      http: http as never,
+      tileLayerVersion: 1,
+      cancellation$: new Subject<void>(),
+      onTimeout: vi.fn(),
+      onCompleteness: (_version, _tileUrl, value) => completeness.push(value),
+      shouldMarkTileError: () => true,
+    })(tile as never, '/tile');
+
+    await setLoader.mock.calls[0][0]([], 1, {} as never);
+
+    expect(completeness).toEqual([
+      { totalFeatures: 1, returnedFeatures: 1, truncated: false },
+    ]);
   });
 });

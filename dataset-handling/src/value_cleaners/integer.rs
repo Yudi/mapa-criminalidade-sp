@@ -6,7 +6,7 @@
 use crate::logger::Logger;
 use crate::patterns::{
     is_brazilian_zip_code, is_dash_identifier, is_excel_overflow, is_nao_informado,
-    is_valid_integer, is_whitespace_only, NON_DIGIT_EXCEPT_MINUS,
+    is_whitespace_only,
 };
 
 /// Clean an integer value, handling Excel overflow and preserving special patterns.
@@ -42,14 +42,6 @@ pub fn clean_integer_value(value: &str, logger: &Logger) -> String {
 
     let original_value = value;
     let cleaned = value.trim().to_string();
-
-    if cleaned.chars().any(|character| character.is_alphabetic()) {
-        logger.warn(&format!(
-            "Alphabetic characters are not valid in integer value: \"{}\", setting to empty",
-            original_value
-        ));
-        return String::new();
-    }
 
     // Handle whitespace-only values
     if is_whitespace_only(value) {
@@ -99,23 +91,7 @@ pub fn clean_integer_value(value: &str, logger: &Logger) -> String {
         return String::new();
     }
 
-    // Remove non-numeric characters except minus sign
-    let mut result = NON_DIGIT_EXCEPT_MINUS.replace_all(&cleaned, "").to_string();
-
-    // Handle minus signs
-    result = normalize_minus_sign(&result, original_value);
-
-    // Final validation
-    if result.is_empty() || is_valid_integer(&result) {
-        // Don't allow just a minus sign by itself
-        if result == "-" {
-            logger.warn(&format!(
-                "Invalid integer value (just minus sign): \"{}\", setting to empty",
-                original_value
-            ));
-            return String::new();
-        }
-
+    if let Some(result) = parse_exact_integer(&cleaned) {
         if result != original_value {
             logger.debug(&format!(
                 "Cleaned integer value: \"{}\" -> \"{}\"",
@@ -125,36 +101,104 @@ pub fn clean_integer_value(value: &str, logger: &Logger) -> String {
         return result;
     }
 
-    // If cleaning failed, return empty and log warning
+    // Keep the original dirty value in the TEXT raw table. Downstream
+    // projections can reject it with a field-level reason without silently
+    // turning punctuation or alphabetic text into a different integer.
     logger.warn(&format!(
-        "Could not clean malformed integer value: \"{}\", setting to empty",
+        "Could not clean malformed integer value: \"{}\", preserving source text",
         original_value
     ));
-    String::new()
+    cleaned
 }
 
-/// Normalize minus sign placement in a value.
-///
-/// Ensures the minus sign is only at the beginning of the number.
-fn normalize_minus_sign(value: &str, original_value: &str) -> String {
-    if !value.contains('-') {
-        return value.to_string();
+fn parse_exact_integer(value: &str) -> Option<String> {
+    let compact = value
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>();
+    if compact.is_empty() {
+        return None;
     }
 
-    let minus_count = value.matches('-').count();
-
-    if minus_count == 1 && value.starts_with('-') {
-        // Valid negative number
-        return value.to_string();
+    let (negative, unsigned) = match compact.as_bytes().first() {
+        Some(b'-') => (true, &compact[1..]),
+        Some(b'+') => (false, &compact[1..]),
+        _ => (false, compact.as_str()),
+    };
+    if unsigned.is_empty() || unsigned.contains(['+', '-']) {
+        return None;
     }
 
-    // Invalid pattern - remove all minus signs and add one at start if original was negative
-    let without_minus = value.replace('-', "");
-    if original_value.starts_with('-') {
-        format!("-{}", without_minus)
+    let digits = if unsigned.contains('.') && unsigned.contains(',') {
+        let decimal_separator = if unsigned.rfind('.') > unsigned.rfind(',') {
+            '.'
+        } else {
+            ','
+        };
+        let grouping_separator = if decimal_separator == '.' { ',' } else { '.' };
+        let (integer, fractional) = unsigned.rsplit_once(decimal_separator)?;
+        if fractional.is_empty()
+            || !fractional.chars().all(|character| character == '0')
+            || !valid_grouped_integer(integer, grouping_separator)
+        {
+            return None;
+        }
+        integer
+            .chars()
+            .filter(|character| *character != grouping_separator)
+            .collect::<String>()
     } else {
-        without_minus
+        let separator = if unsigned.contains('.') { '.' } else { ',' };
+        let separator_count = unsigned.matches(separator).count();
+        if separator_count == 0 {
+            if !unsigned.chars().all(|character| character.is_ascii_digit()) {
+                return None;
+            }
+            unsigned.to_string()
+        } else if separator_count > 1 {
+            if !valid_grouped_integer(unsigned, separator) {
+                return None;
+            }
+            unsigned
+                .chars()
+                .filter(|character| *character != separator)
+                .collect::<String>()
+        } else {
+            let (integer, fractional) = unsigned.split_once(separator)?;
+            // A single three-digit separator is ambiguous between a locale
+            // decimal ("1.234") and a thousands group ("1.234"). Reject it
+            // rather than inventing either interpretation.
+            if integer.is_empty()
+                || fractional.is_empty()
+                || fractional.len() == 3
+                || !integer.chars().all(|character| character.is_ascii_digit())
+                || !fractional.chars().all(|character| character.is_ascii_digit())
+                || !fractional.chars().all(|character| character == '0')
+            {
+                return None;
+            }
+            integer.to_string()
+        }
+    };
+
+    let digits = digits.trim_start_matches('0');
+    let canonical = if digits.is_empty() { "0" } else { digits };
+    if negative && canonical != "0" {
+        Some(format!("-{}", canonical))
+    } else {
+        Some(canonical.to_string())
     }
+}
+
+fn valid_grouped_integer(value: &str, separator: char) -> bool {
+    let groups = value.split(separator).collect::<Vec<_>>();
+    groups.len() >= 2
+        && !groups[0].is_empty()
+        && groups[0].len() <= 3
+        && groups.iter().all(|group| {
+            !group.is_empty() && group.chars().all(|character| character.is_ascii_digit())
+        })
+        && groups.iter().skip(1).all(|group| group.len() == 3)
 }
 
 #[cfg(test)]
@@ -171,14 +215,22 @@ mod tests {
         assert_eq!(clean_integer_value("123-456-789", &logger), "123-456-789");
         assert_eq!(clean_integer_value("########", &logger), "");
         assert_eq!(clean_integer_value("", &logger), "");
-        assert_eq!(clean_integer_value("-", &logger), "");
+        assert_eq!(clean_integer_value("-", &logger), "-");
+        assert_eq!(clean_integer_value("2026.0", &logger), "2026");
+        assert_eq!(clean_integer_value("2026,0", &logger), "2026");
+        assert_eq!(clean_integer_value("1,0", &logger), "1");
+        assert_eq!(clean_integer_value("1.234", &logger), "1.234");
+        assert_eq!(clean_integer_value("1,234", &logger), "1,234");
+        assert_eq!(clean_integer_value("1.234.567", &logger), "1234567");
+        assert_eq!(clean_integer_value("1,234,567", &logger), "1234567");
+        assert_eq!(clean_integer_value("12abc", &logger), "12abc");
     }
 
     #[test]
-    fn test_normalize_minus_sign() {
-        assert_eq!(normalize_minus_sign("-123", "-123"), "-123");
-        assert_eq!(normalize_minus_sign("123", "123"), "123");
-        assert_eq!(normalize_minus_sign("1-2-3", "-123"), "-123");
-        assert_eq!(normalize_minus_sign("1-2-3", "123"), "123");
+    fn parse_exact_integer_rejects_non_integral_values() {
+        assert_eq!(parse_exact_integer("1.5"), None);
+        assert_eq!(parse_exact_integer("1,5"), None);
+        assert_eq!(parse_exact_integer("1e3"), None);
+        assert_eq!(parse_exact_integer("-1"), Some("-1".to_string()));
     }
 }

@@ -1,10 +1,12 @@
 use crate::utils::normalize_text;
-use crate::{parquet_io, text_normalizer::normalize_column_name};
+use crate::{
+    parquet_io,
+    text_normalizer::normalize_unique_headers,
+};
 use calamine::{open_workbook_auto, DataType, Reader};
 use chrono::NaiveDate;
 use rayon::prelude::*;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -48,9 +50,13 @@ fn is_data_sheet(sheet_name: &str) -> bool {
 
     for metadata_name in &metadata_sheet_names {
         let normalized_metadata_name = normalize_text(metadata_name);
-        if normalized_name.contains(&normalized_metadata_name) {
+        let suffix = normalized_name.strip_prefix(&normalized_metadata_name);
+        if suffix
+            .map(|value| value.is_empty() || value.starts_with('_') || value.starts_with('-'))
+            .unwrap_or(false)
+        {
             println!(
-                "Skipping metadata sheet: {} as it contains '{}'",
+                "Skipping metadata sheet: {} as it matches '{}' metadata",
                 sheet_name, metadata_name
             );
             return false;
@@ -68,26 +74,99 @@ fn is_data_row(row: &[DataType], _column_count: usize) -> bool {
     !row.is_empty() && row.iter().any(|cell| !cell.to_string().trim().is_empty())
 }
 
-fn normalize_blank_headers(headers: &[String]) -> Vec<String> {
-    let mut seen = HashMap::<String, usize>::new();
-    headers
-        .iter()
-        .enumerate()
-        .map(|(index, header)| {
-            let base = if header.trim().is_empty() {
-                format!("column_{}", index + 1)
-            } else {
-                header.trim().to_string()
-            };
-            let count = seen.entry(base.clone()).or_insert(0);
-            *count += 1;
-            if *count == 1 {
-                base
-            } else {
-                format!("{}_{}", base, count)
+const MAX_HEADER_CANDIDATE_ROWS: usize = 25;
+const MIN_HEADER_SIGNAL_COUNT: usize = 2;
+
+/// Find a useful schema row without assuming every workbook has the same
+/// number of title/banner rows. Generic workbooks retain the historical first
+/// non-empty row behavior; a later row wins only when it has several
+/// recognizable data-field labels.
+fn find_header_row(
+    range: &calamine::Range<DataType>,
+) -> Result<(usize, Vec<String>), String> {
+    let mut first_non_empty: Option<Vec<String>> = None;
+    let mut best_candidate: Option<(usize, usize, Vec<String>)> = None;
+    let mut ambiguous_best_candidate = false;
+
+    for (row_index, row) in range.rows().enumerate().take(MAX_HEADER_CANDIDATE_ROWS) {
+        if !is_data_row(row, 0) {
+            continue;
+        }
+
+        let raw_headers = row.iter().map(DataType::to_string).collect::<Vec<_>>();
+        let (normalized_headers, _) = normalize_unique_headers(&raw_headers);
+        if normalized_headers.is_empty() {
+            continue;
+        }
+
+        if first_non_empty.is_none() {
+            first_non_empty = Some(normalized_headers.clone());
+        }
+
+        let signal_count = normalized_headers
+            .iter()
+            .filter(|header| is_header_signal(header))
+            .count();
+        match best_candidate.as_ref() {
+            None => best_candidate = Some((row_index, signal_count, normalized_headers)),
+            Some((_, best_score, _)) if signal_count > *best_score => {
+                best_candidate = Some((row_index, signal_count, normalized_headers));
+                ambiguous_best_candidate = false;
             }
+            Some((_, best_score, _))
+                if signal_count == *best_score && signal_count >= MIN_HEADER_SIGNAL_COUNT =>
+            {
+                ambiguous_best_candidate = true;
+            }
+            _ => {}
+        }
+    }
+
+    if let Some((header_index, signal_count, headers)) = best_candidate.as_ref() {
+        if *signal_count >= MIN_HEADER_SIGNAL_COUNT {
+            if ambiguous_best_candidate {
+                return Err("Ambiguous header rows matched the source-field signals".to_string());
+            }
+            return Ok((*header_index, headers.clone()));
+        }
+    }
+
+    first_non_empty
+        .map(|headers| {
+            let header_index = range
+                .rows()
+                .enumerate()
+                .take(MAX_HEADER_CANDIDATE_ROWS)
+                .find_map(|(index, row)| is_data_row(row, 0).then_some(index))
+                .unwrap_or_default();
+            (header_index, headers)
         })
-        .collect()
+        .ok_or_else(|| "No header row found in sheet".to_string())
+}
+
+fn is_header_signal(header: &str) -> bool {
+    const SIGNALS: [&str; 14] = [
+        "BO",
+        "NUM",
+        "NUMERO",
+        "ANO",
+        "DATA",
+        "LAT",
+        "LATITUDE",
+        "LON",
+        "LONG",
+        "LONGITUDE",
+        "DELEGACIA",
+        "MUNICIPIO",
+        "CEP",
+        "ID",
+    ];
+
+    SIGNALS.iter().any(|signal| {
+        header == *signal
+            || header.starts_with(&format!("{}_", signal))
+            || header.ends_with(&format!("_{}", signal))
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -106,8 +185,10 @@ struct SheetConversionFailure {
 
 #[derive(Debug, Serialize)]
 struct ConversionManifest {
+    manifest_version: u8,
     input_path: String,
     format: String,
+    complete: bool,
     sheets: Vec<SheetConversionReport>,
     skipped_sheets: Vec<SheetConversionFailure>,
 }
@@ -193,33 +274,23 @@ pub fn convert_excel(
             output_format.extension()
         ));
 
-        let mut rows: calamine::Rows<'_, DataType> = range.rows();
-        let headers = rows
-            .find(|row| is_data_row(row, 0))
-            .ok_or_else(|| format!("No header row found in sheet {}", sheet_name))?;
-        let column_names = normalize_blank_headers(
-            &headers
-                .iter()
-                .map(|cell: &DataType| cell.to_string())
-                .collect::<Vec<_>>(),
-        );
+        let (header_index, column_names) =
+            find_header_row(&range).map_err(|error| format!("{}: {}", sheet_name, error))?;
         if column_names.is_empty() {
             return Err(format!("Sheet {} has no columns", sheet_name));
         }
 
-        let row_iterator = rows.filter(|row| is_data_row(row, column_names.len()));
+        let column_count = column_names.len();
+        let row_iterator = range
+            .rows()
+            .enumerate()
+            .filter(move |(index, row)| *index > header_index && is_data_row(row, column_count))
+            .map(|(_, row)| row);
         let value_iterator = row_iterator.map(|row| extract_row_values(row, &column_names));
         let rows_written = match output_format {
             OutputFormat::Csv => write_csv_sheet(&output_path, &column_names, value_iterator)
                 .map_err(|error| error.to_string())?,
             OutputFormat::Parquet => {
-                let (final_headers, column_indices) = dedupe_normalized_headers(&column_names);
-                let selected_rows = value_iterator.map(|row| {
-                    column_indices
-                        .iter()
-                        .map(|column_index| row.get(*column_index).cloned().unwrap_or_default())
-                        .collect::<Vec<_>>()
-                });
                 let temporary_path = output_path.with_extension(format!(
                     "{}.{}.part",
                     OutputFormat::Parquet.extension(),
@@ -227,8 +298,8 @@ pub fn convert_excel(
                 ));
                 let rows_written = parquet_io::write_string_rows_to_parquet_iter(
                     &temporary_path,
-                    &final_headers,
-                    selected_rows,
+                    &column_names,
+                    value_iterator,
                 )
                 .map_err(|error| error.to_string())?;
                 fs::rename(temporary_path, &output_path)
@@ -292,8 +363,10 @@ pub fn convert_excel(
             .unwrap_or_default()
     ));
     let manifest = serde_json::to_vec_pretty(&ConversionManifest {
+        manifest_version: 1,
         input_path: excel_path.display().to_string(),
         format: output_format.extension().to_string(),
+        complete: skipped_sheets.is_empty(),
         sheets: reports,
         skipped_sheets,
     })?;
@@ -447,29 +520,10 @@ fn cell_to_string(cell: &DataType, column_name: &str) -> String {
     }
 }
 
-fn dedupe_normalized_headers(headers: &[String]) -> (Vec<String>, Vec<usize>) {
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    let mut final_headers = Vec::new();
-    let mut column_indices = Vec::new();
-
-    for (index, header) in headers.iter().enumerate() {
-        let normalized = normalize_column_name(header);
-        let count = seen.entry(normalized.clone()).or_insert(0);
-        *count += 1;
-        final_headers.push(if *count == 1 {
-            normalized
-        } else {
-            format!("{}_{}", normalized, count)
-        });
-        column_indices.push(index);
-    }
-
-    (final_headers, column_indices)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::escape_csv_formula_value;
+    use super::{escape_csv_formula_value, find_header_row, is_data_sheet};
+    use calamine::{Cell, DataType, Range};
 
     #[test]
     fn escapes_values_that_spreadsheets_can_interpret_as_formulas() {
@@ -491,5 +545,84 @@ mod tests {
         for safe_value in ["normal", "1+1", "", " NULL "] {
             assert_eq!(escape_csv_formula_value(safe_value), safe_value);
         }
+    }
+
+    #[test]
+    fn recognizes_data_tab_named_tabela1() {
+        assert!(is_data_sheet("Tabela1"));
+        assert!(!is_data_sheet("Tabela"));
+        assert!(is_data_sheet("TabelaDados"));
+        assert!(!is_data_sheet("Campos da Tabela - MDIP"));
+        assert!(!is_data_sheet("Campos da Tabela - Dados Criminais"));
+        assert!(!is_data_sheet("Tabela - MDIP"));
+    }
+
+    #[test]
+    fn skips_banner_rows_when_a_structured_header_follows() {
+        let range = Range::from_sparse(vec![
+            Cell::new(
+                (0, 0),
+                DataType::String("Boletim de ocorrências".to_string()),
+            ),
+            Cell::new((2, 0), DataType::String("NUM_BO".to_string())),
+            Cell::new(
+                (2, 1),
+                DataType::String("DATA_OCORRENCIA".to_string()),
+            ),
+            Cell::new((2, 2), DataType::String("LATITUDE".to_string())),
+            Cell::new((2, 3), DataType::String("LONGITUDE".to_string())),
+            Cell::new((3, 0), DataType::String("123".to_string())),
+            Cell::new((3, 1), DataType::String("2024-01-01".to_string())),
+            Cell::new((3, 2), DataType::String("-23.5".to_string())),
+            Cell::new((3, 3), DataType::String("-46.6".to_string())),
+        ]);
+
+        assert_eq!(
+            find_header_row(&range).unwrap(),
+            (2, vec![
+                "NUM_BO".to_string(),
+                "DATA_OCORRENCIA".to_string(),
+                "LATITUDE".to_string(),
+                "LONGITUDE".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn manifest_marks_partial_conversion_incomplete() {
+        let manifest = serde_json::to_value(super::ConversionManifest {
+            manifest_version: 1,
+            input_path: "source.xlsx".to_string(),
+            format: "parquet".to_string(),
+            complete: false,
+            sheets: vec![super::SheetConversionReport {
+                sheet: "A".to_string(),
+                rows: 1,
+                columns: 2,
+                output_path: "source_A.parquet".to_string(),
+            }],
+            skipped_sheets: vec![super::SheetConversionFailure {
+                sheet: "B".to_string(),
+                error: "read error".to_string(),
+            }],
+        })
+        .unwrap();
+
+        assert_eq!(manifest["manifest_version"], 1);
+        assert_eq!(manifest["complete"], false);
+        assert_eq!(manifest["sheets"].as_array().unwrap().len(), 1);
+        assert_eq!(manifest["skipped_sheets"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rejects_ambiguous_structured_header_rows() {
+        let range = Range::from_sparse(vec![
+            Cell::new((0, 0), DataType::String("NUM_BO".to_string())),
+            Cell::new((0, 1), DataType::String("DATA_FATO".to_string())),
+            Cell::new((2, 0), DataType::String("NUM_BO".to_string())),
+            Cell::new((2, 1), DataType::String("DATA_FATO".to_string())),
+        ]);
+
+        assert!(find_header_row(&range).is_err());
     }
 }

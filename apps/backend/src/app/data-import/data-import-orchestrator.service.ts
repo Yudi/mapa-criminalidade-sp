@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import * as path from 'path';
 
 import { DataCategory, FileMetadata } from './types/data-import.types';
@@ -89,30 +90,52 @@ export class DataImportService {
 
     const validCategories = DataCategoryConfig.getDirectCategories();
     const fileCheckCache: FileCheckCache = new Map();
-
-    const targetGroups = await processWithConcurrency(
-      validCategories,
-      this.maxConcurrentImportOperations,
-      async (category): Promise<ImportTarget[]> => {
-        const decisions = await this.importDecisionService.checkMultipleYears(
-          category,
-          fileCheckCache
-        );
-
-        return decisions
-          .filter((decision) => decision.shouldImport)
-          .map((decision) => ({ category, year: decision.year }));
-      }
-    );
-
-    const targets = targetGroups.flat();
-
-    this.logger.log(
-      `Auto-import: ${targets.length} category/year target(s) need updates`
-    );
+    const failures: string[] = [];
 
     try {
-      await this.importTargetsOptimized(targets, fileCheckCache);
+      const targetGroups = await processWithConcurrency(
+        validCategories,
+        this.maxConcurrentImportOperations,
+        async (category): Promise<ImportTarget[]> => {
+          let decisions: Awaited<ReturnType<ImportDecisionService['checkMultipleYears']>>;
+          try {
+            decisions = await this.importDecisionService.checkMultipleYears(
+              category,
+              fileCheckCache
+            );
+          } catch (error) {
+            failures.push(`${category.name}: ${getErrorMessage(error)}`);
+            return [];
+          }
+
+          const unavailable = decisions.filter(
+            (decision) => decision.retryable
+          );
+          if (unavailable.length > 0) {
+            failures.push(
+              `Could not verify ${category.name} source(s): ${unavailable
+                .map(({ year, reason }) => `${year}: ${reason}`)
+                .join('; ')}`
+            );
+          }
+
+          return decisions
+            .filter((decision) => decision.shouldImport && !decision.retryable)
+            .map((decision) => ({ category, year: decision.year }));
+        }
+      );
+
+      const targets = targetGroups.flat();
+
+      this.logger.log(
+        `Auto-import: ${targets.length} category/year target(s) need updates`
+      );
+
+      try {
+        await this.importTargetsOptimized(targets, fileCheckCache);
+      } catch (error) {
+        failures.push(getErrorMessage(error));
+      }
       try {
         await this.imlImportService.importWithIntelligentLogic();
       } catch (error) {
@@ -121,6 +144,9 @@ export class DataImportService {
             error
           )}`
         );
+      }
+      if (failures.length > 0) {
+        throw new Error(`Data import completed partially: ${failures.join('; ')}`);
       }
     } finally {
       await this.cleanupFileCheckCache(fileCheckCache);
@@ -133,6 +159,7 @@ export class DataImportService {
     if (targets.length === 0) return;
 
     await this.tempDirReady;
+    await this.fileOperationsService.sweepStaleDirectories(this.tempDir);
 
     const urlGroups = new Map<string, ImportUrlGroup>();
 
@@ -226,6 +253,11 @@ export class DataImportService {
           '; '
         )}`
       );
+      throw new Error(
+        `Data import completed partially: ${failureCount}/${groupResults.length} source group(s) failed: ${failedGroups.join(
+          '; '
+        )}`
+      );
     }
 
     this.logger.log(
@@ -263,6 +295,14 @@ export class DataImportService {
     const yearChecks = await this.importDecisionService.checkMultipleYears(
       category
     );
+    const unavailable = yearChecks.filter((check) => check.retryable);
+    if (unavailable.length > 0) {
+      throw new Error(
+        `Could not verify ${category.name} source(s): ${unavailable
+          .map(({ year, reason }) => `${year}: ${reason}`)
+          .join('; ')}`
+      );
+    }
     const yearsToImport = yearChecks.filter((check) => check.shouldImport);
 
     if (yearsToImport.length === 0) {
@@ -337,12 +377,13 @@ export class DataImportService {
     const url = DataCategoryConfig.getUrl(category, year);
     const fileName = `${category.tablePrefix}_${year}.xlsx`;
     const filePath = path.join(this.tempDir, fileName);
-    const parquetDir = path.join(
-      this.tempDir,
-      `${category.tablePrefix}_${year}_parquet`
+    const parquetDir = this.createParquetAttemptDirectory(
+      category.tablePrefix,
+      year
     );
 
     await this.tempDirReady;
+    await this.fileOperationsService.sweepStaleDirectories(this.tempDir);
     this.logger.log(`Downloading ${url}...`);
 
     try {
@@ -360,7 +401,8 @@ export class DataImportService {
         await this.parquetProcessingService.importParquetToDatabase(
           parquetDir,
           category,
-          year
+          year,
+          filePath
         );
 
       const metadata: FileMetadata = {
@@ -393,8 +435,19 @@ export class DataImportService {
 
       throw error;
     } finally {
-      await this.fileOperationsService.cleanup(filePath);
-      await this.fileOperationsService.cleanup(undefined, parquetDir);
+      const cleanupResults = await Promise.allSettled([
+        this.fileOperationsService.cleanup(filePath),
+        this.fileOperationsService.cleanup(undefined, parquetDir),
+      ]);
+      for (const result of cleanupResults) {
+        if (result.status === 'rejected') {
+          this.logger.warn(
+            `Failed to cleanup direct import temporary files: ${getErrorMessage(
+              result.reason
+            )}`
+          );
+        }
+      }
     }
   }
   private async importFromSingleFile(
@@ -460,13 +513,12 @@ export class DataImportService {
 
     let successCount = 0;
     const categoriesToProcess = categories;
+    const parquetDir = path.join(
+      this.tempDir,
+      `${primaryCategory.tablePrefix}_${year}_shared_parquet_${randomUUID()}`
+    );
 
     try {
-      const parquetDir = path.join(
-        this.tempDir,
-        `${primaryCategory.tablePrefix}_${year}_shared_parquet`
-      );
-
       this.logger.log(
         `Converting ${fileName} once for ${categoriesToProcess.length} categories`
       );
@@ -492,7 +544,8 @@ export class DataImportService {
                 await this.parquetProcessingService.importParquetToDatabase(
                   parquetDir,
                   category,
-                  year
+                  year,
+                  filePath
                 );
 
               const metadata: FileMetadata = {
@@ -567,11 +620,6 @@ export class DataImportService {
       );
       throw error;
     } finally {
-      const parquetDir = path.join(
-        this.tempDir,
-        `${primaryCategory.tablePrefix}_${year}_shared_parquet`
-      );
-
       try {
         await this.fileOperationsService.cleanup('', parquetDir);
         this.logger.log(`Cleaned up Parquet directory for ${fileName}`);
@@ -627,5 +675,15 @@ export class DataImportService {
           );
       }
     }
+  }
+
+  private createParquetAttemptDirectory(
+    tablePrefix: string,
+    year: number
+  ): string {
+    return path.join(
+      this.tempDir,
+      `${tablePrefix}_${year}_parquet_${randomUUID()}`
+    );
   }
 }

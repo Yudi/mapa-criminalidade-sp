@@ -6,6 +6,8 @@ import TileState from 'ol/TileState';
 import type OlVectorTile from 'ol/VectorTile';
 
 const TILE_STATUS_HEADER = 'X-Map-Tile-Status';
+const TILE_TOTAL_HEADER = 'X-Map-Tile-Total';
+const TILE_TRUNCATED_HEADER = 'X-Map-Tile-Truncated';
 const HTTP_STATUS_NO_CONTENT = 204;
 
 export type VectorTileLoadErrorKind =
@@ -27,11 +29,22 @@ export class VectorTileLoadError extends Error {
   }
 }
 
+export interface TileCompleteness {
+  totalFeatures: number;
+  returnedFeatures: number;
+  truncated: boolean;
+}
+
 export interface VectorTileLoadOptions {
   http: HttpClient;
   tileLayerVersion: number;
   cancellation$: Subject<void>;
   onTimeout: (tileLayerVersion: number) => void;
+  onCompleteness?: (
+    tileLayerVersion: number,
+    tileUrl: string,
+    completeness: TileCompleteness
+  ) => void;
   shouldMarkTileError: (tileLayerVersion: number) => boolean;
   isCancelled?: () => boolean;
   onError?: (error: VectorTileLoadError) => void;
@@ -42,6 +55,7 @@ export function createVectorTileLoadFunction({
   tileLayerVersion,
   cancellation$,
   onTimeout,
+  onCompleteness,
   shouldMarkTileError,
   isCancelled,
   onError,
@@ -69,12 +83,14 @@ export function createVectorTileLoadFunction({
 
         if (response.status === HTTP_STATUS_NO_CONTENT) {
           vectorTile.setFeatures([]);
+          onCompleteness?.(tileLayerVersion, url, readTileCompleteness([], response.headers));
           return [];
         }
 
         const data = response.body;
         if (!data || data.byteLength === 0) {
           vectorTile.setFeatures([]);
+          onCompleteness?.(tileLayerVersion, url, readTileCompleteness([], response.headers));
           return [];
         }
 
@@ -84,6 +100,11 @@ export function createVectorTileLoadFunction({
           featureProjection: projection,
         });
         vectorTile.setFeatures(features);
+        onCompleteness?.(
+          tileLayerVersion,
+          url,
+          readTileCompleteness(features, response.headers)
+        );
         return features;
       } catch (cause) {
         const error = classifyTileError(
@@ -108,6 +129,50 @@ export function createVectorTileLoadFunction({
       }
     });
   };
+}
+
+function readTileCompleteness(
+  features: FeatureLike[],
+  headers: { get(name: string): string | null }
+): TileCompleteness {
+  let totalFeatures = parseCount(headers.get(TILE_TOTAL_HEADER));
+  let truncated = headers.get(TILE_TRUNCATED_HEADER) === 'true';
+
+  for (const feature of features) {
+    const featureTotal = parseCount(feature.get('tile_total'));
+    if (featureTotal !== null) {
+      totalFeatures = Math.max(totalFeatures ?? 0, featureTotal);
+    }
+
+    const featureTruncated = feature.get('truncated');
+    truncated =
+      truncated ||
+      featureTruncated === true ||
+      featureTruncated === 1 ||
+      featureTruncated === '1' ||
+      featureTruncated === 'true';
+  }
+
+  const returnedFeatures = features.length;
+  return {
+    totalFeatures: totalFeatures ?? returnedFeatures,
+    returnedFeatures,
+    truncated,
+  };
+}
+
+function parseCount(value: unknown): number | null {
+  if (
+    value === null ||
+    value === undefined ||
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && value.trim() === '')
+  ) {
+    return null;
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function classifyTileError(

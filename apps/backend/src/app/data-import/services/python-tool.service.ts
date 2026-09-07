@@ -39,6 +39,7 @@ class BoundedOutput {
 @Injectable()
 export class PythonToolService implements OnModuleDestroy {
   private readonly activeChildren = new Set<ChildProcess>();
+  private isShuttingDown = false;
   private readonly outputLimit = this.getPositiveIntegerEnv(
     'DATA_IMPORT_SUBPROCESS_OUTPUT_LIMIT_BYTES',
     DEFAULT_OUTPUT_LIMIT,
@@ -55,7 +56,13 @@ export class PythonToolService implements OnModuleDestroy {
     args: string[],
     timeoutMs: number
   ): Promise<PythonProcessResult> {
+    if (this.isShuttingDown) {
+      throw new Error('Python tool is shutting down');
+    }
     const scriptPath = await this.resolveAssetScript(scriptName);
+    if (this.isShuttingDown) {
+      throw new Error('Python tool is shutting down');
+    }
 
     return await new Promise((resolve, reject) => {
       const child = spawn(this.pythonBinaryPath, [scriptPath, ...args], {
@@ -140,6 +147,7 @@ export class PythonToolService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
+    this.isShuttingDown = true;
     await Promise.all(
       Array.from(this.activeChildren).map((child) =>
         this.terminateChild(child, undefined, true)

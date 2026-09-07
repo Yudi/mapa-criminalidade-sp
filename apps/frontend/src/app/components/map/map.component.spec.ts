@@ -7,7 +7,11 @@ import CircleStyle from 'ol/style/Circle';
 import Icon from 'ol/style/Icon';
 import Style from 'ol/style/Style';
 
-import { MapComponent } from './map.component';
+import {
+  CLIENT_CLUSTER_LAYER_MIN_ZOOM,
+  MapComponent,
+  TILE_LAYER_MIN_ZOOM,
+} from './map.component';
 import { VectorTileMapSetupService } from './services/vector-tile-map-setup.service';
 import {
   createClusterStyleFunction,
@@ -52,6 +56,12 @@ describe('MapComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('keeps the tile and client cluster layers eligible at their handoff zooms', () => {
+    expect(TILE_LAYER_MIN_ZOOM).toBeLessThan(10);
+    expect(TILE_LAYER_MIN_ZOOM).toBeGreaterThan(9.99);
+    expect(CLIENT_CLUSTER_LAYER_MIN_ZOOM).toBe(15);
+  });
+
   it('renders clickable low-zoom singletons as icons', () => {
     const style = createOccurrenceStyleFunction(['Roubo'], () => '/marker.png')(
       new Feature({
@@ -77,6 +87,19 @@ describe('MapComponent', () => {
 
     expect(style.getImage()).toBeInstanceOf(CircleStyle);
     expect(style.getText()?.getText()).toBe('42');
+  });
+
+  it('renders mixed-category server clusters before singleton category filtering', () => {
+    const style = createOccurrenceStyleFunction(['Roubo', 'Furto'], () => '/marker.png')(
+      new Feature({
+        category: 'Múltiplas categorias',
+        cluster_count: 3,
+        server_cluster: 1,
+      })
+    ) as Style;
+
+    expect(style.getImage()).toBeInstanceOf(CircleStyle);
+    expect(style.getText()?.getText()).toBe('3');
   });
 
   it('clusters high-zoom raw features but keeps a solo feature as an icon', () => {
@@ -108,12 +131,14 @@ describe('MapComponent', () => {
     const rawFeature = new Feature({
       geometry: new Point([1, 2]),
       category: 'Roubo',
+      feature_id: 'feature-1',
       num_bo: '123',
       ano_bo: 2024,
     });
     const serverSingleton = new Feature({
       geometry: new Point([3, 4]),
       category: 'Roubo',
+      feature_id: 'feature-2',
       server_singleton: 1,
     });
     const testableComponent = component as unknown as {
@@ -124,6 +149,8 @@ describe('MapComponent', () => {
       ): void;
     };
     testableComponent.clusterFeatureSource = source;
+    const addFeaturesSpy = vi.spyOn(source, 'addFeatures');
+    const addFeatureSpy = vi.spyOn(source, 'addFeature');
 
     testableComponent.addClusterFeatures(
       [rawFeature, serverSingleton],
@@ -132,6 +159,8 @@ describe('MapComponent', () => {
 
     expect(source.getFeatures()).toHaveLength(1);
     expect(source.getFeatures()[0].get('num_bo')).toBe('123');
+    expect(addFeaturesSpy).toHaveBeenCalledTimes(1);
+    expect(addFeatureSpy).not.toHaveBeenCalled();
   });
 
   it('debounces consecutive tile-layer refreshes', () => {

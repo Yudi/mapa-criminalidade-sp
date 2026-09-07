@@ -3,16 +3,13 @@
 //! This module provides functions for detecting and parsing various date/time
 //! formats, including Excel serial dates, and converting between formats.
 
-use chrono::{Datelike, Days, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Days, NaiveDate, NaiveDateTime, NaiveTime};
 
-/// Earliest supported occurrence year for imported crime data.
-pub const MIN_VALID_DATE_YEAR: i32 = 2013;
-
-/// Range for valid Excel serial dates.
+/// Range for valid Excel serial dates used by generic date parsing.
 ///
 /// Excel serial dates start from January 1, 1900 (day 1).
 /// We use a conservative range to avoid false positives with regular numbers.
-pub const EXCEL_SERIAL_MIN: i32 = 41275; // January 1, 2013
+pub const EXCEL_SERIAL_MIN: i32 = 1; // January 1, 1900
 pub const EXCEL_SERIAL_MAX: i32 = 73050; // December 31, 2099
 
 /// Check if a string represents a valid date in common formats.
@@ -48,18 +45,14 @@ pub fn parse_date_flexible(value: &str) -> Option<NaiveDate> {
         .find_map(|format| NaiveDate::parse_from_str(trimmed, format).ok())
 }
 
-/// Check if a parsed date is inside the supported occurrence data range.
-pub fn is_supported_occurrence_date(date: NaiveDate) -> bool {
-    date.year() >= MIN_VALID_DATE_YEAR
-}
-
 /// Normalize a recognized date string to PostgreSQL-safe ISO date format.
 ///
-/// Returns `None` when the value cannot be parsed as a supported date.
+/// Generic date normalization intentionally does not apply the occurrence
+/// data cutoff. Callers dealing with occurrence projections apply their own
+/// field-specific domain rule after parsing so birth dates and other
+/// historical fields remain usable.
 pub fn normalize_date_to_iso(value: &str) -> Option<String> {
-    parse_date_flexible(value)
-        .filter(|date| is_supported_occurrence_date(*date))
-        .map(|date| date.format("%Y-%m-%d").to_string())
+    parse_date_flexible(value).map(|date| date.format("%Y-%m-%d").to_string())
 }
 
 /// Check if a string represents a valid time in common formats.
@@ -318,12 +311,15 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_date_to_iso_rejects_dates_before_cutoff() {
+    fn generic_date_normalization_preserves_historical_dates() {
         assert_eq!(
             normalize_date_to_iso("2013-01-01"),
             Some("2013-01-01".to_string())
         );
-        assert_eq!(normalize_date_to_iso("2012-12-31"), None);
+        assert_eq!(
+            normalize_date_to_iso("2012-12-31"),
+            Some("2012-12-31".to_string())
+        );
     }
 
     #[test]

@@ -105,6 +105,9 @@ export class DateRangeObject {
 @ObjectType()
 export class MapFeatureMetadataObject {
   @Field()
+  datasetRevision!: string;
+
+  @Field()
   format!: string;
 
   @Field(() => Int)
@@ -491,6 +494,9 @@ export class ImlRecordObject {
 
 @ObjectType()
 export class MapFeatureDetailObject extends MapFeatureSummaryObject {
+  @Field(() => Boolean, { nullable: true })
+  imlUnavailable?: boolean;
+
   @Field(() => MapFeatureDataObject)
   featureData!: MapFeatureDataObject;
 

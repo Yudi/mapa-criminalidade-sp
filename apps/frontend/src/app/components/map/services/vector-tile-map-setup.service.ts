@@ -351,7 +351,7 @@ export class VectorTileMapSetupService {
       const data = this.getFeatureDialogData(feature);
       if (!data) return;
 
-      const key = `${data.numBo}:${data.anoBo}:${data.delegacia ?? ''}`;
+      const key = data.featureId;
       if (seen.has(key)) return;
 
       seen.add(key);
@@ -366,7 +366,7 @@ export class VectorTileMapSetupService {
 
     if (!data) {
       console.warn(
-        '[VectorTileMapSetupService] Missing num_bo or ano_bo in feature properties'
+        '[VectorTileMapSetupService] Missing feature_id in feature properties'
       );
       return;
     }
@@ -378,26 +378,31 @@ export class VectorTileMapSetupService {
   private getFeatureDialogData(
     feature: FeatureLike
   ): FeatureDetailDialogData | null {
+    const featureId = feature.get('feature_id') as string | undefined;
     const numBo = feature.get('num_bo') as string | undefined;
     const anoBo = feature.get('ano_bo') as number | string | undefined;
-    const delegacia = feature.get('delegacia') as string | undefined;
 
-    if (!numBo || !anoBo) return null;
+    if (!featureId?.trim()) return null;
 
     const parsedAnoBo =
-      typeof anoBo === 'number' ? anoBo : Number.parseInt(anoBo, 10);
+      anoBo === undefined || anoBo === null || anoBo === ''
+        ? undefined
+        : typeof anoBo === 'number'
+          ? anoBo
+          : Number.parseInt(anoBo, 10);
 
-    if (Number.isNaN(parsedAnoBo)) return null;
+    if (parsedAnoBo !== undefined && Number.isNaN(parsedAnoBo)) return null;
 
     return {
+      featureId: featureId.trim(),
       numBo,
       anoBo: parsedAnoBo,
-      delegacia,
     };
   }
 
   private getSpreadProperties(feature: FeatureLike): Record<string, unknown> {
     return {
+      feature_id: feature.get('feature_id'),
       num_bo: feature.get('num_bo'),
       ano_bo: feature.get('ano_bo'),
       delegacia: feature.get('delegacia'),

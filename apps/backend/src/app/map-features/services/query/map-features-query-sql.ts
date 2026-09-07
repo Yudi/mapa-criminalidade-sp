@@ -31,14 +31,15 @@ const OCCURRENCE_HOUR_SQL = `hora_ocorrencia`;
 const TOP_CHART_BUCKET_LIMIT = 12;
 const RECORD_QUANTITY_SQL = `
   CASE
-    WHEN record.value->>'quantidade' ~ '^[0-9]+$'
-    THEN (record.value->>'quantidade')::int
-    ELSE 1
+    WHEN record.value->>'quantidade' ~ '^[0-9]{1,15}$'
+    THEN (record.value->>'quantidade')::numeric
+    WHEN NULLIF(record.value->>'quantidade', '') IS NULL THEN 1
+    ELSE NULL
   END
 `;
 const DRUG_GRAMS_SQL = `
   CASE
-    WHEN record.value->>'quantidade_gramas' ~ '^[0-9]+([.,][0-9]+)?$'
+    WHEN record.value->>'quantidade_gramas' ~ '^[0-9]{1,15}([.,][0-9]{1,15})?$'
     THEN replace(record.value->>'quantidade_gramas', ',', '.')::numeric
     ELSE 0
   END

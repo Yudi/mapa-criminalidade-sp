@@ -311,4 +311,19 @@ describe('CardComponent', () => {
 
     expect(submitSpy).not.toHaveBeenCalled();
   });
+
+  it('emits a disabled hour filter even when the draft time is invalid', () => {
+    const emissions: { enabled: boolean; startHour: number; endHour: number }[] = [];
+    component.hourFilterEvent.subscribe((value) => emissions.push(value));
+
+    component.hourForm.controls.enabled.setValue(true);
+    component.hourForm.controls.startTime.setValue('invalid');
+    component.hourForm.controls.enabled.setValue(false);
+
+    expect(emissions.at(-1)).toEqual({
+      enabled: false,
+      startHour: 0,
+      endHour: 23,
+    });
+  });
 });

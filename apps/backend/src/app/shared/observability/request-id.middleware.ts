@@ -24,10 +24,14 @@ export class RequestIdMiddleware implements NestMiddleware {
     response.setHeader(REQUEST_ID_HEADER, requestId);
     const startedAt = performance.now();
 
-    response.once('finish', () => {
+    let logged = false;
+    const logTerminal = (outcome: 'finished' | 'aborted') => {
+      if (logged) return;
+      logged = true;
       this.logger.log(
         JSON.stringify({
           event: 'http_request',
+          outcome,
           requestId,
           method: request.method,
           path: request.path,
@@ -35,7 +39,9 @@ export class RequestIdMiddleware implements NestMiddleware {
           durationMs: Math.round(performance.now() - startedAt),
         })
       );
-    });
+    };
+    response.once('finish', () => logTerminal('finished'));
+    response.once('close', () => logTerminal(response.writableFinished ? 'finished' : 'aborted'));
 
     next();
   }

@@ -40,10 +40,9 @@ import {
 import { OccurrencesService } from '../../../../shared/occurrences.service';
 
 export interface FeatureDetailDialogData {
-  numBo: string;
-  anoBo: number;
-  /** Registration police unit, required to disambiguate pre-2022 BO numbers. */
-  delegacia?: string | null;
+  featureId: string;
+  numBo?: string;
+  anoBo?: number;
 }
 
 @Component({
@@ -140,7 +139,7 @@ export class FeatureDetailDialogComponent implements OnInit {
 
   private loadFeature(): void {
     this.occurrencesService
-      .getFullFeature(this.data.numBo, this.data.anoBo, this.data.delegacia)
+      .getFullFeature(this.data.featureId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (feature) => {

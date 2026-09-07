@@ -1,1 +1,21 @@
 <div id="ol-map-tab" class="map-container"></div>
+
+<div class="map-status-stack" aria-live="polite">
+  @if (tileError(); as errorMessage) {
+  <div class="map-status map-status--error" role="alert">
+    <span>{{ errorMessage }}</span>
+    <button mat-flat-button type="button" (click)="retryTileLoads()">
+      Tentar novamente
+    </button>
+  </div>
+  }
+
+  @if (tileCompleteness()) {
+  <div class="map-status map-status--warning" role="status">
+    <span>
+      O mapa está parcialmente representado. Aproxime o mapa ou refine os
+      filtros para ver todos os resultados.
+    </span>
+  </div>
+  }
+</div>

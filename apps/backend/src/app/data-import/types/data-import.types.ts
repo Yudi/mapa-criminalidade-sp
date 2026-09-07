@@ -47,6 +47,7 @@ export interface RustCsvAnalysis {
 export interface ImportDecision {
   shouldImport: boolean;
   reason: string;
+  retryable?: boolean;
 }
 
 export interface FileChangeCheck {

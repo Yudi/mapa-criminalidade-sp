@@ -232,6 +232,37 @@ describe('ImlImportService', () => {
     );
   });
 
+  it('keeps the previous month when the scraper produces zero accepted rows', async () => {
+    jest.mocked(pythonToolService.runAssetScript).mockResolvedValue({
+      stdout: JSON.stringify({
+        year: 2026,
+        status: 'complete',
+        expectedMonths: 3,
+        succeededMonths: 3,
+        failedMonths: [],
+        files: [4, 5, 6].map((month) => ({
+          month,
+          recordCount: 0,
+          rejectedRows: 10,
+          outputPath: path.join(
+            process.cwd(),
+            'temp',
+            'iml',
+            '2026',
+            `registro_obitos_iml_2026_${String(month).padStart(2, '0')}.csv`
+          ),
+        })),
+      }),
+      stderr: '',
+    });
+
+    await expect(service.importCategory(category)).resolves.toBe(0);
+    expect(
+      csvProcessingService.importSingleCsvFileReplacingImlMonth
+    ).not.toHaveBeenCalled();
+    expect(metadataService.saveImlFileMetadata).not.toHaveBeenCalled();
+  });
+
   it('extends IML into the current year without requesting future months', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-01-14T12:00:00Z'));
     const olderCategory = { ...category, years: [2025] };

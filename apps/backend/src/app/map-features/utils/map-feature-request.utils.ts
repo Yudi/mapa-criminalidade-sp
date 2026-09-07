@@ -55,8 +55,9 @@ function badRequest(message: string): never {
   throw new BadRequestException(message);
 }
 
-export function parseIntegerParam(value: string, name: string): number {
-  const trimmed = value?.trim();
+export function parseIntegerParam(value: unknown, name: string): number {
+  if (typeof value !== 'string') badRequest(`Invalid ${name}`);
+  const trimmed = value.trim();
   if (!trimmed || !/^-?\d+$/.test(trimmed)) {
     badRequest(`Invalid ${name}`);
   }
@@ -70,16 +71,17 @@ export function parseIntegerParam(value: string, name: string): number {
 }
 
 export function parseOptionalIntegerQuery(
-  value: string | undefined,
+  value: unknown,
   name: string
 ): number | undefined {
+  if (value !== undefined && typeof value !== 'string') badRequest(`Invalid ${name}`);
   return value === undefined || value.trim() === ''
     ? undefined
     : parseIntegerParam(value, name);
 }
 
 export function parseOptionalHourQuery(
-  value: string | undefined,
+  value: unknown,
   name: string
 ): number | undefined {
   const parsed = parseOptionalIntegerQuery(value, name);
@@ -95,8 +97,9 @@ export function parseOptionalHourQuery(
   return parsed;
 }
 
-export function parseNumberQuery(value: string, name: string): number {
-  const trimmed = value?.trim();
+export function parseNumberQuery(value: unknown, name: string): number {
+  if (typeof value !== 'string') badRequest(`Invalid ${name}`);
+  const trimmed = value.trim();
   if (!trimmed || !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(trimmed)) {
     badRequest(`Invalid ${name}`);
   }
@@ -110,9 +113,10 @@ export function parseNumberQuery(value: string, name: string): number {
 }
 
 export function parseOptionalNumberQuery(
-  value: string | undefined,
+  value: unknown,
   name: string
 ): number | undefined {
+  if (value !== undefined && typeof value !== 'string') badRequest(`Invalid ${name}`);
   return value === undefined || value.trim() === ''
     ? undefined
     : parseNumberQuery(value, name);
@@ -126,6 +130,7 @@ export function parseStringListQuery(
 
   const values = Array.isArray(value) ? value : [value];
   const parsedValues = values.flatMap((item) => {
+    if (typeof item !== 'string') badRequest(`Invalid ${name}`);
     const trimmed = item.trim();
     if (trimmed.startsWith('[')) {
       let decoded: unknown;

@@ -41,6 +41,8 @@ function createCacheMock(): jest.Mocked<CacheMock> {
 }
 
 describe('MapFeaturesQueryService', () => {
+  beforeEach(() => { jest.spyOn(MapFeaturesQueryService.prototype, 'getDatasetRevision').mockResolvedValue('test-revision'); });
+  afterEach(() => jest.restoreAllMocks());
   it('loads the cached date range maintained by database triggers', async () => {
     const findUnique = jest.fn().mockResolvedValue({
       earliest_date: new Date('2013-01-01T00:00:00.000Z'),
@@ -68,6 +70,13 @@ describe('MapFeaturesQueryService', () => {
     });
   });
 
+  it('marks optional IML enrichment unavailable without discarding base feature lookup', async () => {
+    const service = new MapFeaturesQueryService({} as PrismaService);
+    jest.spyOn(service, 'getImlRecordsByBo').mockRejectedValue(new Error('optional source unavailable'));
+    await expect(service.getImlEnrichment({ num_bo: 'TEST', ano_bo: 2026, delegacia: 'DP' } as never))
+      .resolves.toEqual({ records: [], unavailable: true });
+  });
+
   it('returns an empty date range when the cache row is unavailable', async () => {
     const findUnique = jest.fn().mockResolvedValue(null);
     const prisma = {
@@ -91,6 +100,7 @@ describe('MapFeaturesQueryService', () => {
     ]);
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const service = new MapFeaturesQueryService(prisma);
 
@@ -114,6 +124,7 @@ describe('MapFeaturesQueryService', () => {
     const queryRawUnsafe = jest.fn().mockResolvedValue([]);
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const service = new MapFeaturesQueryService(prisma);
 
@@ -131,6 +142,7 @@ describe('MapFeaturesQueryService', () => {
     const queryRawUnsafe = jest.fn().mockResolvedValue([]);
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const service = new MapFeaturesQueryService(prisma);
     const bounds = {
@@ -167,6 +179,7 @@ describe('MapFeaturesQueryService', () => {
     ]);
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const service = new MapFeaturesQueryService(prisma);
 
@@ -247,6 +260,7 @@ describe('MapFeaturesQueryService', () => {
     const prisma = {
       $queryRaw: queryRaw,
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const service = new MapFeaturesQueryService(prisma);
 
@@ -266,10 +280,7 @@ describe('MapFeaturesQueryService', () => {
       '2025',
       '01 D P MAUA'
     );
-    expect(queryRawUnsafe.mock.calls[0][0]).toContain(
-      "to_timestamp(data_entrada_iml, 'DD/MM/YYYY HH24:MI:SS')"
-    );
-    expect(queryRawUnsafe.mock.calls[0][0]).toContain('END NULLS LAST');
+    expect(queryRawUnsafe.mock.calls[0][0]).not.toContain('to_timestamp');
   });
 
   it('generates tiles inside a read-only transaction with a local statement timeout', async () => {
@@ -282,6 +293,7 @@ describe('MapFeaturesQueryService', () => {
         operation({
           $executeRawUnsafe: executeRawUnsafe,
           $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
         })
       );
     const prisma = {
@@ -333,6 +345,7 @@ describe('MapFeaturesQueryService', () => {
         operation({
           $executeRawUnsafe: executeRawUnsafe,
           $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
         })
       );
     const prisma = {
@@ -360,6 +373,7 @@ describe('MapFeaturesQueryService', () => {
         operation({
           $executeRawUnsafe: executeRawUnsafe,
           $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
         })
       );
     const prisma = {
@@ -405,6 +419,7 @@ describe('MapFeaturesQueryService', () => {
     ]);
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const cache = createCacheMock();
     const service = new MapFeaturesQueryService(
@@ -480,6 +495,7 @@ describe('MapFeaturesQueryService', () => {
     );
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const cache = createCacheMock();
     const service = new MapFeaturesQueryService(
@@ -525,6 +541,7 @@ describe('MapFeaturesQueryService', () => {
     ]);
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const cache = createCacheMock();
     const service = new MapFeaturesQueryService(
@@ -570,6 +587,7 @@ describe('MapFeaturesQueryService', () => {
       ]);
     const prisma = {
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const cache = createCacheMock();
     const service = new MapFeaturesQueryService(
@@ -578,8 +596,7 @@ describe('MapFeaturesQueryService', () => {
     );
 
     const staleLoad = service.getCharts();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(queryRawUnsafe).toHaveBeenCalledTimes(1);
 
     await service.invalidateReadCache();
@@ -713,6 +730,7 @@ describe('MapFeaturesQueryService', () => {
     const prisma = {
       mapFeature: { findMany },
       $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const previousHydrationFlag =
       process.env.MAP_FEATURES_HYDRATE_MISSING_SOURCE_RECORDS;

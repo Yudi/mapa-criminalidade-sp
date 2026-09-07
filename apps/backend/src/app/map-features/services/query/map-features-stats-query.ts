@@ -16,7 +16,6 @@ import {
   appendSqlFilters,
   buildCategoryBucketLateralSql,
   buildChartsQuery,
-  buildDateWhere,
   normalizePeriodKey,
   PERIOD_KEY_SQL,
   PERIOD_LABEL_SQL,
@@ -87,7 +86,7 @@ export class MapFeaturesStatsQuery {
         const conditions: string[] = ['geom IS NOT NULL'];
         const queryParams: SqlParam[] = [];
         appendSqlFilters(conditions, queryParams, 1, params);
-        const results = await this.prisma.$queryRawUnsafe<CategoryStatsRow[]>(
+        const results = await this.prisma.executeReadOnlyStatsQuery<CategoryStatsRow[]>(
           buildCategoryStatsQuery(conditions.join(' AND ')),
           ...queryParams
         );
@@ -126,9 +125,7 @@ export class MapFeaturesStatsQuery {
         const conditions: string[] = ['geom IS NOT NULL'];
         const queryParams: SqlParam[] = [longitude, latitude, radius];
 
-        conditions.push(
-          `geom && ST_Expand(ST_SetSRID(ST_MakePoint($1, $2), 4326), $3 / 111320.0)`
-        );
+        // ST_DWithin uses the existing idx_map_features_geom_geography index.
         conditions.push(
           `ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)`
         );
@@ -141,7 +138,7 @@ export class MapFeaturesStatsQuery {
           endHour,
         });
 
-        const results = await this.prisma.$queryRawUnsafe<CategoryStatsRow[]>(
+        const results = await this.prisma.executeReadOnlyStatsQuery<CategoryStatsRow[]>(
           buildCategoryStatsQuery(conditions.join(' AND ')),
           ...queryParams
         );
@@ -168,7 +165,7 @@ export class MapFeaturesStatsQuery {
           includePeriods: false,
         });
 
-        const results = await this.prisma.$queryRawUnsafe<
+        const results = await this.prisma.executeReadOnlyStatsQuery<
           { name: string; count: bigint | string }[]
         >(
           `
@@ -222,7 +219,7 @@ export class MapFeaturesStatsQuery {
           );
         }
 
-        const [row] = await this.prisma.$queryRawUnsafe<
+        const [row] = await this.prisma.executeReadOnlyStatsQuery<
           CategoryPeriodStatsQueryRow[]
         >(
           `
@@ -305,7 +302,7 @@ export class MapFeaturesStatsQuery {
         appendSqlFilters(conditions, queryParams, 1, params);
         const whereClause = conditions.join(' AND ');
 
-        const [charts] = await this.prisma.$queryRawUnsafe<ChartsQueryRow[]>(
+        const [charts] = await this.prisma.executeReadOnlyStatsQuery<ChartsQueryRow[]>(
           buildChartsQuery(whereClause),
           ...queryParams
         );
@@ -395,7 +392,7 @@ export class MapFeaturesStatsQuery {
           const queryParams: SqlParam[] = [];
           appendSqlFilters(conditions, queryParams, 1, params);
 
-          const [result] = await this.prisma.$queryRawUnsafe<
+          const [result] = await this.prisma.executeReadOnlyStatsQuery<
             { count: bigint | string }[]
           >(
             `SELECT COUNT(*) as count FROM map_features WHERE ${conditions.join(
@@ -407,9 +404,14 @@ export class MapFeaturesStatsQuery {
           return Number(result?.count ?? 0);
         }
 
-        const where = buildDateWhere(params);
-
-        return await this.prisma.mapFeature.count({ where });
+        const conditions: string[] = [];
+        const queryParams: SqlParam[] = [];
+        appendSqlFilters(conditions, queryParams, 1, params);
+        const [result] = await this.prisma.executeReadOnlyStatsQuery<{ count: string }[]>(
+          `SELECT COUNT(*) AS count FROM map_features${conditions.length ? ` WHERE ${conditions.join(' AND ')}` : ''}`,
+          ...queryParams
+        );
+        return Number(result?.count ?? 0);
       }
     );
   }

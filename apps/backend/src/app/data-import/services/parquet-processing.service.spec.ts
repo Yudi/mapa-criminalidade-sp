@@ -33,6 +33,30 @@ describe('ParquetProcessingService', () => {
 
     await writeFile(firstParquet, 'parquet-placeholder');
     await writeFile(secondParquet, 'parquet-placeholder');
+    await writeFile(
+      path.join(tempDir, 'source_manifest.json'),
+      JSON.stringify({
+        manifest_version: 1,
+        input_path: '/tmp/source.xlsx',
+        format: 'parquet',
+        complete: true,
+        sheets: [
+          {
+            sheet: 'SPDadosCriminais_2024_JAN-JUN',
+            rows: 1,
+            columns: 2,
+            output_path: firstParquet,
+          },
+          {
+            sheet: 'SPDadosCriminais_2024_JUL-DEZ',
+            rows: 1,
+            columns: 2,
+            output_path: secondParquet,
+          },
+        ],
+        skipped_sheets: [],
+      })
+    );
 
     const fileOperationsService = {
       fileExists: jest.fn().mockResolvedValue(true),
@@ -90,6 +114,27 @@ describe('ParquetProcessingService', () => {
       path.join(tempDir, 'DadosProdutividade_2024_PRESOS E APREENDIDOS.parquet'),
       'parquet-placeholder'
     );
+    await writeFile(
+      path.join(tempDir, 'source_manifest.json'),
+      JSON.stringify({
+        manifest_version: 1,
+        input_path: '/tmp/source.xlsx',
+        format: 'parquet',
+        complete: true,
+        sheets: [
+          {
+            sheet: 'PRESOS E APREENDIDOS',
+            rows: 1,
+            columns: 2,
+            output_path: path.join(
+              tempDir,
+              'DadosProdutividade_2024_PRESOS E APREENDIDOS.parquet'
+            ),
+          },
+        ],
+        skipped_sheets: [],
+      })
+    );
 
     const service = new ParquetProcessingService(
       {} as FileOperationsService,
@@ -99,5 +144,104 @@ describe('ParquetProcessingService', () => {
     await expect(
       service.importParquetToDatabase(tempDir, category, 2024)
     ).rejects.toThrow('No Parquet files matched category Produtividade - Armas');
+  });
+
+  it('rejects an incomplete conversion manifest before replacing the table', async () => {
+    const category = DataCategoryConfig.getCategoryByName(
+      'Dados Criminais'
+    ) as DataCategory;
+    const parquetPath = path.join(tempDir, 'source_data.parquet');
+    await writeFile(parquetPath, 'parquet-placeholder');
+    await writeFile(
+      path.join(tempDir, 'source_manifest.json'),
+      JSON.stringify({
+        manifest_version: 1,
+        input_path: '/tmp/source.xlsx',
+        format: 'parquet',
+        complete: false,
+        sheets: [
+          {
+            sheet: 'source_data',
+            rows: 1,
+            columns: 2,
+            output_path: parquetPath,
+          },
+        ],
+        skipped_sheets: [{ sheet: 'source_failed', error: 'bad sheet' }],
+      })
+    );
+    const databaseService = {
+      importParquetFilesWithRust: jest.fn(),
+    } as unknown as DatabaseService;
+    const service = new ParquetProcessingService(
+      { fileExists: jest.fn().mockResolvedValue(true) } as unknown as FileOperationsService,
+      databaseService
+    );
+
+    await expect(
+      service.importParquetToDatabase(tempDir, category, 2024)
+    ).rejects.toThrow('Conversion manifest is incomplete');
+    expect(databaseService.importParquetFilesWithRust).not.toHaveBeenCalled();
+  });
+
+  it('uses only manifest sheets selected by a category pattern', async () => {
+    const category = DataCategoryConfig.getCategoryByName(
+      'Produtividade - Armas'
+    ) as DataCategory;
+    const armasPath = path.join(
+      tempDir,
+      'DadosProdutividade_2024_ARMAS DE FOGO APREENDIDAS.parquet'
+    );
+    const otherPath = path.join(
+      tempDir,
+      'DadosProdutividade_2024_PRESOS E APREENDIDOS.parquet'
+    );
+    await writeFile(armasPath, 'parquet-placeholder');
+    await writeFile(otherPath, 'parquet-placeholder');
+    await writeFile(
+      path.join(tempDir, 'source_manifest.json'),
+      JSON.stringify({
+        manifest_version: 1,
+        input_path: '/tmp/source.xlsx',
+        format: 'parquet',
+        complete: true,
+        sheets: [
+          {
+            sheet: 'ARMAS DE FOGO APREENDIDAS',
+            rows: 1,
+            columns: 2,
+            output_path: armasPath,
+          },
+          {
+            sheet: 'PRESOS E APREENDIDOS',
+            rows: 1,
+            columns: 2,
+            output_path: otherPath,
+          },
+        ],
+        skipped_sheets: [],
+      })
+    );
+    const databaseService = {
+      checkTableExists: jest.fn().mockResolvedValue(false),
+      createTableFromDataFileWithTypes: jest.fn().mockResolvedValue(undefined),
+      importParquetFilesWithRust: jest.fn().mockResolvedValue(1),
+      markTableForMapFeaturesEtl: jest.fn().mockResolvedValue(undefined),
+    } as unknown as DatabaseService;
+    const service = new ParquetProcessingService(
+      {
+        fileExists: jest.fn().mockResolvedValue(true),
+        getFileSize: jest.fn().mockResolvedValue(100),
+      } as unknown as FileOperationsService,
+      databaseService
+    );
+
+    await service.importParquetToDatabase(tempDir, category, 2024);
+
+    expect(databaseService.importParquetFilesWithRust).toHaveBeenCalledWith(
+      'produtividade_armas_2024',
+      [armasPath],
+      expect.any(Object)
+    );
   });
 });

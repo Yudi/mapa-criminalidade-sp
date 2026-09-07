@@ -38,7 +38,7 @@ describe('OccurrencesService', () => {
     expect(graphql.request).not.toHaveBeenCalled();
   });
 
-  it('reuses quantized bounds and evicts old successful responses', async () => {
+  it('keeps exact viewports separate and evicts old successful responses', async () => {
     graphql.request.mockImplementation(() =>
       of({ mapFeaturesCharts: { totalFeatures: 1 } })
     );
@@ -58,7 +58,7 @@ describe('OccurrencesService', () => {
       })
     );
 
-    expect(graphql.request).toHaveBeenCalledTimes(1);
+    expect(graphql.request).toHaveBeenCalledTimes(2);
 
     for (let index = 0; index < 120; index++) {
       await firstValueFrom(
@@ -88,5 +88,18 @@ describe('OccurrencesService', () => {
       firstValueFrom(service.getOccurrencesByNumBo('123'))
     ).resolves.toBeNull();
     expect(graphql.request).toHaveBeenCalledTimes(2);
+  });
+
+  it('looks up feature details by stable feature id', async () => {
+    graphql.request.mockReturnValue(of({ mapFeatureById: null }));
+
+    await expect(
+      firstValueFrom(service.getFullFeature('  018f-feature-id  '))
+    ).resolves.toBeNull();
+    expect(graphql.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variables: { id: '018f-feature-id' },
+      })
+    );
   });
 });

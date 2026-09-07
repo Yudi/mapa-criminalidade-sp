@@ -28,6 +28,7 @@ import {
 import { OccurrencesService } from './shared/occurrences.service';
 import { DateService } from './shared/date.service';
 import { ProgressBarService } from './shared/progressbar.service';
+import { VectorTileService } from './shared/vector-tile.service';
 import {
   BehaviorSubject,
   catchError,
@@ -35,6 +36,7 @@ import {
   debounceTime,
   distinctUntilChanged,
   EMPTY,
+  finalize,
   map,
   Observable,
   of,
@@ -84,6 +86,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private progressBarService = inject(ProgressBarService);
+  private vectorTileService = inject(VectorTileService);
   private changeDetectorRef = inject(ChangeDetectorRef);
   categories: Observable<CategoryInfo[]> = of([]);
   periods: Observable<PeriodInfo[]> = of([]);
@@ -98,6 +101,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   );
   progressBarPercentage = signal(-1);
   viewportStatsLoading = signal(false);
+  metadataLoadError = signal(false);
+  metadataLoading = signal(false);
+  datasetRevision: string | null = null;
   addressCenter: {
     lon: number | null;
     lat: number | null;
@@ -116,12 +122,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.periodFilter
   );
   private hourFilterSubject = new BehaviorSubject<HourFilter>(this.hourFilter);
+  private datasetRevisionSubject = new BehaviorSubject<string | null>(null);
   currentBounds: MapBounds | null = null;
   isMapComponentLoaded = signal(false);
   mapLoadError = signal(false);
   private isDestroyed = false;
   private mapComponentRef: ComponentRef<DynamicMapComponent> | null = null;
   private mapBoundsSubscription: SubscriptionLike | null = null;
+  private metadataLoaded = false;
 
   @ViewChild('mapOutlet', { read: ViewContainerRef })
   private mapOutlet?: ViewContainerRef;
@@ -144,39 +152,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.iconRegistry.setDefaultFontSetClass('material-symbols-outlined');
 
     if (this.isBrowserOnly) {
-      this.occurrencesService
-        .getTileMetadata()
-        .pipe(take(1))
-        .subscribe({
-          next: (metadata) => {
-            this.dateRange = metadata.dateRange;
-
-            if (!this.dateFilters.before && !this.dateFilters.after) {
-              const defaultAfterDate = this.dateService.defaultAfterDate(
-                metadata.dateRange
-              );
-              this.dateFilters = {
-                after:
-                  this.dateService.formatYYYYMMDD(defaultAfterDate) || null,
-                before: metadata.dateRange.latest,
-              };
-              this.dateFiltersSubject.next(this.dateFilters);
-              this.syncMapInputs();
-            }
-
-            this.changeDetectorRef.markForCheck();
-          },
-          error: (error: unknown) => {
-            console.error('Error loading map metadata:', error);
-            this.changeDetectorRef.markForCheck();
-          },
-        });
+      this.loadMetadata();
     }
     const categoryPeriodStats = combineLatest([
       this.boundsSubject,
       this.dateFiltersSubject,
       this.periodFilterSubject,
       this.hourFilterSubject,
+      this.datasetRevisionSubject,
     ]).pipe(
       debounceTime(300),
       distinctUntilChanged(
@@ -191,7 +174,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           prev[2] === curr[2] &&
           prev[3].enabled === curr[3].enabled &&
           prev[3].startHour === curr[3].startHour &&
-          prev[3].endHour === curr[3].endHour
+          prev[3].endHour === curr[3].endHour &&
+          prev[4] === curr[4]
       ),
       switchMap(([bounds, dateFilters, periodFilter, hourFilter]) => {
         if (!bounds || bounds.zoom < MIN_CRIME_TILE_ZOOM) {
@@ -250,6 +234,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   onRubricasFormChange(rubricasFormValues: { [key: string]: boolean }) {
+    if (
+      this.categoriesFormValues &&
+      this.selectedCategoryKey(this.categoriesFormValues) ===
+        this.selectedCategoryKey(rubricasFormValues)
+    ) {
+      return;
+    }
+
     this.categoriesFormValues = rubricasFormValues;
     this.syncMapInputs();
     this.changeDetectorRef.markForCheck();
@@ -267,6 +259,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.hourFilterSubject.next(hourFilter);
     this.syncMapInputs();
     this.changeDetectorRef.markForCheck();
+  }
+
+  retryMetadata(): void {
+    if (this.isDestroyed || !this.isBrowserOnly) return;
+
+    this.occurrencesService.clearCache();
+    this.vectorTileService.clearMetadataCache();
+    this.loadMetadata();
   }
   onBoundsChange(bounds: MapBounds) {
     this.currentBounds = bounds;
@@ -405,6 +405,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
     mapComponentRef.setInput('addressCenter', this.addressCenter);
     mapComponentRef.setInput('dateFilters', this.dateFilters);
+    mapComponentRef.setInput('datasetRevision', this.datasetRevision);
     mapComponentRef.setInput('hourFilter', this.hourFilter);
     mapComponentRef.setInput('periodFilter', this.periodFilter);
     mapComponentRef.setInput('progressBarPercentage', this.progressBarPercentage);
@@ -419,5 +420,65 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     return Object.entries(this.categoriesFormValues ?? {})
       .filter(([, selected]) => selected)
       .map(([category]) => category);
+  }
+
+  private selectedCategoryKey(values: { [key: string]: boolean }): string {
+    return Object.entries(values)
+      .filter(([, selected]) => selected)
+      .map(([category]) => category)
+      .sort()
+      .join('\u001f');
+  }
+
+  private loadMetadata(): void {
+    if (this.isDestroyed || !this.isBrowserOnly) return;
+
+    this.metadataLoading.set(true);
+    this.metadataLoadError.set(false);
+    this.occurrencesService
+      .getTileMetadata()
+      .pipe(
+        take(1),
+        finalize(() => {
+          this.metadataLoading.set(false);
+          this.changeDetectorRef.markForCheck();
+        })
+      )
+      .subscribe({
+        next: (metadata) => {
+          const revisionChanged =
+            this.metadataLoaded && this.datasetRevision !== metadata.datasetRevision;
+
+          if (revisionChanged) {
+            this.occurrencesService.clearCacheByPrefix('category-period-stats');
+            this.occurrencesService.clearCacheByPrefix('charts-bounds');
+          }
+
+          this.metadataLoaded = true;
+          this.datasetRevision = metadata.datasetRevision ?? null;
+          this.datasetRevisionSubject.next(this.datasetRevision);
+          this.dateRange = metadata.dateRange;
+
+          if (!this.dateFilters.before && !this.dateFilters.after) {
+            const defaultAfterDate = this.dateService.defaultAfterDate(
+              metadata.dateRange
+            );
+            this.dateFilters = {
+              after:
+                this.dateService.formatYYYYMMDD(defaultAfterDate) || null,
+              before: metadata.dateRange.latest,
+            };
+            this.dateFiltersSubject.next(this.dateFilters);
+          }
+
+          this.syncMapInputs();
+
+          this.changeDetectorRef.markForCheck();
+        },
+        error: (error: unknown) => {
+          this.metadataLoadError.set(true);
+          console.error('Error loading map metadata:', error);
+        },
+      });
   }
 }

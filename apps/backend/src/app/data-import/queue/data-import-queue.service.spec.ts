@@ -101,6 +101,35 @@ describe('DataImportQueueService', () => {
     );
   });
 
+  it('does not checkpoint raw import when a source group fails', async () => {
+    const { service, dataImportService, mapFeaturesEtlService } =
+      createService();
+    jest
+      .mocked(dataImportService.importAllCategories)
+      .mockRejectedValue(new Error('one source group failed'));
+    const updateData = jest.fn().mockResolvedValue(undefined);
+
+    await expect(
+      service.processJob({
+        id: 'daily-data-import',
+        name: 'import-all-categories',
+        data: {
+          requestedAt: new Date().toISOString(),
+          requestedBy: 'scheduler',
+          reason: 'data import check',
+        },
+        updateData,
+      } as unknown as Job<
+        DataImportJobData,
+        DataImportJobResult,
+        DataImportQueueName
+      >)
+    ).rejects.toThrow('one source group failed');
+
+    expect(updateData).not.toHaveBeenCalled();
+    expect(mapFeaturesEtlService.runIncrementalEtl).toHaveBeenCalledTimes(1);
+  });
+
   it('retries only ETL after the raw import stage completed', async () => {
     const { service, dataImportService, mapFeaturesEtlService } =
       createService();

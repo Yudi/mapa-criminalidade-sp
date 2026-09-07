@@ -6,7 +6,7 @@
 //! cleaned CSV.
 
 use crate::logger::Logger;
-use crate::text_normalizer::normalize_column_name;
+use crate::text_normalizer::{normalize_column_name, normalize_unique_headers};
 use crate::type_inference::correct_column_type;
 use crate::value_cleaners::{
     clean_date_value, clean_general_value, clean_integer_value, clean_numeric_value,
@@ -275,26 +275,8 @@ impl CsvCleaner {
         &self,
         original_headers: &csv::StringRecord,
     ) -> (Vec<String>, Vec<usize>) {
-        let mut seen = HashMap::<String, usize>::new();
-        let mut final_headers = Vec::with_capacity(original_headers.len());
-        let mut column_indices = Vec::with_capacity(original_headers.len());
-        for (index, header) in original_headers.iter().enumerate() {
-            let normalized = normalize_column_name(header);
-            let base = if normalized.is_empty() {
-                format!("COLUMN_{}", index + 1)
-            } else {
-                normalized
-            };
-            let count = seen.entry(base.clone()).or_insert(0);
-            *count += 1;
-            final_headers.push(if *count == 1 {
-                base
-            } else {
-                format!("{}_{}", base, count)
-            });
-            column_indices.push(index);
-        }
-        (final_headers, column_indices)
+        let headers = original_headers.iter().map(str::to_string).collect::<Vec<_>>();
+        normalize_unique_headers(&headers)
     }
 
     fn clean_value_by_type(&self, value: &str, col_type: &str, header: &str) -> String {

@@ -33,6 +33,7 @@ describe('DataImportService orchestration', () => {
     const fileOperationsService = {
       ensureDirectory: jest.fn().mockResolvedValue(undefined),
       cleanup: jest.fn().mockResolvedValue(undefined),
+      sweepStaleDirectories: jest.fn().mockResolvedValue(undefined),
     } as unknown as FileOperationsService;
     const rustToolService = {
       ensureRustTool: jest.fn().mockResolvedValue(undefined),
@@ -66,7 +67,7 @@ describe('DataImportService orchestration', () => {
     jest.restoreAllMocks();
   });
 
-  it('skips a failed external source group and continues with IML', async () => {
+  it('keeps a failed external source group retryable', async () => {
     jest.spyOn(DataCategoryConfig, 'getDirectCategories').mockReturnValue([
       category,
     ]);
@@ -80,7 +81,40 @@ describe('DataImportService orchestration', () => {
       )
       .mockRejectedValue(new Error('conversion failed'));
 
-    await expect(service.importAllCategories()).resolves.toBeUndefined();
+    await expect(service.importAllCategories()).rejects.toThrow(
+      'Data import completed partially'
+    );
+    expect(imlImportService.importWithIntelligentLogic).toHaveBeenCalledTimes(1);
+  });
+
+  it('imports healthy categories and years before reporting unavailable sources', async () => {
+    const unavailable = { ...category, name: 'Unavailable', years: [2025, 2026] };
+    const broken = { ...category, name: 'Broken' };
+    jest.spyOn(DataCategoryConfig, 'getDirectCategories').mockReturnValue([
+      unavailable, broken, category,
+    ]);
+    const { service, importDecisionService, imlImportService } = createService();
+    jest.mocked(importDecisionService.checkMultipleYears).mockImplementation(async (source) => {
+      if (source === broken) throw new Error('verification failed');
+      if (source === unavailable) return [
+        { year: 2025, shouldImport: true, reason: 'changed' },
+        { year: 2026, shouldImport: false, reason: 'timeout', retryable: true },
+      ];
+      return [{ year: 2026, shouldImport: true, reason: 'changed' }];
+    });
+    const importFile = jest.spyOn(service as unknown as {
+      importFromSingleFile(): Promise<void>;
+    }, 'importFromSingleFile').mockResolvedValue(undefined);
+
+    await expect(service.importAllCategories()).rejects.toThrow('Data import completed partially');
+
+    expect(importFile).toHaveBeenCalledTimes(2);
+    expect(importFile).toHaveBeenCalledWith(
+      DataCategoryConfig.getUrl(unavailable, 2025), 2025, [unavailable], expect.any(Function), undefined
+    );
+    expect(importFile).toHaveBeenCalledWith(
+      DataCategoryConfig.getUrl(category, 2026), 2026, [category], expect.any(Function), undefined
+    );
     expect(imlImportService.importWithIntelligentLogic).toHaveBeenCalledTimes(1);
   });
 

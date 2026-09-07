@@ -54,7 +54,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.redis?.quit().catch(() => undefined);
+    this.redis?.disconnect();
   }
 
   async getJson<T>(key: string): Promise<T | null> {
@@ -184,6 +184,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       connectTimeout: Number(
         process.env.REDIS_CACHE_CONNECT_TIMEOUT_MS ?? DEFAULT_CONNECT_TIMEOUT_MS
       ),
+      commandTimeout: 1_000,
       enableOfflineQueue: false,
       lazyConnect: true,
       maxRetriesPerRequest: 1,
@@ -223,6 +224,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   ): void {
     this.circuitOpenUntil = Date.now() + CIRCUIT_OPEN_MS;
     this.lastErrorAt = new Date();
+    this.redis?.disconnect();
     const message = error instanceof Error ? error.message : String(error);
     this.logger.warn(`Redis cache ${action} failed for ${key}: ${message}`);
   }

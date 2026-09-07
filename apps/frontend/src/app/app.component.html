@@ -27,7 +27,19 @@
   </section>
   }
 
-  <section class="card-section" aria-label="Filtros de pesquisa">
+  <section
+    class="card-section"
+    aria-label="Filtros de pesquisa"
+    [attr.aria-busy]="metadataLoading()"
+  >
+    @if (metadataLoadError()) {
+    <div class="metadata-status" role="alert">
+      <span>Não foi possível carregar os dados do mapa.</span>
+      <button mat-flat-button type="button" (click)="retryMetadata()">
+        Tentar novamente
+      </button>
+    </div>
+    }
     <app-card
       (submitEvent)="onSubmitEvent($event)"
       (rubricasFormEvent)="onRubricasFormChange($event)"

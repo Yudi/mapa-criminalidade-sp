@@ -92,7 +92,12 @@ export class MapFeaturesEtlAggregator {
         continue;
       }
 
-      const locationHash = this.createLocationHash(lat, lon);
+      const canonicalLat = Number(row.__etl_sort_latitude_bucket);
+      const canonicalLon = Number(row.__etl_sort_longitude_bucket);
+      if (!Number.isFinite(canonicalLat) || !Number.isFinite(canonicalLon)) {
+        throw new Error('ETL source row is missing canonical coordinate buckets');
+      }
+      const locationHash = this.createLocationHash(canonicalLat, canonicalLon);
       const key = this.getCanonicalGroupKey(row);
 
       let feature = features.get(key);
@@ -101,8 +106,8 @@ export class MapFeaturesEtlAggregator {
           numBo,
           anoBo,
           delegacia,
-          lat,
-          lon,
+          canonicalLat,
+          canonicalLon,
           locationHash,
           row,
           config,
@@ -339,8 +344,8 @@ export class MapFeaturesEtlAggregator {
   }
 
   private createLocationHash(lat: number, lon: number): string {
-    const roundedLat = Math.round(lat * 1_000_000) / 1_000_000;
-    const roundedLon = Math.round(lon * 1_000_000) / 1_000_000;
+    const roundedLat = lat;
+    const roundedLon = lon;
     const input = `${roundedLat.toFixed(6)}|${roundedLon.toFixed(6)}`;
     return crypto
       .createHash('sha256')

@@ -14,6 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  postgis-contract:
+    name: PostGIS migration and tile contracts
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:18-3.6-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mapa_contract_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mapa_contract_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Exercise the SQL and decoded MVT contract in a disposable database
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mapa_contract_test
+        run: node tools/test-postgis-contract.mjs
+
   checks:
     name: Lint, test, and build
     runs-on: ubuntu-latest

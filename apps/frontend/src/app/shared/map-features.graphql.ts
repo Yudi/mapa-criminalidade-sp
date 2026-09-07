@@ -51,6 +51,7 @@ const GROUPED_OCCURRENCE_FIELDS = `
 
 const FEATURE_DETAIL_FIELDS = `
   id
+  imlUnavailable
   numBo
   anoBo
   delegacia
@@ -147,6 +148,7 @@ const FEATURE_DETAIL_FIELDS = `
 export const MAP_FEATURES_METADATA_QUERY = `
   query MapFeaturesMetadata {
     mapFeaturesMetadata {
+      datasetRevision
       format
       minZoom
       maxZoom
@@ -264,6 +266,14 @@ export const GROUPED_OCCURRENCE_BY_BO_QUERY = `
 export const MAP_FEATURE_FULL_QUERY = `
   query MapFeatureFull($input: MapFeatureLookupInput!) {
     mapFeatureFull(input: $input) {
+      ${FEATURE_DETAIL_FIELDS}
+    }
+  }
+`;
+
+export const MAP_FEATURE_BY_ID_QUERY = `
+  query MapFeatureById($id: ID!) {
+    mapFeatureById(id: $id) {
       ${FEATURE_DETAIL_FIELDS}
     }
   }

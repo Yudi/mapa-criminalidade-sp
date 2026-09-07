@@ -8,7 +8,10 @@ export class MapFeaturesQueryCacheCoordinator {
   private readonly inFlightCacheLoads = new Map<string, Promise<unknown>>();
   private cacheInvalidationGeneration = 0;
 
-  constructor(private readonly cache?: RedisCacheService) {}
+  constructor(
+    private readonly cache?: RedisCacheService,
+    private readonly getRevision?: () => Promise<string>
+  ) {}
 
   async invalidate(): Promise<number> {
     this.cacheInvalidationGeneration++;
@@ -28,7 +31,9 @@ export class MapFeaturesQueryCacheCoordinator {
   ): Promise<T> {
     if (!this.cache) return await load();
 
-    const key = buildMapFeaturesCacheKey(scope, payload);
+    const loadGeneration = this.cacheInvalidationGeneration;
+    const datasetRevision = this.getRevision ? await this.getRevision() : undefined;
+    const key = buildMapFeaturesCacheKey(scope, datasetRevision ? { datasetRevision, payload } : payload);
     const cached = await this.cache.getJson<{ value: T }>(key);
 
     if (cached) {
@@ -42,7 +47,6 @@ export class MapFeaturesQueryCacheCoordinator {
       return await existingLoad;
     }
 
-    const loadGeneration = this.cacheInvalidationGeneration;
     const loadPromise = load()
       .then(async (value) => {
         if (this.cacheInvalidationGeneration === loadGeneration) {

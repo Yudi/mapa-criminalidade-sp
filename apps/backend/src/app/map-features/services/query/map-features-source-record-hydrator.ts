@@ -77,17 +77,17 @@ export class MapFeaturesSourceRecordHydrator {
     const query = `
       SELECT *
       FROM ${qualifiedTableName(sourceTable)}
-      WHERE NULLIF(btrim(${sourceTextColumnExpression(
+      WHERE UPPER(NULLIF(btrim(${sourceTextColumnExpression(
         config.columnMappings.num_bo
-      )}), '') = $1
+      )}), '')) = UPPER($1)
         AND ${sourceIntegerExpression(config.columnMappings.ano_bo)} = $2
-        AND ${sourceTextExpression(config.columnMappings.delegacia)} = $3
+        AND UPPER(${sourceTextExpression(config.columnMappings.delegacia)}) = UPPER($3)
         AND ROUND(${sourceNumberExpression(
           config.columnMappings.latitude
-        )}, 4) = ROUND($4::numeric, 4)
+        )}, 6) = ROUND($4::numeric, 6)
         AND ROUND(${sourceNumberExpression(
           config.columnMappings.longitude
-        )}, 4) = ROUND($5::numeric, 4)
+        )}, 6) = ROUND($5::numeric, 6)
       ORDER BY id
     `;
 

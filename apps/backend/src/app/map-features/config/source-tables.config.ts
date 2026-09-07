@@ -163,6 +163,27 @@ const dadosCriminaisConfig: SourceTableConfig = {
     conduta: optionalString(row, 'DESCR_CONDUTA'),
   }),
 };
+const mdipConfig: SourceTableConfig = {
+  tablePattern: 'mdip',
+  recordType: 'dados_criminais',
+  columnMappings: {
+    num_bo: 'NUM_BO',
+    ano_bo: 'ANO_BO',
+    latitude: 'LATITUDE',
+    longitude: 'LONGITUDE',
+    data_ocorrencia: 'DATA_FATO',
+    rubrica: 'NATUREZA_APURADA',
+    delegacia: 'DP_ELABORACAO',
+  },
+  extractRecord: (row, tableName): DadosCriminaisRecord => ({
+    type: 'dados_criminais',
+    source_id: requiredSourceId(row),
+    source_table: tableName,
+    rubrica: optionalString(row, 'NATUREZA_APURADA'),
+    natureza_apurada: optionalString(row, 'NATUREZA_APURADA'),
+  }),
+};
+
 const produtividadeArmasConfig: SourceTableConfig = {
   tablePattern: 'produtividade_armas',
   recordType: 'produtividade_armas',
@@ -325,6 +346,7 @@ const produtividadeEcaConfig: SourceTableConfig = {
   extractRecord: produtividadePessoasConfig.extractRecord,
 };
 export const SOURCE_TABLE_CONFIGS: SourceTableConfig[] = [
+  mdipConfig,
   produtividadeArmasConfig,
   produtividadeEntorpecentesConfig,
   produtividadeVeiculosConfig,
@@ -341,6 +363,10 @@ export function getSourceTableConfig(
   tableName: string
 ): SourceTableConfig | null {
   for (const config of SOURCE_TABLE_CONFIGS) {
+    if (config.tablePattern === 'mdip') {
+      if (tableName === 'mdip') return config;
+      continue;
+    }
     const allowedPrefixes =
       config.tablePattern === 'produtividade_entorpecentes'
         ? [
@@ -370,21 +396,22 @@ export const LOCATION_COLUMN_MAPPINGS: Record<string, string[]> = {
   logradouro: ['LOGRADOURO'],
   numero: ['NUMERO_LOGRADOURO'],
   bairro: ['BAIRRO'],
-  cidade: ['CIDADE', 'NOME_MUNICIPIO'],
+  cidade: ['CIDADE', 'NOME_MUNICIPIO', 'MUNICIPIO_CIRCUNSCRICAO'],
   cep: ['CEP'],
-  tipo_local: ['DESCR_TIPOLOCAL'],
+  tipo_local: ['DESCR_TIPOLOCAL', 'DESC_TIPOLOCAL'],
   subtipo_local: ['DESCR_SUBTIPOLOCAL'],
 };
 export const OCCURRENCE_COLUMN_MAPPINGS: Record<string, string[]> = {
   hora_ocorrencia: ['HORA_OCORRENCIA', 'HORA_OCORRENCIA_BO', 'HORA_FATO'],
   periodo: ['DESCR_PERIODO', 'DESC_PERIODO'],
-  delegacia: ['NOME_DELEGACIA'],
+  delegacia: ['NOME_DELEGACIA', 'DP_ELABORACAO'],
   delegacia_circunscricao: [
     'NOME_DELEGACIA_CIRC',
     'NOME_DELEGACIA_CIRCUNSCRICAO',
+    'DP_CIRCUNSCRICAO',
   ],
-  departamento: ['NOME_DEPARTAMENTO'],
-  seccional: ['NOME_SECCIONAL'],
+  departamento: ['NOME_DEPARTAMENTO', 'DEP_ELABORACAO'],
+  seccional: ['NOME_SECCIONAL', 'SEC_ELABORACAO'],
   natureza_apurada: ['NATUREZA_APURADA'],
   conduta: ['DESCR_CONDUTA'],
   autoria: ['AUTORIA_BO'],

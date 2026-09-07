@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../../generated/prisma/client';
-import { Pool, PoolClient, Query, QueryResultRow } from 'pg';
+import { Client, Pool, PoolClient, Query, QueryResultRow } from 'pg';
 import { getDatabaseUrl } from './database-url.util';
 import { MAP_FEATURES_TILE_CONFIG } from '../map-features/services/query/map-features-tile-query';
 
@@ -44,9 +44,13 @@ export class PrismaService
 
     const client = await this.tilePool.connect();
     let activeQuery: Query<T> | null = null;
+    let releaseError: Error | undefined;
+    let cancelClient: Client | undefined;
     const cancelQuery = () => {
       if (!activeQuery) return;
-      const cancellableClient = client as PoolClient & {
+      cancelClient = new Client({ connectionString: getDatabaseUrl() });
+      cancelClient.on('error', () => { /* The statement deadline remains the fallback. */ });
+      const cancellableClient = cancelClient as Client & {
         cancel: (client: PoolClient, query: Query<T>) => void;
       };
       cancellableClient.cancel(client, activeQuery);
@@ -54,11 +58,13 @@ export class PrismaService
     signal?.addEventListener('abort', cancelQuery, { once: true });
 
     try {
+      if (signal?.aborted) throw createAbortError();
       await client.query('BEGIN');
       await client.query('SET TRANSACTION READ ONLY');
       await client.query(
         `SET LOCAL statement_timeout = '${MAP_FEATURES_TILE_CONFIG.STATEMENT_TIMEOUT_MS}ms'`
       );
+      await client.query("SET LOCAL lock_timeout = '5000ms'");
       await client.query('SET LOCAL plan_cache_mode = force_custom_plan');
       await client.query("SET LOCAL work_mem = '32MB'");
 
@@ -82,19 +88,30 @@ export class PrismaService
         client.query(activeQuery);
       });
 
+      if (signal?.aborted) throw createAbortError();
       await client.query('COMMIT');
       return rows;
     } catch (error) {
       try {
         await client.query('ROLLBACK');
-      } catch {
-        // The connection is released with the original query error below.
+      } catch (rollbackError) {
+        releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
       }
       throw error;
     } finally {
       signal?.removeEventListener('abort', cancelQuery);
-      client.release();
+      void cancelClient?.end().catch(() => undefined);
+      client.release(releaseError);
     }
+  }
+
+  async executeReadOnlyStatsQuery<T>(queryText: string, ...params: unknown[]): Promise<T> {
+    return this.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '15000ms'");
+      await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '3000ms'");
+      await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
+      return tx.$queryRawUnsafe<T>(queryText, ...params);
+    }, { maxWait: 5_000, timeout: 20_000 });
   }
 
   private static getPositiveIntegerEnv(name: string, fallback: number): number {

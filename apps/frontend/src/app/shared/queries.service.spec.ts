@@ -49,7 +49,7 @@ describe('QueriesService', () => {
       firstValueFrom(service.getAddressData('x'.repeat(161), '', 'São Paulo'))
     ).rejects.toBeInstanceOf(AddressSearchInputError);
     expect(() =>
-      http.expectOne((request) => request.url.includes('nominatim'))
+      http.expectOne((request) => request.url.includes('/geocoding/search'))
     ).toThrow();
   });
 
@@ -57,7 +57,9 @@ describe('QueriesService', () => {
     const request = firstValueFrom(
       service.getAddressData('  Rua   A  ', ' São Paulo ', ' São Paulo ')
     );
-    const pending = http.expectOne((request) => request.url.includes('nominatim'));
+    const pending = http.expectOne((request) =>
+      request.url.includes('/geocoding/search')
+    );
     expect(pending.request.params.get('street')).toBe('Rua A');
     expect(pending.request.params.get('city')).toBe('São Paulo');
     pending.flush([{ lat: '-23.5', lon: '-46.6' }]);
@@ -71,6 +73,46 @@ describe('QueriesService', () => {
     expect([...cache.inFlight.keys()].some((key) => key.includes('Rua'))).toBe(
       false
     );
+  });
+
+  it('cancels an older pending search before serving a newer cached result', async () => {
+    vi.useFakeTimers();
+
+    const cachedLookup = firstValueFrom(
+      service.getAddressData('Rua B', 'São Paulo', 'São Paulo')
+    );
+    const cachedRequest = http.expectOne((request) =>
+      request.url.includes('/geocoding/search')
+    );
+    cachedRequest.flush([{ lat: '-23.5', lon: '-46.6' }]);
+    await expect(cachedLookup).resolves.toEqual([{ lat: -23.5, lon: -46.6 }]);
+
+    vi.advanceTimersByTime(1001);
+    const olderValues: { lat: number; lon: number }[] = [];
+    let olderCompleted = false;
+    service
+      .getAddressData('Rua A', 'São Paulo', 'São Paulo')
+      .subscribe({
+        next: (value) => {
+          if (value) olderValues.push(...value);
+        },
+        complete: () => {
+          olderCompleted = true;
+        },
+      });
+    const olderRequest = http.expectOne((request) =>
+      request.url.includes('/geocoding/search') &&
+      request.params.get('street') === 'Rua A'
+    );
+
+    vi.advanceTimersByTime(1001);
+    await expect(
+      firstValueFrom(service.getAddressData('Rua B', 'São Paulo', 'São Paulo'))
+    ).resolves.toEqual([{ lat: -23.5, lon: -46.6 }]);
+
+    expect(olderCompleted).toBe(true);
+    expect(olderValues).toEqual([]);
+    expect(olderRequest.cancelled).toBe(true);
   });
 
   it('returns valid zero coordinates through the deprecated location path', async () => {

@@ -31,4 +31,22 @@ describe('RustToolService process boundary', () => {
     ).rejects.toThrow('timed out');
     await service.onModuleDestroy();
   });
+
+  it('rejects queued work before shutdown can release a slot', async () => {
+    process.env.RUST_BINARY_PATH = '/bin/sh';
+    const service = new RustToolService();
+
+    const active = service.runDatasetHandlingCommand(['-c', 'sleep 30'], 30_000);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const queued = service.runDatasetHandlingCommand(
+      ['-c', 'printf queued'],
+      30_000
+    );
+    const queuedExpectation = expect(queued).rejects.toThrow('shutting down');
+
+    await service.onModuleDestroy();
+
+    await expect(active).rejects.toThrow();
+    await queuedExpectation;
+  });
 });

@@ -134,6 +134,7 @@ describe('ImportDecisionService', () => {
     await expect(service.shouldImportData(category, 2026)).resolves.toEqual({
       shouldImport: false,
       reason: 'Could not verify file for current year; source skipped',
+      retryable: true,
     });
   });
 
@@ -153,6 +154,7 @@ describe('ImportDecisionService', () => {
         year: 2026,
         shouldImport: false,
         reason: 'Could not verify file for current year; source skipped',
+        retryable: true,
       },
     ]);
   });

@@ -47,6 +47,20 @@
   padding: 16px 0;
 }
 
+.iml-warning {
+  align-items: center;
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 12px;
+
+  mat-icon {
+    flex: 0 0 20px;
+  }
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

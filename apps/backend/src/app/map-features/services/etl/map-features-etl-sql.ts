@@ -16,78 +16,8 @@ type SourceTableConfig = NonNullable<ReturnType<typeof getSourceTableConfig>>;
 export function buildRemoveSourceTableFeaturesSql(): string {
   return `
     UPDATE map_features
-    SET
-      source_tables = array_remove(source_tables, $1),
-      feature_data = (
-        WITH remaining_records AS (
-          SELECT COALESCE(jsonb_agg(record.value), '[]'::jsonb) AS records
-          FROM jsonb_array_elements(
-            COALESCE(feature_data->'records', '[]'::jsonb)
-          ) AS record(value)
-          WHERE record.value->>'source_table' <> $1
-        ),
-        remaining_rubricas AS (
-          SELECT COALESCE(jsonb_agg(DISTINCT rubrica), '[]'::jsonb) AS all_rubricas
-          FROM (
-            SELECT to_jsonb(record.value->>'rubrica') AS rubrica
-            FROM jsonb_array_elements(
-              (SELECT records FROM remaining_records)
-            ) AS record(value)
-            WHERE NULLIF(record.value->>'rubrica', '') IS NOT NULL
-          ) AS rubrica_rows
-        )
-        SELECT jsonb_build_object(
-          'location',
-          COALESCE(feature_data->'location', '{}'::jsonb),
-          'occurrence',
-          COALESCE(feature_data->'occurrence', '{}'::jsonb),
-          'all_rubricas',
-          remaining_rubricas.all_rubricas,
-          'records',
-          remaining_records.records,
-          'summary',
-          jsonb_build_object(
-            'total_records',
-            jsonb_array_length(remaining_records.records),
-            'celulares_count',
-            (
-              SELECT COUNT(*)
-              FROM jsonb_array_elements(remaining_records.records) AS record(value)
-              WHERE record.value->>'type' = 'celular'
-            ),
-            'veiculos_count',
-            (
-              SELECT COUNT(*)
-              FROM jsonb_array_elements(remaining_records.records) AS record(value)
-              WHERE record.value->>'type' = 'veiculo'
-            ),
-            'objetos_count',
-            (
-              SELECT COUNT(*)
-              FROM jsonb_array_elements(remaining_records.records) AS record(value)
-              WHERE record.value->>'type' = 'objeto'
-            ),
-            'dados_criminais_count',
-            (
-              SELECT COUNT(*)
-              FROM jsonb_array_elements(remaining_records.records) AS record(value)
-              WHERE record.value->>'type' = 'dados_criminais'
-            ),
-            'produtividade_count',
-            (
-              SELECT COUNT(*)
-              FROM jsonb_array_elements(remaining_records.records) AS record(value)
-              WHERE record.value->>'type' IN (
-                'produtividade_armas',
-                'produtividade_entorpecentes',
-                'produtividade_veiculos',
-                'produtividade_pessoa'
-              )
-            )
-          )
-        )
-        FROM remaining_records, remaining_rubricas
-      ),
+    SET source_tables = array_remove(source_tables, $1),
+      feature_data = public.map_features_merge_source_data(feature_data, '{}'::jsonb, $1),
       updated_at = NOW()
     WHERE source_tables @> ARRAY[$1]::text[]
       AND cardinality(source_tables) > 1

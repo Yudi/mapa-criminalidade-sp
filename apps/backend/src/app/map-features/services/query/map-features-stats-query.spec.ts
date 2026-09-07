@@ -22,7 +22,7 @@ describe('MapFeaturesStatsQuery', () => {
       },
     ]);
     const prisma = {
-      $queryRawUnsafe: queryRawUnsafe,
+      executeReadOnlyStatsQuery: queryRawUnsafe,
     } as unknown as PrismaService;
     const statsQuery = new MapFeaturesStatsQuery(prisma, uncachedLoader);
 
@@ -42,10 +42,10 @@ describe('MapFeaturesStatsQuery', () => {
     expect(queryRawUnsafe.mock.calls[0][0]).toContain('ORDER BY sort_order ASC');
   });
 
-  it('uses Prisma count for unfiltered date-only count queries', async () => {
-    const count = jest.fn().mockResolvedValue(7);
+  it('uses the deadline-bound query path for date-only counts', async () => {
+    const count = jest.fn().mockResolvedValue([{ count: '7' }]);
     const prisma = {
-      mapFeature: { count },
+      executeReadOnlyStatsQuery: count,
     } as unknown as PrismaService;
     const statsQuery = new MapFeaturesStatsQuery(prisma, uncachedLoader);
 
@@ -56,13 +56,9 @@ describe('MapFeaturesStatsQuery', () => {
       })
     ).resolves.toBe(7);
 
-    expect(count).toHaveBeenCalledWith({
-      where: {
-        data_ocorrencia: {
-          gte: '2025-01-01',
-          lte: '2025-12-31',
-        },
-      },
-    });
+    expect(count).toHaveBeenCalledWith(
+      expect.stringContaining('data_ocorrencia <= $1 AND data_ocorrencia >= $2'),
+      '2025-12-31', '2025-01-01'
+    );
   });
 });

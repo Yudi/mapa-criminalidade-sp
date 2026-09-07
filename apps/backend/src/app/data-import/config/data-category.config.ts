@@ -23,12 +23,14 @@ const commonColumnTypeOverrides: Record<string, string> = {
   ANO_REGISTRO_BO: 'INT',
 };
 const imlFirstYear = 2013;
-const imlCurrentYear = Number(
-  new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-  }).format(new Date())
-);
+const getSaoPauloCurrentYear = (): number =>
+  Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+    }).format(new Date())
+  );
+const imlCurrentYear = getSaoPauloCurrentYear();
 const imlYears = Array.from(
   { length: imlCurrentYear - imlFirstYear + 1 },
   (_, index) => imlFirstYear + index
@@ -174,10 +176,25 @@ export class DataCategoryConfig {
   static readonly dataCategories: DataCategory[] =
     dataCategoriesSchema.parse(rawDataCategories);
   static getDataCategories(): DataCategory[] {
-    return this.dataCategories;
+    const currentYear = getSaoPauloCurrentYear();
+    return this.dataCategories.map((category) => {
+      const lastConfiguredYear = Math.max(...category.years);
+      if (currentYear <= lastConfiguredYear) return category;
+
+      return {
+        ...category,
+        years: [
+          ...category.years,
+          ...Array.from(
+            { length: currentYear - lastConfiguredYear },
+            (_, index) => lastConfiguredYear + index + 1
+          ),
+        ],
+      };
+    });
   }
   static getValidCategories(): DataCategory[] {
-    return this.dataCategories.filter((category) => category.hasSchema);
+    return this.getDataCategories().filter((category) => category.hasSchema);
   }
   static getDirectCategories(): DataCategory[] {
     return this.getValidCategories().filter(
@@ -185,7 +202,7 @@ export class DataCategoryConfig {
     );
   }
   static getImlCategory(): DataCategory {
-    const category = this.dataCategories.find(
+    const category = this.getDataCategories().find(
       (item) => item.importStrategy === 'ssp-iml'
     );
 
@@ -196,7 +213,7 @@ export class DataCategoryConfig {
     return category;
   }
   static getCategoryByName(name: string): DataCategory | undefined {
-    return this.dataCategories.find((category) => category.name === name);
+    return this.getDataCategories().find((category) => category.name === name);
   }
   static getTableName(category: DataCategory, year: number): string {
     return category.useYearSuffix === false

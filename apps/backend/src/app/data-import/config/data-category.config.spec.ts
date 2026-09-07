@@ -50,6 +50,16 @@ describe('DataCategoryConfig', () => {
     ).toBe(true);
   });
 
+  it('discovers the next direct-source year after the São Paulo new-year boundary', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2027-01-01T04:00:00Z'));
+    try {
+      const category = DataCategoryConfig.getCategoryByName('Dados Criminais');
+      expect(category?.years).toEqual([2022, 2023, 2024, 2025, 2026, 2027]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('keeps MDIP on the cumulative table while using the 2026 source URL', () => {
     const category = DataCategoryConfig.getCategoryByName('MDIP');
 

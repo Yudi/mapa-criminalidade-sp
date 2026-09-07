@@ -16,7 +16,7 @@ cors:
   max_age: 3600
 
 postgres:
-  connection_string: 'postgresql://postgres:postgres@db:5432/postgres?options=-c%20statement_timeout%3D30000%20-c%20plan_cache_mode%3Dforce_custom_plan%20-c%20work_mem%3D32MB'
+  connection_string: '${DATABASE_URL}'
   default_srid: 4326
   pool_size: 2
   auto_bounds: skip

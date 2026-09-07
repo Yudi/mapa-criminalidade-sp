@@ -45,8 +45,12 @@ class BoundedOutput {
 export class RustToolService implements OnModuleDestroy {
   private readonly logger = new Logger(RustToolService.name);
   private activeDatasetHandlingProcesses = 0;
-  private readonly datasetHandlingQueue: Array<() => void> = [];
+  private readonly datasetHandlingQueue: Array<{
+    start: () => void;
+    reject: (error: Error) => void;
+  }> = [];
   private readonly activeChildren = new Set<ChildProcess>();
+  private isShuttingDown = false;
   private readonly rustToolPath = path.resolve(
     __dirname,
     '../../../dataset-handling'
@@ -83,6 +87,9 @@ export class RustToolService implements OnModuleDestroy {
     const release = await this.acquireDatasetHandlingSlot();
 
     try {
+      if (this.isShuttingDown) {
+        throw new Error('Rust tool is shutting down');
+      }
       return await operation();
     } finally {
       release();
@@ -90,8 +97,17 @@ export class RustToolService implements OnModuleDestroy {
   }
 
   private acquireDatasetHandlingSlot(): Promise<() => void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      if (this.isShuttingDown) {
+        reject(new Error('Rust tool is shutting down'));
+        return;
+      }
+
       const start = () => {
+        if (this.isShuttingDown) {
+          reject(new Error('Rust tool is shutting down'));
+          return;
+        }
         this.activeDatasetHandlingProcesses++;
         let released = false;
         resolve(() => {
@@ -99,7 +115,7 @@ export class RustToolService implements OnModuleDestroy {
           released = true;
           this.activeDatasetHandlingProcesses--;
           const next = this.datasetHandlingQueue.shift();
-          if (next) next();
+          if (next) next.start();
         });
       };
 
@@ -108,7 +124,7 @@ export class RustToolService implements OnModuleDestroy {
       ) {
         start();
       } else {
-        this.datasetHandlingQueue.push(start);
+        this.datasetHandlingQueue.push({ start, reject });
       }
     });
   }
@@ -259,6 +275,13 @@ export class RustToolService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
+    this.isShuttingDown = true;
+    const shutdownError = new Error('Rust tool is shutting down');
+    const queued = this.datasetHandlingQueue.splice(0);
+    for (const waiter of queued) {
+      waiter.reject(shutdownError);
+    }
+
     const children = Array.from(this.activeChildren);
     await Promise.all(
       children.map((child) => this.terminateChild(child, undefined, true))

@@ -1,7 +1,9 @@
 <h2 mat-dialog-title>
   <div class="dialog-title">
     <span class="dialog-heading">Detalhes da ocorrência</span>
+    @if (data.numBo && data.anoBo !== undefined) {
     <span class="bo-number">BO {{ data.numBo }}/{{ data.anoBo }}</span>
+    }
   </div>
 </h2>
 
@@ -17,6 +19,12 @@
     <p>{{ error() }}</p>
   </div>
   } @else if (feature(); as f) {
+  @if (f.imlUnavailable) {
+  <div class="iml-warning" role="status">
+    <mat-icon aria-hidden="true">info</mat-icon>
+    <span>Os registros do IML estão temporariamente indisponíveis.</span>
+  </div>
+  }
   <section class="overview-section">
     <div class="info-grid">
       <div class="info-item">
@@ -168,7 +176,7 @@
         Veículos ({{ veiculos().length }})
       </h3>
       <div class="record-list">
-        @for (veiculo of veiculos(); track veiculo.source_id) {
+        @for (veiculo of veiculos(); track veiculo.source_table + ':' + veiculo.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>directions_car</mat-icon>
@@ -220,7 +228,7 @@
         Celulares ({{ celulares().length }})
       </h3>
       <div class="record-list">
-        @for (celular of celulares(); track celular.source_id) {
+        @for (celular of celulares(); track celular.source_table + ':' + celular.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>smartphone</mat-icon>
@@ -269,7 +277,7 @@
         Objetos ({{ objetos().length }})
       </h3>
       <div class="record-list">
-        @for (objeto of objetos(); track objeto.source_id) {
+        @for (objeto of objetos(); track objeto.source_table + ':' + objeto.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>inventory_2</mat-icon>
@@ -313,7 +321,7 @@
         Armas ({{ armas().length }})
       </h3>
       <div class="record-list">
-        @for (arma of armas(); track arma.source_id) {
+        @for (arma of armas(); track arma.source_table + ':' + arma.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>gavel</mat-icon>
@@ -358,7 +366,7 @@
         Entorpecentes ({{ entorpecentes().length }})
       </h3>
       <div class="record-list">
-        @for (droga of entorpecentes(); track droga.source_id) {
+        @for (droga of entorpecentes(); track droga.source_table + ':' + droga.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>medication</mat-icon>
@@ -399,7 +407,7 @@
         Veículos recuperados ({{ veiculosRecuperados().length }})
       </h3>
       <div class="record-list">
-        @for (veiculo of veiculosRecuperados(); track veiculo.source_id) {
+        @for (veiculo of veiculosRecuperados(); track veiculo.source_table + ':' + veiculo.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>directions_car</mat-icon>
@@ -456,7 +464,7 @@
         Pessoas ({{ pessoas().length }})
       </h3>
       <div class="record-list">
-        @for (pessoa of pessoas(); track pessoa.source_id) {
+        @for (pessoa of pessoas(); track pessoa.source_table + ':' + pessoa.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>person</mat-icon>

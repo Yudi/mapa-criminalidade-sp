@@ -25,6 +25,7 @@ describe('FeatureDetailDialogComponent', () => {
         {
           provide: MAT_DIALOG_DATA,
           useValue: {
+            featureId: 'feature-123',
             numBo: '123',
             anoBo: 2026,
           },

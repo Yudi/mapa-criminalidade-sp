@@ -23,15 +23,16 @@ export function createOccurrenceStyleFunction(
   return (feature: FeatureLike): Style | Style[] => {
     const category = feature.get('category') as string;
 
-    if (!activeCategories.includes(category)) {
-      return hiddenStyle;
-    }
-
     const clusterCount = Number(feature.get('cluster_count') ?? 1);
     const isServerCluster =
       Number(feature.get(SERVER_CLUSTER_PROPERTY) ?? 0) === 1;
+
     if (isServerCluster || clusterCount > 1) {
       return getClusterStyle(clusterCount, clusterStyleCache);
+    }
+
+    if (!activeCategories.includes(category)) {
+      return hiddenStyle;
     }
 
     if (Number(feature.get(SERVER_SINGLETON_PROPERTY) ?? 0) !== 1) {

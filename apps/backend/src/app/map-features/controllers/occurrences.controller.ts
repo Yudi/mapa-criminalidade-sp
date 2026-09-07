@@ -191,13 +191,9 @@ export class OccurrencesController {
       throw new HttpException('Feature not found', HttpStatus.NOT_FOUND);
     }
 
-    const imlRecords = await this.queryService.getImlRecordsByBo(
-      feature.num_bo,
-      feature.ano_bo,
-      feature.delegacia
-    );
+    const enrichment = await this.queryService.getImlEnrichment(feature);
 
-    return this.mapper.toDetail(feature, imlRecords);
+    return { ...this.mapper.toDetail(feature, enrichment.records), imlUnavailable: enrichment.unavailable };
   }
 
   @Get('categories')

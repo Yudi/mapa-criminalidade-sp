@@ -48,6 +48,11 @@ export class MapFeaturesResolver {
 
   @Query(() => MapFeatureMetadataObject, { name: 'mapFeaturesMetadata' })
   async getMetadata(): Promise<MapFeatureMetadataObject> {
+    return this.loadMetadata();
+  }
+
+  private async loadMetadata(retried = false): Promise<MapFeatureMetadataObject> {
+    const datasetRevision = await this.queryService.getDatasetRevision();
     // Keep the expensive statistics scan out of a three-way fan-out on the
     // production pool (which is intentionally limited to three connections).
     const stats = await this.queryService.getCategoryPeriodStats();
@@ -55,12 +60,17 @@ export class MapFeaturesResolver {
       this.queryService.getDateRange(),
       this.queryService.getCount(),
     ]);
+    if (datasetRevision !== await this.queryService.getDatasetRevision()) {
+      if (retried) throw new Error('Dataset changed during metadata loading; retry the request');
+      return this.loadMetadata(true);
+    }
     const { categories, periods } = stats;
     const categoryNames = categories.map((category) => category.name);
     const periodNames = periods.map((period) => period.name);
 
     return {
       format: 'mvt',
+      datasetRevision,
       minZoom: MIN_CRIME_TILE_ZOOM,
       maxZoom: MAX_CRIME_TILE_ZOOM,
       layers: ['occurrences'],
@@ -209,12 +219,8 @@ export class MapFeaturesResolver {
       return null;
     }
 
-    const imlRecords = await this.queryService.getImlRecordsByBo(
-      feature.num_bo,
-      feature.ano_bo,
-      feature.delegacia
-    );
-    return this.mapper.toDetail(feature, imlRecords);
+    const enrichment = await this.queryService.getImlEnrichment(feature);
+    return { ...this.mapper.toDetail(feature, enrichment.records), imlUnavailable: enrichment.unavailable };
   }
 
   @Query(() => MapFeatureDetailObject, {
@@ -234,12 +240,8 @@ export class MapFeaturesResolver {
       return null;
     }
 
-    const imlRecords = await this.queryService.getImlRecordsByBo(
-      feature.num_bo,
-      feature.ano_bo,
-      feature.delegacia
-    );
-    return this.mapper.toDetail(feature, imlRecords);
+    const enrichment = await this.queryService.getImlEnrichment(feature);
+    return { ...this.mapper.toDetail(feature, enrichment.records), imlUnavailable: enrichment.unavailable };
   }
 
   @Query(() => DateRangeObject, { name: 'mapFeaturesDateRange' })

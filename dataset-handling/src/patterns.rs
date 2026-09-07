@@ -15,8 +15,6 @@ pub static ZIP_CODE_BR: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{5}-\d{3}$").
 
 pub static IDENTIFIER_WITH_DASHES: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(-\d+)+$").unwrap());
 
-pub static INTEGER: Lazy<Regex> = Lazy::new(|| Regex::new(r"^-?\d+$").unwrap());
-
 pub static TIME_HH_MM: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{1,2}:\d{2}$").unwrap());
 
 pub static TIME_HH_MM_SS: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d{1,2}:\d{2}:\d{2}$").unwrap());
@@ -42,8 +40,6 @@ pub static LEADING_SEPARATOR_AFTER_MINUS: Lazy<Regex> =
 
 pub static EXTRACT_NUMERIC: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(-?\d+)(?:[,.](\d+))?").unwrap());
-
-pub static NON_DIGIT_EXCEPT_MINUS: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\d-]").unwrap());
 
 #[inline]
 pub fn is_nao_informado(value: &str) -> bool {
@@ -73,11 +69,6 @@ pub fn is_brazilian_zip_code(value: &str) -> bool {
 #[inline]
 pub fn is_dash_identifier(value: &str) -> bool {
     IDENTIFIER_WITH_DASHES.is_match(value)
-}
-
-#[inline]
-pub fn is_valid_integer(value: &str) -> bool {
-    INTEGER.is_match(value)
 }
 
 #[inline]

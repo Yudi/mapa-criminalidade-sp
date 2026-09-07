@@ -248,19 +248,26 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
     );
 
     let rawImportCompletedAt = jobData.rawImportCompletedAt;
+    let rawImportError: Error | undefined;
     if (!rawImportCompletedAt) {
-      await this.runRawImportStage(jobName, jobData);
-      rawImportCompletedAt = new Date().toISOString();
-      await job.updateData({
-        ...jobData,
-        rawImportCompletedAt,
-      });
+      try {
+        await this.runRawImportStage(jobName, jobData);
+        rawImportCompletedAt = new Date().toISOString();
+        await job.updateData({
+          ...jobData,
+          rawImportCompletedAt,
+        });
+      } catch (error) {
+        rawImportError = error instanceof Error ? error : new Error(String(error));
+      }
     } else {
       this.logger.log(
         `Skipping completed raw import stage for retry of ${jobName} (${job.id})`
       );
     }
 
+    // Successful sources still need publication when another source failed.
+    // Leave the raw-stage checkpoint unset so the failed sources are retried.
     const etlResult = await this.mapFeaturesEtlService.runIncrementalEtl();
     this.logger.log(
       `Post-import ETL processed ${etlResult.processed} map features`
@@ -273,6 +280,9 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
         `Post-import ETL failed: ${etlResult.errors.join('; ')}`
       );
     }
+
+    if (rawImportError) throw rawImportError;
+    if (!rawImportCompletedAt) throw new Error('Raw import checkpoint is missing');
 
     return {
       status: 'completed',

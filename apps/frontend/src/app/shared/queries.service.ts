@@ -11,6 +11,7 @@ import {
   take,
   takeUntil,
   tap,
+  timeout,
   throwError,
 } from 'rxjs';
 import {
@@ -19,6 +20,7 @@ import {
 import { DateService } from './date.service';
 import { OccurrencesService } from './occurrences.service';
 import { BoundedTtlLruCache } from './bounded-cache';
+import { environment } from '../../environments/environment';
 
 interface AddressCoordinate {
   lat: number;
@@ -33,7 +35,9 @@ interface NominatimAddressResult {
 const MAX_STREET_LENGTH = 160;
 const MAX_CITY_LENGTH = 100;
 const MAX_STATE_LENGTH = 80;
-const MAX_ADDRESS_REQUESTS_PER_SECOND = 4;
+const MAX_ADDRESS_REQUESTS_PER_SECOND = 1;
+const ADDRESS_REQUEST_TIMEOUT_MS = 12_000;
+const ADDRESS_SEARCH_URL = `${environment.apiUrl}/geocoding/search`;
 const ADDRESS_CACHE_TTL_MS = 5 * 60_000;
 const ADDRESS_CACHE_MAX_ENTRIES = 48;
 
@@ -63,6 +67,11 @@ export class QueriesService {
     city: string,
     state: string
   ): Observable<AddressCoordinate[] | null> {
+    // Supersede an earlier search before validation or cache lookup. A cache
+    // hit is still a new submission and must not allow an older request to
+    // move the map after the cached result has been applied.
+    this.addressCancellation$.next();
+
     let normalized: NormalizedAddressInput | null;
     try {
       normalized = normalizeAddressInput(street, city, state);
@@ -92,8 +101,6 @@ export class QueriesService {
       );
     }
     this.lastAddressRequestAt = now;
-    this.addressCancellation$.next();
-
     const params = new HttpParams()
       .set('format', 'json')
       .set('street', normalized.street)
@@ -104,7 +111,7 @@ export class QueriesService {
     return this.cachedRequest(cacheKey, () =>
       this.http
         .get<NominatimAddressResult[]>(
-          'https://nominatim.openstreetmap.org/search',
+          ADDRESS_SEARCH_URL,
           { params }
         )
         .pipe(
@@ -124,6 +131,7 @@ export class QueriesService {
                   Number.isFinite(coordinate.lon)
               );
           }),
+          timeout({ first: ADDRESS_REQUEST_TIMEOUT_MS }),
           takeUntil(this.addressCancellation$)
         )
     );

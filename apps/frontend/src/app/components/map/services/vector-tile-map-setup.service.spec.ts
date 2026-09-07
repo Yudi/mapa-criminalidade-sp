@@ -95,6 +95,7 @@ describe('VectorTileMapSetupService', () => {
   it('treats an identified low-zoom singleton as a directly clickable feature', () => {
     const singleton = new Feature({
       geometry: new Point([100, 200]),
+      feature_id: 'feature-123',
       server_singleton: 1,
       num_bo: '123',
       ano_bo: 2024,
@@ -113,14 +114,37 @@ describe('VectorTileMapSetupService', () => {
 
   it('keeps registration police unit in the BO identity', () => {
     const first = new Feature<Point>({
+      feature_id: 'feature-1',
       num_bo: '123',
       ano_bo: 2021,
       delegacia: '1º DP',
     });
     const second = new Feature<Point>({
+      feature_id: 'feature-2',
       num_bo: '123',
       ano_bo: 2021,
       delegacia: '2º DP',
+    });
+    const testableService = service as unknown as {
+      getUniqueClickableFeatures(features: Feature<Point>[]): Feature<Point>[];
+    };
+
+    expect(testableService.getUniqueClickableFeatures([first, second])).toEqual([
+      first,
+      second,
+    ]);
+  });
+
+  it('keeps distinct source features with the same BO identity clickable', () => {
+    const first = new Feature<Point>({
+      feature_id: 'location-a',
+      num_bo: '123',
+      ano_bo: 2024,
+    });
+    const second = new Feature<Point>({
+      feature_id: 'location-b',
+      num_bo: '123',
+      ano_bo: 2024,
     });
     const testableService = service as unknown as {
       getUniqueClickableFeatures(features: Feature<Point>[]): Feature<Point>[];

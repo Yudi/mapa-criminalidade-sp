@@ -52,4 +52,13 @@ describe('VectorTileService', () => {
   it('versions the vector tile payload contract to avoid stale tile shapes', () => {
     expect(service.buildTileUrl()).toContain('tileSchema=v2');
   });
+
+  it('includes the published dataset revision in tile cache identity', () => {
+    const url = new URL(
+      service.buildTileUrl({ datasetRevision: 'revision/b' }),
+      'http://localhost'
+    );
+
+    expect(url.searchParams.get('datasetRevision')).toBe('revision/b');
+  });
 });

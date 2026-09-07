@@ -262,6 +262,7 @@ export interface MapFeaturesFilterParams {
 }
 
 export interface MapFeatureResponse {
+  imlUnavailable?: boolean;
   id: string;
   numBo: string;
   anoBo: number;

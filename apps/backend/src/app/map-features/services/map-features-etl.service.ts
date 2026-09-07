@@ -77,7 +77,6 @@ export class MapFeaturesEtlService {
   }
   async runIncrementalEtl(): Promise<{ processed: number; errors: string[] }> {
     this.logger.log('Starting incremental ETL for map_features...');
-    await this.ensureFutureTilePartitions();
 
     const result = await this.prisma.dynamicTableMetadata.findMany({
       where: { needs_geom_update: true },
@@ -93,6 +92,7 @@ export class MapFeaturesEtlService {
       return { processed: 0, errors: [] };
     }
 
+    await this.ensureFutureTilePartitions();
     this.logger.log(`${tablesToProcess.length} tables need ETL processing`);
 
     let totalProcessed = 0;
@@ -127,15 +127,25 @@ export class MapFeaturesEtlService {
     await this.updateEtlStatus(tableName, 'processing', 0, null);
 
     const processedCount = await this.runEtlTransaction(async (tx) => {
+      const previousFeature = await tx.mapFeature.findFirst({
+        where: { source_tables: { has: tableName } },
+        select: { id: true },
+      });
       await this.removeSourceTableFeatures(tableName, tx);
       const count = await this.processSourceTable(tableName, tx, false);
+      if (previousFeature && count === 0) {
+        throw new Error(`Refusing to replace ${tableName}: no eligible features remain in a previously published source`);
+      }
       await tx.$executeRawUnsafe(
         'SELECT public.refresh_map_features_date_range()'
       );
+      await tx.$executeRawUnsafe(
+        'UPDATE public.map_dataset_revision SET revision = gen_random_uuid() WHERE singleton = TRUE'
+      );
+      await this.updateEtlStatus(tableName, 'completed', count, null, tx);
       return count;
     });
 
-    await this.updateEtlStatus(tableName, 'completed', processedCount, null);
     return processedCount;
   }
 
@@ -196,6 +206,20 @@ export class MapFeaturesEtlService {
     tableName: string,
     db: DatabaseExecutor = this.prisma
   ): Promise<void> {
+    // Retain IDs for the logical locations that are deleted and rebuilt below.
+    // A transaction-local table keeps this bounded in application memory and
+    // preserves the IDs already held by open maps and cached tiles.
+    await db.$executeRawUnsafe(`
+      CREATE TEMP TABLE map_feature_previous_ids ON COMMIT DROP AS
+      SELECT id, num_bo, ano_bo, delegacia, location_hash
+      FROM map_features
+      WHERE source_tables @> ARRAY[$1]::text[]
+        AND cardinality(source_tables) = 1
+    `, tableName);
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX ON map_feature_previous_ids
+        (num_bo, ano_bo, COALESCE(delegacia, ''), location_hash)
+    `);
     await db.$executeRawUnsafe(
       `
         DELETE FROM map_features
@@ -398,11 +422,19 @@ export class MapFeaturesEtlService {
 
     for (const feature of features.values()) {
       const geomWkt = `POINT(${feature.longitude} ${feature.latitude})`;
+      const firstParam = paramIndex;
 
       placeholders.push(`(
+        COALESCE((
+          SELECT id FROM pg_temp.map_feature_previous_ids
+          WHERE num_bo = $${firstParam} AND ano_bo = $${firstParam + 1}
+            AND COALESCE(delegacia, '') = COALESCE($${firstParam + 2}::text, '')
+            AND location_hash = $${firstParam + 5}
+        ), uuidv7()),
         $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++},
         $${paramIndex++}, ST_SetSRID(ST_GeomFromText($${paramIndex++}), 4326),
-        $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}
+        $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++},
+        public.map_features_merge_source_data('{}'::jsonb, $${paramIndex++}::jsonb)
       )`);
 
       values.push(
@@ -417,14 +449,24 @@ export class MapFeaturesEtlService {
         feature.rubrica_for_styling,
         feature.data_ocorrencia,
         feature.source_tables,
-        JSON.stringify(feature.feature_data)
+        JSON.stringify({
+          ...feature.feature_data,
+          _source_metadata: Object.fromEntries(feature.source_tables.map((source) => [source, {
+            location: feature.feature_data.location,
+            occurrence: feature.feature_data.occurrence,
+            all_rubricas: feature.feature_data.all_rubricas,
+            category: feature.category,
+            rubrica_for_styling: feature.rubrica_for_styling,
+            data_ocorrencia: feature.data_ocorrencia?.toISOString().slice(0, 10) ?? null,
+          }])),
+        })
       );
     }
 
     // Note: The unique index uses COALESCE(delegacia, '') for null handling
     const query = `
       INSERT INTO map_features (
-        num_bo, ano_bo, delegacia, latitude, longitude, location_hash, geom,
+        id, num_bo, ano_bo, delegacia, latitude, longitude, location_hash, geom,
         category, rubrica_for_styling, data_ocorrencia, source_tables, feature_data
       )
       VALUES ${placeholders.join(', ')}
@@ -435,90 +477,7 @@ export class MapFeaturesEtlService {
         source_tables = (
           SELECT ARRAY(SELECT DISTINCT UNNEST(map_features.source_tables || EXCLUDED.source_tables))
         ),
-        feature_data = (
-          WITH merged_records AS (
-            SELECT COALESCE(jsonb_agg(record), '[]'::jsonb) AS records
-            FROM (
-              SELECT existing_record.value AS record
-              FROM jsonb_array_elements(
-                COALESCE(map_features.feature_data->'records', '[]'::jsonb)
-              ) AS existing_record(value)
-              WHERE NOT (existing_record.value->>'source_table' = ANY(EXCLUDED.source_tables))
-              UNION ALL
-              SELECT incoming_record.value AS record
-              FROM jsonb_array_elements(
-                COALESCE(EXCLUDED.feature_data->'records', '[]'::jsonb)
-              ) AS incoming_record(value)
-            ) AS record_rows
-          ),
-          merged_rubricas AS (
-            SELECT COALESCE(jsonb_agg(DISTINCT rubrica), '[]'::jsonb) AS all_rubricas
-            FROM (
-              SELECT existing_rubrica.value AS rubrica
-              FROM jsonb_array_elements(
-                COALESCE(map_features.feature_data->'all_rubricas', '[]'::jsonb)
-              ) AS existing_rubrica(value)
-              UNION
-              SELECT incoming_rubrica.value AS rubrica
-              FROM jsonb_array_elements(
-                COALESCE(EXCLUDED.feature_data->'all_rubricas', '[]'::jsonb)
-              ) AS incoming_rubrica(value)
-            ) AS rubrica_rows
-          )
-          SELECT jsonb_build_object(
-            'location',
-            COALESCE(map_features.feature_data->'location', '{}'::jsonb) ||
-              COALESCE(EXCLUDED.feature_data->'location', '{}'::jsonb),
-            'occurrence',
-            COALESCE(map_features.feature_data->'occurrence', '{}'::jsonb) ||
-              COALESCE(EXCLUDED.feature_data->'occurrence', '{}'::jsonb),
-            'all_rubricas',
-            merged_rubricas.all_rubricas,
-            'records',
-            merged_records.records,
-            'summary',
-            jsonb_build_object(
-              'total_records',
-              jsonb_array_length(merged_records.records),
-              'celulares_count',
-              (
-                SELECT COUNT(*)
-                FROM jsonb_array_elements(merged_records.records) AS record(value)
-                WHERE record.value->>'type' = 'celular'
-              ),
-              'veiculos_count',
-              (
-                SELECT COUNT(*)
-                FROM jsonb_array_elements(merged_records.records) AS record(value)
-                WHERE record.value->>'type' = 'veiculo'
-              ),
-              'objetos_count',
-              (
-                SELECT COUNT(*)
-                FROM jsonb_array_elements(merged_records.records) AS record(value)
-                WHERE record.value->>'type' = 'objeto'
-              ),
-              'dados_criminais_count',
-              (
-                SELECT COUNT(*)
-                FROM jsonb_array_elements(merged_records.records) AS record(value)
-                WHERE record.value->>'type' = 'dados_criminais'
-              ),
-              'produtividade_count',
-              (
-                SELECT COUNT(*)
-                FROM jsonb_array_elements(merged_records.records) AS record(value)
-                WHERE record.value->>'type' IN (
-                  'produtividade_armas',
-                  'produtividade_entorpecentes',
-                  'produtividade_veiculos',
-                  'produtividade_pessoa'
-                )
-              )
-            )
-          )
-          FROM merged_records, merged_rubricas
-        ),
+        feature_data = public.map_features_merge_source_data(map_features.feature_data, EXCLUDED.feature_data),
         updated_at = NOW()
     `;
 

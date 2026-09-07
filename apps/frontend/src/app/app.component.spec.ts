@@ -11,6 +11,7 @@ import {
 import { of, Subject, throwError } from 'rxjs';
 import { AppComponent } from './app.component';
 import { OccurrencesService } from './shared/occurrences.service';
+import { VectorTileService } from './shared/vector-tile.service';
 
 describe('AppComponent', () => {
   const categories: CategoryInfo[] = [
@@ -24,6 +25,8 @@ describe('AppComponent', () => {
   let occurrencesService: {
     getTileMetadata: ReturnType<typeof vi.fn>;
     getCategoryPeriodStatsForBounds: ReturnType<typeof vi.fn>;
+    clearCache: ReturnType<typeof vi.fn>;
+    clearCacheByPrefix: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -40,6 +43,8 @@ describe('AppComponent', () => {
       getCategoryPeriodStatsForBounds: vi.fn(() =>
         of({ categories, periods: [] })
       ),
+      clearCache: vi.fn(),
+      clearCacheByPrefix: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -50,6 +55,10 @@ describe('AppComponent', () => {
         { provide: MAT_DATE_LOCALE, useValue: ptBR },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: OccurrencesService, useValue: occurrencesService },
+        {
+          provide: VectorTileService,
+          useValue: { clearMetadataCache: vi.fn() },
+        },
       ],
     }).compileComponents();
   });
@@ -273,5 +282,44 @@ describe('AppComponent', () => {
     expect(emissions).toEqual([categories]);
 
     subscription.unsubscribe();
+  });
+
+  it('does not resync the map when viewport stats re-emit the same selection', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    const app = fixture.componentInstance;
+    const syncSpy = vi.spyOn(
+      app as unknown as { syncMapInputs: () => void },
+      'syncMapInputs'
+    );
+
+    app.onRubricasFormChange({ Furto: true });
+    app.onRubricasFormChange({ Furto: true });
+
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a retry state when metadata fails and recovers without reload', () => {
+    occurrencesService.getTileMetadata
+      .mockReturnValueOnce(throwError(() => new Error('offline')))
+      .mockReturnValueOnce(
+        of({
+          dateRange: {
+            earliest: '2013-01-01',
+            latest: '2026-04-30',
+            defaultAfter: '2026-01-30',
+          },
+          datasetRevision: 'revision-b',
+        })
+      );
+    const fixture = TestBed.createComponent(AppComponent);
+    const app = fixture.componentInstance;
+
+    expect(app.metadataLoadError()).toBe(true);
+
+    app.retryMetadata();
+
+    expect(app.metadataLoadError()).toBe(false);
+    expect(app.datasetRevision).toBe('revision-b');
+    expect(occurrencesService.getTileMetadata).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { GeocodingController } from './shared/geocoding.controller';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -51,7 +52,7 @@ type GraphqlContextFactoryArgs = { req: unknown; res: unknown };
     MapFeaturesModule,
     DataImportModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, GeocodingController],
   providers: [
     AppService,
     ValidatorsService,

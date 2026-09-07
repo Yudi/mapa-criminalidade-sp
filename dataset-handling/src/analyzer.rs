@@ -11,11 +11,10 @@ use crate::date_time::{is_date_format, is_time_format, is_timestamp_format};
 use crate::logger::Logger;
 use crate::parquet_io;
 use crate::patterns::{is_brazilian_zip_code, is_null_pattern};
-use crate::text_normalizer::normalize_column_name;
+use crate::text_normalizer::{normalize_column_name, normalize_unique_headers};
 use crate::type_inference::determine_postgresql_type;
 use crate::types::{ChunkStats, ColumnAnalysis, CsvAnalysis, IntegerRange, NumericStats};
 
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -105,23 +104,8 @@ impl CsvAnalyzer {
         &self,
         headers: &csv::StringRecord,
     ) -> (Vec<String>, Vec<usize>) {
-        let mut seen: HashMap<String, usize> = HashMap::new();
-        let mut final_headers = Vec::new();
-        let mut column_indices = Vec::new();
-
-        for (idx, header) in headers.iter().enumerate() {
-            let normalized = normalize_column_name(header);
-            let count = seen.entry(normalized.clone()).or_insert(0);
-            *count += 1;
-            if *count == 1 {
-                final_headers.push(normalized);
-            } else {
-                final_headers.push(format!("{}_{}", normalized, count));
-            }
-            column_indices.push(idx);
-        }
-
-        (final_headers, column_indices)
+        let source_headers = headers.iter().map(str::to_string).collect::<Vec<_>>();
+        normalize_unique_headers(&source_headers)
     }
 
     /// Analyze a CSV file and return column analysis.
@@ -487,7 +471,13 @@ impl CsvAnalyzer {
         source_label: &str,
     ) -> Result<CsvAnalysis, Box<dyn Error>> {
         let file = File::open(file_path)?;
-        let mut reader = csv::ReaderBuilder::new().delimiter(b';').from_reader(file);
+        let mut reader = csv::ReaderBuilder::new()
+            .delimiter(b';')
+            // Keep schema analysis tolerant of bad-width rows. The cleaning
+            // stage records those rows as durable rejections with their source
+            // ordinal instead of letting analysis abort the whole import.
+            .flexible(true)
+            .from_reader(file);
 
         let headers = reader.headers()?.clone();
         let column_count = headers.len();
@@ -553,5 +543,43 @@ mod tests {
         assert_eq!(analyzer.max_sample_size, 15);
         assert_eq!(analyzer.chunk_size, 5000);
         assert!(!analyzer.enable_parallel);
+    }
+
+    #[test]
+    fn accepts_bad_width_rows_for_tolerant_cleaning() {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("analyzer_bad_width_{}.csv", suffix));
+        std::fs::write(&path, "A;B\n1;2\nmalformed\n3;4\n").unwrap();
+
+        let analyzer = CsvAnalyzer::with_settings(20, 10, false, Logger::new(true));
+        let analysis = analyzer.analyze_csv(path.to_str().unwrap()).unwrap();
+
+        assert_eq!(analysis.total_rows, 3);
+        assert_eq!(analysis.columns.len(), 2);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn analyzer_header_names_are_globally_unique() {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("analyzer_duplicate_headers_{}.csv", suffix));
+        std::fs::write(&path, "COD;COD;COD_2\nA;B;C\n").unwrap();
+
+        let analyzer = CsvAnalyzer::with_settings(20, 10, false, Logger::new(true));
+        let analysis = analyzer.analyze_csv(path.to_str().unwrap()).unwrap();
+
+        let names = analysis
+            .columns
+            .iter()
+            .map(|column| column.normalized_name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["COD", "COD_3", "COD_2"]);
+        let _ = std::fs::remove_file(path);
     }
 }
