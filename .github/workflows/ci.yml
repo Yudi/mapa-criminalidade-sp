@@ -35,6 +35,8 @@ jobs:
           node-version: 26
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
+      - name: Generate Prisma client
+        run: bunx prisma generate --schema prisma/schema.prisma
       - name: Exercise the SQL and decoded MVT contract in a disposable database
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mapa_contract_test
