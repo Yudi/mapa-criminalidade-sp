@@ -19,7 +19,7 @@
     "@angular/material-date-fns-adapter": "22.1.2",
     "@angular/platform-browser": "22.1.2",
     "@angular/platform-browser-dynamic": "22.1.2",
-    "@angular/platform-server": "22.1.2",
+    "@angular/platform-server": "22.1.4",
     "@angular/router": "22.0.1",
     "@angular/ssr": "22.0.1",
     "@apollo/server": "^5.5.1",
