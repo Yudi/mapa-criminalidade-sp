@@ -6,14 +6,17 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ptBR } from 'date-fns/locale';
 import {
   CategoryInfo,
+  DateRange,
   MIN_CRIME_TILE_ZOOM,
 } from '@mapa-criminalidade/shared-types';
 import { of, Subject, throwError } from 'rxjs';
 import { AppComponent } from './app.component';
 import { OccurrencesService } from './shared/occurrences.service';
 import { VectorTileService } from './shared/vector-tile.service';
+import { createRelativeDateRange } from './testing/relative-date.fixture';
 
 describe('AppComponent', () => {
+  const relativeDateRange = createRelativeDateRange();
   const categories: CategoryInfo[] = [
     {
       name: 'Furto',
@@ -33,19 +36,11 @@ describe('AppComponent', () => {
   beforeEach(async () => {
     occurrencesService = {
       getDateRange: vi.fn(() =>
-        of({
-          earliest: '2013-01-01',
-          latest: '2026-04-30',
-          defaultAfter: '2026-01-30',
-        })
+        of(relativeDateRange)
       ),
       getTileMetadata: vi.fn(() =>
         of({
-          dateRange: {
-            earliest: '2013-01-01',
-            latest: '2026-04-30',
-            defaultAfter: '2026-01-30',
-          },
+          dateRange: relativeDateRange,
         })
       ),
       getCategoryPeriodStatsForBounds: vi.fn(() =>
@@ -169,8 +164,8 @@ describe('AppComponent', () => {
       pannedBounds.minLat,
       pannedBounds.maxLon,
       pannedBounds.maxLat,
-      '2026-04-30',
-      '2026-01-30',
+      relativeDateRange.latest,
+      relativeDateRange.defaultAfter,
       undefined,
       undefined,
       undefined
@@ -204,12 +199,8 @@ describe('AppComponent', () => {
 
   it('waits for the pre-cached date range and sends the bounded initial lookup', () => {
     vi.useFakeTimers();
-    const dateRange = new Subject<{
-      earliest: string;
-      latest: string;
-      defaultAfter: string;
-    }>();
-    occurrencesService.getDateRange.mockReturnValue(dateRange);
+    const dateRangeSubject = new Subject<DateRange>();
+    occurrencesService.getDateRange.mockReturnValue(dateRangeSubject);
     occurrencesService.getTileMetadata.mockReturnValue(new Subject());
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
@@ -228,11 +219,7 @@ describe('AppComponent', () => {
       occurrencesService.getCategoryPeriodStatsForBounds
     ).not.toHaveBeenCalled();
 
-    dateRange.next({
-      earliest: '2013-01-01',
-      latest: '2026-04-30',
-      defaultAfter: '2026-01-30',
-    });
+    dateRangeSubject.next(relativeDateRange);
     vi.advanceTimersByTime(300);
 
     expect(
@@ -242,8 +229,8 @@ describe('AppComponent', () => {
       expect.any(Number),
       expect.any(Number),
       expect.any(Number),
-      '2026-04-30',
-      '2026-01-30',
+      relativeDateRange.latest,
+      relativeDateRange.defaultAfter,
       undefined,
       undefined,
       undefined
@@ -308,11 +295,7 @@ describe('AppComponent', () => {
       .mockReturnValueOnce(throwError(() => new Error('offline')))
       .mockReturnValueOnce(
         of({
-          dateRange: {
-            earliest: '2013-01-01',
-            latest: '2026-04-30',
-            defaultAfter: '2026-01-30',
-          },
+          dateRange: relativeDateRange,
           datasetRevision: 'revision-b',
         })
       );

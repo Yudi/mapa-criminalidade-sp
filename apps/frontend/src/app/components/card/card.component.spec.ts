@@ -6,6 +6,7 @@ import { ptBR } from 'date-fns/locale';
 
 import { CardComponent } from './card.component';
 import { DateService } from '../../shared/date.service';
+import { createRelativeDateRange } from '../../testing/relative-date.fixture';
 import { CategoryInfo, PeriodInfo } from '@mapa-criminalidade/shared-types';
 
 describe('CardComponent', () => {
@@ -240,19 +241,16 @@ describe('CardComponent', () => {
   });
 
   it('uses the cached default start date', () => {
-    fixture.componentRef.setInput('dateRange', {
-      earliest: '2013-01-01',
-      latest: '2026-04-30',
-      defaultAfter: '2026-01-30',
-    });
+    const relativeDateRange = createRelativeDateRange();
+    fixture.componentRef.setInput('dateRange', relativeDateRange);
     fixture.detectChanges();
 
     expect(
       dateService.formatYYYYMMDD(component.dataForm.controls.afterDate.value)
-    ).toBe('2026-01-30');
+    ).toBe(relativeDateRange.defaultAfter);
     expect(
       dateService.formatYYYYMMDD(component.dataForm.controls.beforeDate.value)
-    ).toBe('2026-04-30');
+    ).toBe(relativeDateRange.latest);
   });
 
   it('does not default before the earliest available date', () => {

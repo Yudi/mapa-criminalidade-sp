@@ -3,8 +3,10 @@ import { firstValueFrom, of, throwError } from 'rxjs';
 import { DateService } from './date.service';
 import { GraphqlClientService } from './graphql-client.service';
 import { OccurrencesService } from './occurrences.service';
+import { createRelativeDateRange } from '../testing/relative-date.fixture';
 
 describe('OccurrencesService', () => {
+  const relativeDateRange = createRelativeDateRange();
   let service: OccurrencesService;
   let graphql: { request: ReturnType<typeof vi.fn> };
 
@@ -34,19 +36,13 @@ describe('OccurrencesService', () => {
   it('loads the pre-cached date range without requesting full metadata', async () => {
     graphql.request.mockReturnValue(
       of({
-        mapFeaturesDateRange: {
-          earliest: '2013-01-01',
-          latest: '2026-04-30',
-          defaultAfter: '2026-01-30',
-        },
+        mapFeaturesDateRange: relativeDateRange,
       })
     );
 
-    await expect(firstValueFrom(service.getDateRange())).resolves.toEqual({
-      earliest: '2013-01-01',
-      latest: '2026-04-30',
-      defaultAfter: '2026-01-30',
-    });
+    await expect(firstValueFrom(service.getDateRange())).resolves.toEqual(
+      relativeDateRange
+    );
     expect(graphql.request).toHaveBeenCalledWith({
       query: expect.stringContaining('mapFeaturesDateRange'),
     });
