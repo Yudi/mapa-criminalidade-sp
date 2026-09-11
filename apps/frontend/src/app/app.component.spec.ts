@@ -24,6 +24,7 @@ describe('AppComponent', () => {
   ];
   let occurrencesService: {
     getTileMetadata: ReturnType<typeof vi.fn>;
+    getDateRange: ReturnType<typeof vi.fn>;
     getCategoryPeriodStatsForBounds: ReturnType<typeof vi.fn>;
     clearCache: ReturnType<typeof vi.fn>;
     clearCacheByPrefix: ReturnType<typeof vi.fn>;
@@ -31,6 +32,13 @@ describe('AppComponent', () => {
 
   beforeEach(async () => {
     occurrencesService = {
+      getDateRange: vi.fn(() =>
+        of({
+          earliest: '2013-01-01',
+          latest: '2026-04-30',
+          defaultAfter: '2026-01-30',
+        })
+      ),
       getTileMetadata: vi.fn(() =>
         of({
           dateRange: {
@@ -194,16 +202,15 @@ describe('AppComponent', () => {
     periodsSubscription.unsubscribe();
   });
 
-  it('waits for metadata and sends the default three-month date range', () => {
+  it('waits for the pre-cached date range and sends the bounded initial lookup', () => {
     vi.useFakeTimers();
-    const metadata = new Subject<{
-      dateRange: {
-        earliest: string;
-        latest: string;
-        defaultAfter: string;
-      };
+    const dateRange = new Subject<{
+      earliest: string;
+      latest: string;
+      defaultAfter: string;
     }>();
-    occurrencesService.getTileMetadata.mockReturnValue(metadata);
+    occurrencesService.getDateRange.mockReturnValue(dateRange);
+    occurrencesService.getTileMetadata.mockReturnValue(new Subject());
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
     const subscription = app.categories.subscribe();
@@ -221,12 +228,10 @@ describe('AppComponent', () => {
       occurrencesService.getCategoryPeriodStatsForBounds
     ).not.toHaveBeenCalled();
 
-    metadata.next({
-      dateRange: {
-        earliest: '2013-01-01',
-        latest: '2026-04-30',
-        defaultAfter: '2026-01-30',
-      },
+    dateRange.next({
+      earliest: '2013-01-01',
+      latest: '2026-04-30',
+      defaultAfter: '2026-01-30',
     });
     vi.advanceTimersByTime(300);
 

@@ -152,6 +152,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.iconRegistry.setDefaultFontSetClass('material-symbols-outlined');
 
     if (this.isBrowserOnly) {
+      this.loadInitialDateRange();
       this.loadMetadata();
     }
     const categoryPeriodStats = combineLatest([
@@ -266,6 +267,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
     this.occurrencesService.clearCache();
     this.vectorTileService.clearMetadataCache();
+    this.loadInitialDateRange();
     this.loadMetadata();
   }
   onBoundsChange(bounds: MapBounds) {
@@ -457,19 +459,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           this.metadataLoaded = true;
           this.datasetRevision = metadata.datasetRevision ?? null;
           this.datasetRevisionSubject.next(this.datasetRevision);
-          this.dateRange = metadata.dateRange;
-
-          if (!this.dateFilters.before && !this.dateFilters.after) {
-            const defaultAfterDate = this.dateService.defaultAfterDate(
-              metadata.dateRange
-            );
-            this.dateFilters = {
-              after:
-                this.dateService.formatYYYYMMDD(defaultAfterDate) || null,
-              before: metadata.dateRange.latest,
-            };
-            this.dateFiltersSubject.next(this.dateFilters);
-          }
+          this.applyDateRange(metadata.dateRange);
 
           this.syncMapInputs();
 
@@ -480,5 +470,43 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           console.error('Error loading map metadata:', error);
         },
       });
+  }
+
+  private loadInitialDateRange(): void {
+    this.occurrencesService
+      .getDateRange()
+      .pipe(take(1))
+      .subscribe({
+        next: (dateRange) => {
+          this.applyDateRange(dateRange);
+          this.syncMapInputs();
+          this.changeDetectorRef.markForCheck();
+        },
+        error: (error: unknown) => {
+          // Full metadata remains a fallback for the same date range.
+          console.error('Error loading initial map date range:', error);
+        },
+      });
+  }
+
+  private applyDateRange(dateRange: DateRange): void {
+    if (
+      this.dateRange?.earliest !== dateRange.earliest ||
+      this.dateRange?.latest !== dateRange.latest ||
+      this.dateRange?.defaultAfter !== dateRange.defaultAfter
+    ) {
+      this.dateRange = dateRange;
+    }
+
+    if (this.dateFilters.before || this.dateFilters.after) {
+      return;
+    }
+
+    const defaultAfterDate = this.dateService.defaultAfterDate(dateRange);
+    this.dateFilters = {
+      after: this.dateService.formatYYYYMMDD(defaultAfterDate) || null,
+      before: dateRange.latest,
+    };
+    this.dateFiltersSubject.next(this.dateFilters);
   }
 }

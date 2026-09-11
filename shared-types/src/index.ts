@@ -52,6 +52,7 @@ export type {
   MapFeatureCharts,
   MapFeaturesMetadata,
   MapFeaturesMetadataQuery,
+  MapFeaturesDateRangeQuery,
   MapFeaturesCategoriesQuery,
   MapFeaturesCategoriesForLocationQuery,
   MapFeaturesCategoryPeriodStatsQuery,

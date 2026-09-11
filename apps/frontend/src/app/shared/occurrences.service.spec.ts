@@ -31,6 +31,30 @@ describe('OccurrencesService', () => {
     expect(graphql.request).toHaveBeenCalledTimes(1);
   });
 
+  it('loads the pre-cached date range without requesting full metadata', async () => {
+    graphql.request.mockReturnValue(
+      of({
+        mapFeaturesDateRange: {
+          earliest: '2013-01-01',
+          latest: '2026-04-30',
+          defaultAfter: '2026-01-30',
+        },
+      })
+    );
+
+    await expect(firstValueFrom(service.getDateRange())).resolves.toEqual({
+      earliest: '2013-01-01',
+      latest: '2026-04-30',
+      defaultAfter: '2026-01-30',
+    });
+    expect(graphql.request).toHaveBeenCalledWith({
+      query: expect.stringContaining('mapFeaturesDateRange'),
+    });
+    expect(graphql.request.mock.calls[0][0].query).not.toContain(
+      'mapFeaturesMetadata'
+    );
+  });
+
   it('rejects non-finite coordinates without issuing a request', async () => {
     await expect(
       firstValueFrom(service.getCategoriesForLocation(Number.NaN, 0, 100))

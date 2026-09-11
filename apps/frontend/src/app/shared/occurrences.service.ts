@@ -13,6 +13,7 @@ import {
 import {
   GroupedOccurrence,
   CategoryInfo,
+  DateRange,
   GroupedOccurrenceByBoQuery,
   MapFeatureFilterInput,
   MapFeatureLocationInput,
@@ -25,6 +26,7 @@ import {
   MapFeaturesCategoriesForLocationQuery,
   MapFeaturesMetadata,
   MapFeaturesMetadataQuery,
+  MapFeaturesDateRangeQuery,
 } from '@mapa-criminalidade/shared-types';
 import { DateService } from './date.service';
 import { GraphqlClientService } from './graphql-client.service';
@@ -34,6 +36,7 @@ import {
   MAP_FEATURES_CATEGORIES_FOR_LOCATION_QUERY,
   MAP_FEATURES_CATEGORY_PERIOD_STATS_QUERY,
   MAP_FEATURES_CHARTS_QUERY,
+  MAP_FEATURES_DATE_RANGE_QUERY,
   MAP_FEATURES_METADATA_QUERY,
   MAP_FEATURE_BY_ID_QUERY,
 } from './map-features.graphql';
@@ -64,6 +67,17 @@ export class OccurrencesService {
         .pipe(map((data) => data.mapFeaturesMetadata))
     );
   }
+
+  getDateRange(): Observable<DateRange> {
+    return this.cachedRequest('date-range', () =>
+      this.graphql
+        .request<MapFeaturesDateRangeQuery>({
+          query: MAP_FEATURES_DATE_RANGE_QUERY,
+        })
+        .pipe(map((data) => data.mapFeaturesDateRange))
+    );
+  }
+
   getCategoryPeriodStatsForBounds(
     minLon: number,
     minLat: number,

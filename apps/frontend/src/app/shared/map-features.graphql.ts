@@ -173,6 +173,16 @@ export const MAP_FEATURES_METADATA_QUERY = `
   }
 `;
 
+export const MAP_FEATURES_DATE_RANGE_QUERY = `
+  query MapFeaturesDateRange {
+    mapFeaturesDateRange {
+      earliest
+      latest
+      defaultAfter
+    }
+  }
+`;
+
 export const MAP_FEATURES_CATEGORIES_QUERY = `
   query MapFeaturesCategories($filter: MapFeatureFilterInput) {
     mapFeaturesCategories(filter: $filter) {

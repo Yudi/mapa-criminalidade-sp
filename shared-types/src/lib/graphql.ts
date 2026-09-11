@@ -109,6 +109,10 @@ export interface MapFeaturesMetadataQuery {
   mapFeaturesMetadata: MapFeaturesMetadata;
 }
 
+export interface MapFeaturesDateRangeQuery {
+  mapFeaturesDateRange: DateRange;
+}
+
 export interface MapFeaturesCategoriesQuery {
   mapFeaturesCategories: CategoryInfo[];
 }
