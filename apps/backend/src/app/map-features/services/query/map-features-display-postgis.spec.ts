@@ -50,7 +50,7 @@ describePostgis('fixed density and weekday/hour aggregation (PostGIS)', () => {
           migration.indexOf('    WITH cells AS MATERIALIZED'),
           migration.indexOf('  ELSIF z < 16')
         )
-        .replace(' INTO mvt', '')
+        .replace(' INTO mvt', ' AS mvt')
         .replace(/;\s*$/, '')
         .replace(/\btile_envelope\b/g, 'ST_TileEnvelope($1, $2, $3)')
         .replace(/\bcategory_filter\b/g, "ARRAY['Furto']::text[]")
