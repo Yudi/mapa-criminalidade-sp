@@ -8,13 +8,13 @@ import { DecimalPipe } from '@angular/common';
 import { WeekdayHourBucket } from '@mapa-criminalidade/shared-types';
 
 const WEEKDAYS = [
-  'Segunda',
-  'Terça',
-  'Quarta',
-  'Quinta',
-  'Sexta',
-  'Sábado',
-  'Domingo',
+  { isoWeekday: 7, label: 'Domingo' },
+  { isoWeekday: 1, label: 'Segunda' },
+  { isoWeekday: 2, label: 'Terça' },
+  { isoWeekday: 3, label: 'Quarta' },
+  { isoWeekday: 4, label: 'Quinta' },
+  { isoWeekday: 5, label: 'Sexta' },
+  { isoWeekday: 6, label: 'Sábado' },
 ];
 
 export function buildWeekdayHourMatrix(buckets: readonly WeekdayHourBucket[]) {
@@ -50,10 +50,10 @@ export function buildWeekdayHourMatrix(buckets: readonly WeekdayHourBucket[]) {
     unknownHour,
     unknownDate,
     unknownBoth,
-    rows: counts.map((hours, day) => ({
-      label: WEEKDAYS[day],
-      unknown: unknownByDay[day],
-      cells: hours.map((count, hour) => ({
+    rows: WEEKDAYS.map(({ isoWeekday, label }) => ({
+      label,
+      unknown: unknownByDay[isoWeekday - 1],
+      cells: counts[isoWeekday - 1].map((count, hour) => ({
         hour,
         count,
         level: count === 0 ? 0 : Math.max(1, Math.ceil((count / maximum) * 5)),

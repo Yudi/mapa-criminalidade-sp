@@ -15,9 +15,11 @@ describe('weekday × hour heatmap', () => {
     ]);
     expect(matrix.rows).toHaveLength(7);
     expect(matrix.rows.every((row) => row.cells.length === 24)).toBe(true);
-    expect(matrix.rows[0].cells[0].count).toBe(2);
-    expect(matrix.rows[6].cells[23].count).toBe(3);
-    expect(matrix.rows[0].unknown).toBe(100);
+    expect(matrix.rows[0].label).toBe('Domingo');
+    expect(matrix.rows[0].cells[23].count).toBe(3);
+    expect(matrix.rows[1].label).toBe('Segunda');
+    expect(matrix.rows[1].cells[0].count).toBe(2);
+    expect(matrix.rows[1].unknown).toBe(100);
     expect(matrix.maximum).toBe(3);
     expect(matrix.known).toBe(5);
     expect(matrix.unknownHour).toBe(105);
