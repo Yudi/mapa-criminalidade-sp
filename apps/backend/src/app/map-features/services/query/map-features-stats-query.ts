@@ -1,3 +1,7 @@
+import {
+  MapFeatureTemporalStats,
+  WeekdayHourBucket,
+} from '@mapa-criminalidade/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   MapFeatureCharts,
@@ -44,6 +48,7 @@ type ChartsQueryRow = {
   category_distribution: unknown;
   period_distribution: unknown;
   weekday_distribution: unknown;
+  weekday_hour_distribution: WeekdayHourBucket[] | null;
   record_type_distribution: unknown;
   object_type_distribution: unknown;
   vehicle_brand_distribution: unknown;
@@ -86,10 +91,9 @@ export class MapFeaturesStatsQuery {
         const conditions: string[] = ['geom IS NOT NULL'];
         const queryParams: SqlParam[] = [];
         appendSqlFilters(conditions, queryParams, 1, params);
-        const results = await this.prisma.executeReadOnlyStatsQuery<CategoryStatsRow[]>(
-          buildCategoryStatsQuery(conditions.join(' AND ')),
-          ...queryParams
-        );
+        const results = await this.prisma.executeReadOnlyStatsQuery<
+          CategoryStatsRow[]
+        >(buildCategoryStatsQuery(conditions.join(' AND ')), ...queryParams);
 
         return mapCategoryStatsRows(results);
       }
@@ -138,10 +142,9 @@ export class MapFeaturesStatsQuery {
           endHour,
         });
 
-        const results = await this.prisma.executeReadOnlyStatsQuery<CategoryStatsRow[]>(
-          buildCategoryStatsQuery(conditions.join(' AND ')),
-          ...queryParams
-        );
+        const results = await this.prisma.executeReadOnlyStatsQuery<
+          CategoryStatsRow[]
+        >(buildCategoryStatsQuery(conditions.join(' AND ')), ...queryParams);
 
         return mapCategoryStatsRows(results);
       }
@@ -210,9 +213,7 @@ export class MapFeaturesStatsQuery {
         const periods = normalizeStringList(params?.periods);
 
         if (periods?.length) {
-          const placeholders = periods
-            .map(() => `$${paramIndex++}`)
-            .join(', ');
+          const placeholders = periods.map(() => `$${paramIndex++}`).join(', ');
           categoryConditions.push(`${PERIOD_KEY_SQL} IN (${placeholders})`);
           queryParams.push(
             ...periods.map((period) => normalizePeriodKey(period))
@@ -293,7 +294,7 @@ export class MapFeaturesStatsQuery {
 
   async getCharts(params?: MapFeaturesFilterParams): Promise<MapFeatureCharts> {
     return await this.getStats(
-      'charts',
+      'charts-v4',
       normalizeMapFeaturesFilterParams(params),
       MAP_FEATURES_CACHE_TTL_SECONDS.CHARTS,
       async () => {
@@ -302,14 +303,20 @@ export class MapFeaturesStatsQuery {
         appendSqlFilters(conditions, queryParams, 1, params);
         const whereClause = conditions.join(' AND ');
 
-        const [charts] = await this.prisma.executeReadOnlyStatsQuery<ChartsQueryRow[]>(
-          buildChartsQuery(whereClause),
-          ...queryParams
-        );
+        const [charts] = await this.prisma.executeReadOnlyStatsQuery<
+          ChartsQueryRow[]
+        >(buildChartsQuery(whereClause), ...queryParams);
 
         return {
           totalFeatures: Number(charts?.total_features ?? 0),
           totalRecords: Number(charts?.total_records ?? 0),
+          weekdayHourDistribution: (
+            charts?.weekday_hour_distribution ?? []
+          ).map((bucket) => ({
+            weekday: bucket.weekday,
+            hour: bucket.hour,
+            count: Number(bucket.count),
+          })),
           categoryDistribution: toChartBucketsFromJson(
             charts?.category_distribution
           ),
@@ -346,6 +353,52 @@ export class MapFeaturesStatsQuery {
           drugTypeDistribution: toChartBucketsFromJson(
             charts?.drug_type_distribution
           ),
+        };
+      }
+    );
+  }
+
+  async getTemporalStats(
+    params: MapFeaturesFilterParams
+  ): Promise<MapFeatureTemporalStats> {
+    return this.getStats(
+      'temporal',
+      normalizeMapFeaturesFilterParams(params),
+      getMapFeaturesStatsCacheTtl(params),
+      async () => {
+        const conditions = ['geom IS NOT NULL', 'data_ocorrencia IS NOT NULL'];
+        const values: SqlParam[] = [];
+        appendSqlFilters(conditions, values, 1, params);
+        const [row] = await this.prisma.executeReadOnlyStatsQuery<
+          {
+            total: string;
+            monthly: unknown;
+            categories: unknown;
+            dataset_revision: string | null;
+          }[]
+        >(
+          `
+          WITH selected AS MATERIALIZED (
+            SELECT data_ocorrencia, category, all_rubricas FROM map_features
+            WHERE ${conditions.join(' AND ')}
+          )
+          SELECT (SELECT revision::text FROM public.map_dataset_revision WHERE singleton = TRUE) AS dataset_revision,
+            (SELECT COUNT(*) FROM selected) AS total,
+            (SELECT COALESCE(jsonb_agg(months ORDER BY label), '[]'::jsonb)
+             FROM (SELECT to_char(data_ocorrencia, 'YYYY-MM') AS label, COUNT(*) AS count
+               FROM selected GROUP BY label) months) AS monthly,
+            (SELECT COALESCE(jsonb_agg(buckets ORDER BY label), '[]'::jsonb)
+             FROM (SELECT category_bucket.category_name AS label, COUNT(*) AS count
+               FROM selected ${buildCategoryBucketLateralSql('selected')}
+               GROUP BY category_bucket.category_name) buckets) AS categories
+        `,
+          ...values
+        );
+        return {
+          datasetRevision: row?.dataset_revision ?? null,
+          total: Number(row?.total ?? 0),
+          monthly: toChartBucketsFromJson(row?.monthly),
+          categories: toChartBucketsFromJson(row?.categories),
         };
       }
     );
@@ -407,8 +460,12 @@ export class MapFeaturesStatsQuery {
         const conditions: string[] = [];
         const queryParams: SqlParam[] = [];
         appendSqlFilters(conditions, queryParams, 1, params);
-        const [result] = await this.prisma.executeReadOnlyStatsQuery<{ count: string }[]>(
-          `SELECT COUNT(*) AS count FROM map_features${conditions.length ? ` WHERE ${conditions.join(' AND ')}` : ''}`,
+        const [result] = await this.prisma.executeReadOnlyStatsQuery<
+          { count: string }[]
+        >(
+          `SELECT COUNT(*) AS count FROM map_features${
+            conditions.length ? ` WHERE ${conditions.join(' AND ')}` : ''
+          }`,
           ...queryParams
         );
         return Number(result?.count ?? 0);

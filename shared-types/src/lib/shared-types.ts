@@ -1,3 +1,4 @@
+import type { MapFeatureDetailFilters } from './graphql';
 export interface GeometryPoint {
   type: 'Point';
   coordinates: [number, number]; // [longitude, latitude]
@@ -65,7 +66,8 @@ export interface TileMetadata {
   availableRubricas: string[];
   tileUrlTemplate: string;
 }
-export interface TileFilterParams {
+export interface TileFilterParams extends MapFeatureDetailFilters {
+  mode?: import('./map-tiles').MapDisplayMode;
   before?: string;
   after?: string;
   rubricas?: string[];

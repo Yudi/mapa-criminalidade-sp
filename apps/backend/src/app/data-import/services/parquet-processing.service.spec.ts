@@ -83,7 +83,9 @@ describe('ParquetProcessingService', () => {
     );
 
     expect(recordCount).toBe(2);
-    expect(databaseService.createTableFromDataFileWithTypes).toHaveBeenCalledWith(
+    expect(
+      databaseService.createTableFromDataFileWithTypes
+    ).toHaveBeenCalledWith(
       'dados_criminais_2024',
       firstParquet,
       expect.objectContaining({
@@ -111,7 +113,10 @@ describe('ParquetProcessingService', () => {
       'Produtividade - Armas'
     ) as DataCategory;
     await writeFile(
-      path.join(tempDir, 'DadosProdutividade_2024_PRESOS E APREENDIDOS.parquet'),
+      path.join(
+        tempDir,
+        'DadosProdutividade_2024_PRESOS E APREENDIDOS.parquet'
+      ),
       'parquet-placeholder'
     );
     await writeFile(
@@ -143,7 +148,9 @@ describe('ParquetProcessingService', () => {
 
     await expect(
       service.importParquetToDatabase(tempDir, category, 2024)
-    ).rejects.toThrow('No Parquet files matched category Produtividade - Armas');
+    ).rejects.toThrow(
+      'No Parquet files matched category Produtividade - Armas'
+    );
   });
 
   it('rejects an incomplete conversion manifest before replacing the table', async () => {
@@ -174,7 +181,9 @@ describe('ParquetProcessingService', () => {
       importParquetFilesWithRust: jest.fn(),
     } as unknown as DatabaseService;
     const service = new ParquetProcessingService(
-      { fileExists: jest.fn().mockResolvedValue(true) } as unknown as FileOperationsService,
+      {
+        fileExists: jest.fn().mockResolvedValue(true),
+      } as unknown as FileOperationsService,
       databaseService
     );
 

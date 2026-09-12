@@ -195,9 +195,7 @@ export class RustToolService implements OnModuleDestroy {
 
   async runRustAnalyzer(dataPath: string): Promise<RustCsvAnalysis> {
     if (!(await this.isRustToolAvailable())) {
-      throw new Error(
-        `Rust tool binary not found at ${this.rustBinaryPath}.`
-      );
+      throw new Error(`Rust tool binary not found at ${this.rustBinaryPath}.`);
     }
 
     const stats = await fs.stat(dataPath);
@@ -264,7 +262,9 @@ export class RustToolService implements OnModuleDestroy {
       const outputLine = result.stdout.trim().split('\n').filter(Boolean).pop();
       const parsed = JSON.parse(outputLine ?? '{}') as { records?: unknown };
       if (!Number.isInteger(parsed.records) || (parsed.records as number) < 0) {
-        throw new Error('Parquet import response did not include a record count');
+        throw new Error(
+          'Parquet import response did not include a record count'
+        );
       }
       return parsed.records as number;
     } catch (error) {
@@ -338,7 +338,9 @@ export class RustToolService implements OnModuleDestroy {
             );
             return;
           }
-          finish(new Error(`Rust tool execution timed out after ${timeoutMs}ms`));
+          finish(
+            new Error(`Rust tool execution timed out after ${timeoutMs}ms`)
+          );
         })();
       }, timeoutMs);
 
@@ -377,7 +379,8 @@ export class RustToolService implements OnModuleDestroy {
   ): Promise<boolean> {
     if (child.exitCode !== null || child.signalCode !== null) return true;
     const closed =
-      closedPromise ?? new Promise<void>((resolve) => child.once('close', resolve));
+      closedPromise ??
+      new Promise<void>((resolve) => child.once('close', resolve));
     this.signalProcessGroup(child, forceImmediately ? 'SIGKILL' : 'SIGTERM');
 
     if (
@@ -393,7 +396,10 @@ export class RustToolService implements OnModuleDestroy {
     return await this.waitForClose(closed, PROCESS_TERMINATION_GRACE_MS);
   }
 
-  private signalProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  private signalProcessGroup(
+    child: ChildProcess,
+    signal: NodeJS.Signals
+  ): void {
     if (child.pid && process.platform !== 'win32') {
       try {
         process.kill(-child.pid, signal);

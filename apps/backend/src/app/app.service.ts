@@ -61,7 +61,13 @@ export class AppService {
 
       checks.rust = (await this.checkExecutable(
         process.env.RUST_BINARY_PATH ??
-          path.resolve(process.cwd(), 'dataset-handling', 'target', 'release', 'dataset-handling')
+          path.resolve(
+            process.cwd(),
+            'dataset-handling',
+            'target',
+            'release',
+            'dataset-handling'
+          )
       ))
         ? 'ok'
         : 'degraded';
@@ -120,7 +126,9 @@ export class AppService {
   }
 
   private minimumFreeBytes(): number {
-    const configured = Number(process.env.READINESS_MIN_FREE_BYTES ?? 256 * 1024 * 1024);
+    const configured = Number(
+      process.env.READINESS_MIN_FREE_BYTES ?? 256 * 1024 * 1024
+    );
     return Number.isFinite(configured) && configured > 0
       ? configured
       : 256 * 1024 * 1024;

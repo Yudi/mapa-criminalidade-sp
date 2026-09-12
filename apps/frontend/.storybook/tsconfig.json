@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "emitDecoratorMetadata": false,
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "exclude": ["../src/**/*.spec.ts"],
+  "include": ["../src/**/*.stories.ts", "preview.ts"]
+}

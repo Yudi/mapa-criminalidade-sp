@@ -28,8 +28,7 @@ export function normalizeCachePayload(value: unknown): unknown {
     if (
       normalizedItems.every(
         (item) =>
-          item === null ||
-          ['boolean', 'number', 'string'].includes(typeof item)
+          item === null || ['boolean', 'number', 'string'].includes(typeof item)
       )
     ) {
       return normalizedItems.sort((left, right) =>
@@ -57,10 +56,17 @@ export function normalizeMapFeaturesFilterParams(
   params?: MapFeaturesFilterParams
 ): MapFeaturesFilterParams {
   return {
+    area: params?.area,
     beforeDate: normalizeOptionalString(params?.beforeDate),
     afterDate: normalizeOptionalString(params?.afterDate),
     categories: normalizeStringList(params?.categories),
     periods: normalizeStringList(params?.periods),
+    vehicleBrands: normalizeStringList(params?.vehicleBrands),
+    objectTypes: normalizeStringList(params?.objectTypes),
+    phoneBrandModels: normalizeStringList(params?.phoneBrandModels),
+    locationTypes: normalizeStringList(params?.locationTypes),
+    weekdays: normalizeWeekdays(params?.weekdays),
+
     startHour: params?.startHour,
     endHour: params?.endHour,
     minLon: params?.minLon,
@@ -82,6 +88,18 @@ export function normalizeStringList(values?: string[]): string[] | undefined {
     .sort((left, right) => left.localeCompare(right));
 
   return normalized?.length ? normalized : undefined;
+}
+
+export function normalizeWeekdays(values?: number[]): number[] | undefined {
+  const normalized = [
+    ...new Set(
+      values?.filter(
+        (value) => Number.isInteger(value) && value >= 1 && value <= 7
+      )
+    ),
+  ].sort((left, right) => left - right);
+
+  return normalized.length ? normalized : undefined;
 }
 
 export function getMapFeaturesStatsCacheTtl(

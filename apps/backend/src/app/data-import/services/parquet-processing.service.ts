@@ -119,9 +119,9 @@ export class ParquetProcessingService {
     }
     if (parsed.skipped_sheets.length > 0) {
       throw new Error(
-        `Conversion manifest lists skipped data sheets for ${category.name}: ${parsed.skipped_sheets
-          .map((sheet) => sheet.sheet)
-          .join(', ')}`
+        `Conversion manifest lists skipped data sheets for ${
+          category.name
+        }: ${parsed.skipped_sheets.map((sheet) => sheet.sheet).join(', ')}`
       );
     }
 
@@ -148,7 +148,9 @@ export class ParquetProcessingService {
 
       const stats = await fs.lstat(outputPath).catch((error: unknown) => {
         throw new Error(
-          `Conversion manifest output is unavailable: ${sheet.output_path} (${error instanceof Error ? error.message : String(error)})`
+          `Conversion manifest output is unavailable: ${sheet.output_path} (${
+            error instanceof Error ? error.message : String(error)
+          })`
         );
       });
       if (!stats.isFile() || stats.isSymbolicLink()) {
@@ -226,7 +228,9 @@ export class ParquetProcessingService {
     outputPath: string
   ): string {
     const resolvedPath = path.resolve(
-      path.isAbsolute(outputPath) ? outputPath : path.join(parquetDir, outputPath)
+      path.isAbsolute(outputPath)
+        ? outputPath
+        : path.join(parquetDir, outputPath)
     );
     const relativePath = path.relative(parquetDir, resolvedPath);
     if (
@@ -307,7 +311,10 @@ export class ParquetProcessingService {
         columnTypeOverrides
       );
     } catch (error) {
-      this.logger.error(`Failed to process Parquet file ${parquetPath}:`, error);
+      this.logger.error(
+        `Failed to process Parquet file ${parquetPath}:`,
+        error
+      );
       throw error;
     }
   }

@@ -82,9 +82,9 @@ describe('createVectorTileLoadFunction', () => {
       shouldMarkTileError: () => true,
     })(tile as never, '/tile');
 
-    await expect(setLoader.mock.calls[0][0]([], 1, {} as never)).resolves.toEqual(
-      []
-    );
+    await expect(
+      setLoader.mock.calls[0][0]([], 1, {} as never)
+    ).resolves.toEqual([]);
     expect(onTimeout).toHaveBeenCalledWith(4);
     expect(setState).toHaveBeenCalledWith(TileState.ERROR);
   });
@@ -135,9 +135,9 @@ describe('createVectorTileLoadFunction', () => {
       onError: (error) => errors.push(error),
     })(tile as never, '/tile');
 
-    await expect(setLoader.mock.calls[0][0]([], 1, {} as never)).resolves.toEqual(
-      []
-    );
+    await expect(
+      setLoader.mock.calls[0][0]([], 1, {} as never)
+    ).resolves.toEqual([]);
     expect(errors[0]?.kind).toBe('decode');
     expect(setState).toHaveBeenCalledWith(TileState.ERROR);
   });
@@ -169,9 +169,9 @@ describe('createVectorTileLoadFunction', () => {
       shouldMarkTileError: () => true,
     })(tile as never, '/tile');
 
-    await expect(setLoader.mock.calls[0][0]([], 1, {} as never)).resolves.toEqual([
-      feature,
-    ]);
+    await expect(
+      setLoader.mock.calls[0][0]([], 1, {} as never)
+    ).resolves.toEqual([feature]);
     expect(completeness).toEqual([
       {
         tileUrl: '/tile',

@@ -7,4 +7,3 @@ export const dataImportTriggerBodySchema = z
   .strict();
 
 export type DataImportTriggerBody = z.infer<typeof dataImportTriggerBodySchema>;
-

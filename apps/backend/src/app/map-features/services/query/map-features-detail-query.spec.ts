@@ -12,10 +12,7 @@ describe('MapFeaturesDetailQuery', () => {
       mapFeature: { findMany },
     } as unknown as PrismaService;
     const sourceHydrator = { hydrate: jest.fn() };
-    const query = new MapFeaturesDetailQuery(
-      prisma,
-      sourceHydrator as never
-    );
+    const query = new MapFeaturesDetailQuery(prisma, sourceHydrator as never);
 
     await expect(query.getFeaturesByBo('123')).resolves.toEqual([]);
     expect(findMany).toHaveBeenCalledWith(
@@ -31,16 +28,13 @@ describe('MapFeaturesDetailQuery', () => {
     const prisma = {
       mapFeature: { findMany },
     } as unknown as PrismaService;
-    const query = new MapFeaturesDetailQuery(
-      prisma,
-      { hydrate: jest.fn() } as never
-    );
+    const query = new MapFeaturesDetailQuery(prisma, {
+      hydrate: jest.fn(),
+    } as never);
 
     await expect(query.getFeatureByBo('123')).rejects.toBeInstanceOf(
       AmbiguousMapFeatureLookupError
     );
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 2 })
-    );
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 2 }));
   });
 });

@@ -90,6 +90,12 @@ export function toChartBuckets(rows: ChartBucketRow[]) {
   return rows.map((row) => ({
     label: row.label?.trim() || 'Não informado',
     count: Number(row.count),
+    ...('filterValue' in row
+      ? {
+          filterValue:
+            typeof row.filterValue === 'string' ? row.filterValue : null,
+        }
+      : {}),
     amount:
       row.amount === undefined || row.amount === null
         ? null
@@ -118,7 +124,9 @@ export function toCategoryStatsFromJson(
         name: category,
         count: Number(row.count ?? 0),
         rubricaForStyling: String(row.rubrica_for_styling ?? category),
-        sourceType: row.is_rubrica ? ('rubrica' as const) : ('derived' as const),
+        sourceType: row.is_rubrica
+          ? ('rubrica' as const)
+          : ('derived' as const),
       };
     })
     .filter((category) => category.name.length > 0);

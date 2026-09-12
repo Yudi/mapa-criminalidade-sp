@@ -39,9 +39,7 @@ describe('DataImportController', () => {
       throw new Error('Expected triggerImport to reject');
     } catch (error) {
       expect(error).toBeInstanceOf(HttpException);
-      expect((error as HttpException).getStatus()).toBe(
-        HttpStatus.BAD_REQUEST
-      );
+      expect((error as HttpException).getStatus()).toBe(HttpStatus.BAD_REQUEST);
     }
     expect(queueService.enqueueManualImport).not.toHaveBeenCalled();
   });

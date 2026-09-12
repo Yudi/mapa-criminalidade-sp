@@ -50,6 +50,7 @@ export type {
   MapFeatureSummary,
   MapFeatureChartBucket,
   MapFeatureCharts,
+  WeekdayHourBucket,
   MapFeaturesMetadata,
   MapFeaturesMetadataQuery,
   MapFeaturesDateRangeQuery,
@@ -62,3 +63,4 @@ export type {
   GroupedOccurrenceByBoQuery,
   MapFeaturesByBoQuery,
 } from './lib/graphql';
+export * from './lib/analysis-area';

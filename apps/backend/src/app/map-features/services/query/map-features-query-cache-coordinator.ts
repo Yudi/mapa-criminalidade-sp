@@ -32,8 +32,13 @@ export class MapFeaturesQueryCacheCoordinator {
     if (!this.cache) return await load();
 
     const loadGeneration = this.cacheInvalidationGeneration;
-    const datasetRevision = this.getRevision ? await this.getRevision() : undefined;
-    const key = buildMapFeaturesCacheKey(scope, datasetRevision ? { datasetRevision, payload } : payload);
+    const datasetRevision = this.getRevision
+      ? await this.getRevision()
+      : undefined;
+    const key = buildMapFeaturesCacheKey(
+      scope,
+      datasetRevision ? { datasetRevision, payload } : payload
+    );
     const cached = await this.cache.getJson<{ value: T }>(key);
 
     if (cached) {

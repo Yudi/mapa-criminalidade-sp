@@ -34,7 +34,18 @@ export interface MapFeatureBoundsInput {
   maxLat: number;
 }
 
-export interface MapFeatureFilterInput {
+/** Values within a dimension are ORed; dimensions and rubricas are ANDed. */
+export interface MapFeatureDetailFilters {
+  vehicleBrands?: string[];
+  objectTypes?: string[];
+  phoneBrandModels?: string[];
+  locationTypes?: string[];
+  /** ISO weekdays, Monday = 1 and Sunday = 7. */
+  weekdays?: number[];
+}
+
+export interface MapFeatureFilterInput extends MapFeatureDetailFilters {
+  area?: import('./map-features').AnalysisArea;
   beforeDate?: string;
   afterDate?: string;
   categories?: string[];
@@ -79,6 +90,15 @@ export interface MapFeatureChartBucket {
   label: string;
   count: number;
   amount?: number | null;
+  /** Exact filter value; null means this bucket cannot be selected. */
+  filterValue?: string | null;
+}
+
+/** ISO weekday (Monday = 1); null preserves an unknown date or hour. */
+export interface WeekdayHourBucket {
+  weekday: number | null;
+  hour: number | null;
+  count: number;
 }
 
 export interface MapFeatureCharts {
@@ -87,6 +107,7 @@ export interface MapFeatureCharts {
   categoryDistribution: MapFeatureChartBucket[];
   periodDistribution: MapFeatureChartBucket[];
   weekdayDistribution: MapFeatureChartBucket[];
+  weekdayHourDistribution: WeekdayHourBucket[];
   recordTypeDistribution: MapFeatureChartBucket[];
   objectTypeDistribution: MapFeatureChartBucket[];
   vehicleBrandDistribution: MapFeatureChartBucket[];
@@ -143,4 +164,12 @@ export interface GroupedOccurrenceByBoQuery {
 
 export interface MapFeaturesByBoQuery {
   mapFeaturesByBo: MapFeatureSummary[];
+}
+
+/** Exact occurrence aggregates; category counts can overlap for multi-category BOs. */
+export interface MapFeatureTemporalStats {
+  datasetRevision: string | null;
+  total: number;
+  monthly: MapFeatureChartBucket[];
+  categories: MapFeatureChartBucket[];
 }

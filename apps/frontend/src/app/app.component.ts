@@ -1,9 +1,16 @@
+import { TemporalAnalysisComponent } from './components/temporal-analysis/temporal-analysis.component';
+import {
+  TemporalRange,
+  TemporalMapState,
+  displayDate,
+} from './components/temporal-analysis/temporal-analysis.utils';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   ComponentRef,
+  ElementRef,
   computed,
   OnDestroy,
   PLATFORM_ID,
@@ -11,7 +18,12 @@ import {
   ViewContainerRef,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
+import {
+  DetailFilterEntry,
+  detailFilterEntries,
+} from './shared/map-detail-filters';
 import { CardComponent } from './components/card/card.component';
 import { ToolbarComponent } from './components/toolbar/toolbar.component';
 
@@ -42,14 +54,18 @@ import {
   of,
   ReplaySubject,
   shareReplay,
+  skip,
+  takeUntil,
   switchMap,
   take,
   tap,
 } from 'rxjs';
 import {
+  AnalysisArea,
   CategoryInfo,
   DateRange,
   MapFeatureFilterInput,
+  MapFeatureDetailFilters,
   MIN_CRIME_TILE_ZOOM,
   PeriodInfo,
 } from '@mapa-criminalidade/shared-types';
@@ -65,19 +81,120 @@ type DateFilters = { before: string | null; after: string | null };
 type HourFilter = { enabled: boolean; startHour: number; endHour: number };
 type SubscriptionLike = { unsubscribe: () => void };
 type DynamicMapComponent = {
+  temporalState: {
+    subscribe: (
+      callback: (state: TemporalMapState) => void
+    ) => SubscriptionLike;
+  };
+  areaChange: {
+    subscribe: (
+      callback: (area: AnalysisArea | null) => void
+    ) => SubscriptionLike;
+  };
   boundsChange: {
     subscribe: (callback: (bounds: MapBounds) => void) => SubscriptionLike;
   };
 };
 @Component({
   selector: 'app-root',
-  imports: [CardComponent, ToolbarComponent, MatButtonModule],
+  imports: [
+    CardComponent,
+    ToolbarComponent,
+    MatButtonModule,
+    TemporalAnalysisComponent,
+  ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent implements AfterViewInit, OnDestroy {
   title = 'frontend';
+  readonly detailFilters = signal<MapFeatureDetailFilters>({});
+  readonly detailEntries = computed(() =>
+    detailFilterEntries(this.detailFilters())
+  );
+
+  removeDetailFilter(entry: DetailFilterEntry): void {
+    const current = this.detailFilters();
+    const remaining = (current[entry.key] ?? []).filter(
+      (value) => value !== entry.value
+    );
+    this.updateDetailFilters({
+      ...current,
+      [entry.key]: remaining.length ? remaining : undefined,
+    });
+  }
+
+  private updateDetailFilters(filters: MapFeatureDetailFilters): void {
+    this.closeTemporal();
+    this.detailFilters.set(filters);
+    this.retryStats();
+    this.syncMapInputs();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  readonly temporalFilter = signal<MapFeatureFilterInput | null>(null);
+  readonly temporalFrame = signal<TemporalRange | null>(null);
+  readonly temporalMapState = signal<TemporalMapState | null>(null);
+  readonly temporalPanel = viewChild<{
+    pause(): void;
+    play(): void;
+    restore(): void;
+    playing(): boolean;
+  }>('temporalPanel');
+  readonly displayDate = displayDate;
+  private temporalSubscription: SubscriptionLike | null = null;
+  @ViewChild('mapSection') private mapSection?: ElementRef<HTMLElement>;
+
+  focusTemporalMap(): void {
+    if (this.isBrowserOnly && window.matchMedia('(max-width: 959px)').matches) {
+      this.mapSection?.nativeElement.scrollIntoView({
+        block: 'start',
+        behavior: 'instant',
+      });
+    }
+  }
+
+  openTemporal(): void {
+    const bounds = this.currentBounds;
+    if (!bounds || !this.canOpenVisibleCharts || !this.dateRange) return;
+    const area = this.analysisArea();
+    this.temporalFilter.set({
+      ...this.detailFilters(),
+      afterDate: this.dateFilters.after ?? undefined,
+      beforeDate: this.dateFilters.before ?? undefined,
+      categories: this.selectedCategories(),
+      periods: this.periodFilter ? [this.periodFilter] : undefined,
+      startHour: this.hourFilter.enabled
+        ? this.hourFilter.startHour
+        : undefined,
+      endHour: this.hourFilter.enabled ? this.hourFilter.endHour : undefined,
+      ...(area
+        ? { area }
+        : {
+            bounds: {
+              minLon: bounds.minLon,
+              minLat: bounds.minLat,
+              maxLon: bounds.maxLon,
+              maxLat: bounds.maxLat,
+            },
+          }),
+    });
+  }
+
+  closeTemporal(): void {
+    if (!this.temporalFilter() && !this.temporalFrame()) return;
+    this.temporalPanel()?.pause();
+    this.temporalFilter.set(null);
+    this.onTemporalFrame(null);
+  }
+
+  onTemporalFrame(frame: TemporalRange | null): void {
+    this.temporalFrame.set(frame);
+    this.temporalMapState.set(null);
+    this.syncMapInputs();
+  }
+
   private platformId = inject(PLATFORM_ID);
   private queriesService = inject(QueriesService);
   private occurrencesService = inject(OccurrencesService);
@@ -101,6 +218,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   );
   progressBarPercentage = signal(-1);
   viewportStatsLoading = signal(false);
+  readonly statsError = signal(false);
+  private readonly statsRefreshSubject = new BehaviorSubject(0);
   metadataLoadError = signal(false);
   metadataLoading = signal(false);
   datasetRevision: string | null = null;
@@ -115,6 +234,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   dateFilters: DateFilters = { before: null, after: null };
   periodFilter: string | null = null;
   hourFilter: HourFilter = { enabled: false, startHour: 0, endHour: 23 };
+  readonly analysisArea = signal<AnalysisArea | null>(null);
+  private areaSubject = new BehaviorSubject<AnalysisArea | null>(null);
+  private areaSubscription: SubscriptionLike | null = null;
   private boundsSubject = new BehaviorSubject<MapBounds | null>(null);
   // Do not emit until metadata provides the bounded default date range.
   private dateFiltersSubject = new ReplaySubject<DateFilters>(1);
@@ -138,14 +260,17 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     return isPlatformBrowser(this.platformId);
   }
 
+  get canLoadStats(): boolean {
+    return Boolean(
+      this.currentBounds &&
+        (this.analysisArea() || this.currentBounds.zoom >= MIN_CRIME_TILE_ZOOM)
+    );
+  }
+
   get canOpenVisibleCharts(): boolean {
     const selectedCategories = this.selectedCategories();
 
-    return Boolean(
-      this.currentBounds &&
-        this.currentBounds.zoom >= MIN_CRIME_TILE_ZOOM &&
-        selectedCategories.length > 0
-    );
+    return Boolean(this.canLoadStats && selectedCategories.length > 0);
   }
 
   constructor() {
@@ -161,15 +286,20 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       this.periodFilterSubject,
       this.hourFilterSubject,
       this.datasetRevisionSubject,
+      this.areaSubject,
+      this.statsRefreshSubject,
     ]).pipe(
       debounceTime(300),
       distinctUntilChanged(
         (prev, curr) =>
-          prev[0]?.minLon === curr[0]?.minLon &&
-          prev[0]?.minLat === curr[0]?.minLat &&
-          prev[0]?.maxLon === curr[0]?.maxLon &&
-          prev[0]?.maxLat === curr[0]?.maxLat &&
-          prev[0]?.zoom === curr[0]?.zoom &&
+          (curr[5] != null ||
+            (prev[0]?.minLon === curr[0]?.minLon &&
+              prev[0]?.minLat === curr[0]?.minLat &&
+              prev[0]?.maxLon === curr[0]?.maxLon &&
+              prev[0]?.maxLat === curr[0]?.maxLat &&
+              prev[0]?.zoom === curr[0]?.zoom)) &&
+          prev[5] === curr[5] &&
+          prev[6] === curr[6] &&
           prev[1].before === curr[1].before &&
           prev[1].after === curr[1].after &&
           prev[2] === curr[2] &&
@@ -178,11 +308,13 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           prev[3].endHour === curr[3].endHour &&
           prev[4] === curr[4]
       ),
-      switchMap(([bounds, dateFilters, periodFilter, hourFilter]) => {
-        if (!bounds || bounds.zoom < MIN_CRIME_TILE_ZOOM) {
+      switchMap(([bounds, dateFilters, periodFilter, hourFilter, , area]) => {
+        if (!bounds || (!area && bounds.zoom < MIN_CRIME_TILE_ZOOM)) {
+          this.statsError.set(false);
           this.viewportStatsLoading.set(false);
           return EMPTY;
         }
+        this.statsError.set(false);
         this.viewportStatsLoading.set(true);
         return this.occurrencesService
           .getCategoryPeriodStatsForBounds(
@@ -194,12 +326,17 @@ export class AppComponent implements AfterViewInit, OnDestroy {
             dateFilters.after ?? undefined,
             periodFilter ? [periodFilter] : undefined,
             hourFilter.enabled ? hourFilter.startHour : undefined,
-            hourFilter.enabled ? hourFilter.endHour : undefined
+            hourFilter.enabled ? hourFilter.endHour : undefined,
+            area ?? undefined,
+            this.detailFilters()
           )
           .pipe(
+            // Cancel the old scope immediately, before the next debounced query.
+            takeUntil(this.areaSubject.pipe(skip(1))),
             tap(() => this.viewportStatsLoading.set(false)),
             catchError((error: unknown) => {
               this.viewportStatsLoading.set(false);
+              this.statsError.set(true);
               console.error(
                 'Error loading category and period statistics for map bounds:',
                 error
@@ -211,7 +348,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       shareReplay(1)
     );
 
-    this.categories = categoryPeriodStats.pipe(map((stats) => stats.categories));
+    this.categories = categoryPeriodStats.pipe(
+      map((stats) => stats.categories)
+    );
     this.periods = categoryPeriodStats.pipe(map((stats) => stats.periods));
   }
 
@@ -228,7 +367,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.isDestroyed = true;
+    this.temporalSubscription?.unsubscribe();
     this.mapBoundsSubscription?.unsubscribe();
+    this.areaSubscription?.unsubscribe();
     this.mapComponentRef?.destroy();
     this.mapBoundsSubscription = null;
     this.mapComponentRef = null;
@@ -243,12 +384,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    this.closeTemporal();
     this.categoriesFormValues = rubricasFormValues;
     this.syncMapInputs();
     this.changeDetectorRef.markForCheck();
   }
 
   onPeriodFilterChange(period: string | null) {
+    this.closeTemporal();
     this.periodFilter = period;
     this.periodFilterSubject.next(period);
     this.syncMapInputs();
@@ -256,6 +399,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   onHourFilterChange(hourFilter: HourFilter) {
+    this.closeTemporal();
     this.hourFilter = hourFilter;
     this.hourFilterSubject.next(hourFilter);
     this.syncMapInputs();
@@ -270,7 +414,24 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.loadInitialDateRange();
     this.loadMetadata();
   }
+  retryStats(): void {
+    this.statsRefreshSubject.next(this.statsRefreshSubject.value + 1);
+  }
+
+  onAreaChange(area: AnalysisArea | null): void {
+    this.closeTemporal();
+    this.viewportStatsLoading.set(true);
+    this.analysisArea.set(area);
+    this.areaSubject.next(area);
+  }
+
   onBoundsChange(bounds: MapBounds) {
+    if (
+      this.temporalFilter() &&
+      !this.analysisArea() &&
+      JSON.stringify(bounds) !== JSON.stringify(this.currentBounds)
+    )
+      this.closeTemporal();
     this.currentBounds = bounds;
     this.boundsSubject.next(bounds);
     if (this.metadataLoadError() && !this.metadataLoading()) {
@@ -283,19 +444,27 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     const bounds = this.currentBounds;
     if (!bounds || !this.canOpenVisibleCharts) return;
 
+    const area = this.analysisArea();
     const filter: MapFeatureFilterInput = {
+      ...this.detailFilters(),
       beforeDate: this.dateFilters.before ?? undefined,
       afterDate: this.dateFilters.after ?? undefined,
       categories: this.selectedCategories(),
       periods: this.periodFilter ? [this.periodFilter] : undefined,
-      startHour: this.hourFilter.enabled ? this.hourFilter.startHour : undefined,
+      startHour: this.hourFilter.enabled
+        ? this.hourFilter.startHour
+        : undefined,
       endHour: this.hourFilter.enabled ? this.hourFilter.endHour : undefined,
-      bounds: {
-        minLon: bounds.minLon,
-        minLat: bounds.minLat,
-        maxLon: bounds.maxLon,
-        maxLat: bounds.maxLat,
-      },
+      ...(area
+        ? { area }
+        : {
+            bounds: {
+              minLon: bounds.minLon,
+              minLat: bounds.minLat,
+              maxLon: bounds.maxLon,
+              maxLat: bounds.maxLat,
+            },
+          }),
     };
 
     try {
@@ -303,16 +472,35 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         './components/map/components/visible-map-charts-dialog/visible-map-charts-dialog.component'
       );
 
-      this.dialog.open(VisibleMapChartsDialogComponent, {
-        data: {
-          filter,
-          zoom: bounds.zoom,
-        },
-        width: 'min(96vw, 1180px)',
-        maxWidth: '96vw',
-        maxHeight: '94vh',
-        panelClass: 'visible-map-charts-dialog',
-      });
+      this.dialog
+        .open(VisibleMapChartsDialogComponent, {
+          data: {
+            filter,
+            zoom: bounds.zoom,
+          },
+          width: 'min(96vw, 1180px)',
+          maxWidth: '96vw',
+          maxHeight: '94vh',
+          panelClass: 'visible-map-charts-dialog',
+        })
+        .afterClosed()
+        .pipe(take(1))
+        .subscribe((result: MapFeatureFilterInput | undefined) => {
+          if (!result || this.isDestroyed) return;
+          this.categoriesFormValues = Object.fromEntries(
+            (result.categories ?? []).map((category) => [category, true])
+          );
+          this.updateDetailFilters({
+            vehicleBrands: result.vehicleBrands,
+            objectTypes: result.objectTypes,
+            phoneBrandModels: result.phoneBrandModels,
+            locationTypes: result.locationTypes,
+            weekdays: result.weekdays,
+          });
+          this.snackBar.open('Filtros aplicados ao mapa.', 'Fechar', {
+            duration: 3000,
+          });
+        });
     } catch (error) {
       console.error('Error loading visible map charts dialog:', error);
       this.snackBar.open(
@@ -324,6 +512,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   onSubmitEvent(dataForm: DataFormValues) {
+    this.closeTemporal();
     this.showIndeterminateProgressBar.set(true);
     this.dateFilters = {
       before: this.dateService.formatYYYYMMDD(dataForm.beforeDate),
@@ -387,6 +576,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         this.mapComponentRef.instance.boundsChange.subscribe((bounds) =>
           this.onBoundsChange(bounds)
         );
+      this.areaSubscription =
+        this.mapComponentRef.instance.areaChange.subscribe((area) =>
+          this.onAreaChange(area)
+        );
+      this.temporalSubscription =
+        this.mapComponentRef.instance.temporalState.subscribe((state) =>
+          this.temporalMapState.set(state)
+        );
       this.syncMapInputs();
       this.isMapComponentLoaded.set(true);
     } catch (error) {
@@ -409,11 +606,21 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (!mapComponentRef) return;
 
     mapComponentRef.setInput('addressCenter', this.addressCenter);
-    mapComponentRef.setInput('dateFilters', this.dateFilters);
+    const frame = this.temporalFrame();
+    mapComponentRef.setInput(
+      'dateFilters',
+      frame
+        ? { after: frame.afterDate, before: frame.beforeDate }
+        : this.dateFilters
+    );
     mapComponentRef.setInput('datasetRevision', this.datasetRevision);
     mapComponentRef.setInput('hourFilter', this.hourFilter);
     mapComponentRef.setInput('periodFilter', this.periodFilter);
-    mapComponentRef.setInput('progressBarPercentage', this.progressBarPercentage);
+    mapComponentRef.setInput('detailFilters', this.detailFilters());
+    mapComponentRef.setInput(
+      'progressBarPercentage',
+      this.progressBarPercentage
+    );
     mapComponentRef.setInput(
       'showIndeterminateProgressBar',
       this.showIndeterminateProgressBar
@@ -436,7 +643,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   private loadMetadata(): void {
-    if (this.isDestroyed || !this.isBrowserOnly || this.metadataLoading()) return;
+    if (this.isDestroyed || !this.isBrowserOnly || this.metadataLoading())
+      return;
 
     this.metadataLoading.set(true);
     this.occurrencesService
@@ -452,9 +660,11 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         next: (metadata) => {
           this.metadataLoadError.set(false);
           const revisionChanged =
-            this.metadataLoaded && this.datasetRevision !== metadata.datasetRevision;
+            this.metadataLoaded &&
+            this.datasetRevision !== metadata.datasetRevision;
 
           if (revisionChanged) {
+            this.closeTemporal();
             this.occurrencesService.clearCacheByPrefix('category-period-stats');
             this.occurrencesService.clearCacheByPrefix('charts-bounds');
           }

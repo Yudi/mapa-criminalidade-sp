@@ -76,6 +76,9 @@ jobs:
       - name: Build deployable apps
         run: bunx nx run-many -t build -p backend,frontend --configuration=production --parallel=2
 
+      - name: Build frontend Storybook
+        run: bunx nx build-storybook frontend --configuration=ci
+
   dataset-handling:
     name: Rust dataset handling tests and lint
     runs-on: ubuntu-latest

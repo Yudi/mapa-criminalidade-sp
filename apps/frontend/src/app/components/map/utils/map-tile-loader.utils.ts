@@ -83,14 +83,22 @@ export function createVectorTileLoadFunction({
 
         if (response.status === HTTP_STATUS_NO_CONTENT) {
           vectorTile.setFeatures([]);
-          onCompleteness?.(tileLayerVersion, url, readTileCompleteness([], response.headers));
+          onCompleteness?.(
+            tileLayerVersion,
+            url,
+            readTileCompleteness([], response.headers)
+          );
           return [];
         }
 
         const data = response.body;
         if (!data || data.byteLength === 0) {
           vectorTile.setFeatures([]);
-          onCompleteness?.(tileLayerVersion, url, readTileCompleteness([], response.headers));
+          onCompleteness?.(
+            tileLayerVersion,
+            url,
+            readTileCompleteness([], response.headers)
+          );
           return [];
         }
 

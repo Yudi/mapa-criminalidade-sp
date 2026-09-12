@@ -32,7 +32,7 @@ export class LicensesComponent {
         catchError((err) => {
           this.error.set(true);
           return this.handleError(err);
-        }),
+        })
       );
   }
 
@@ -43,8 +43,8 @@ export class LicensesComponent {
       return throwError(
         () =>
           new Error(
-            `Server returned code ${error.status} for 3rdpartylicenses.txt request`,
-          ),
+            `Server returned code ${error.status} for 3rdpartylicenses.txt request`
+          )
       );
     }
   }

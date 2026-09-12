@@ -4,6 +4,7 @@ import { UseGuards } from '@nestjs/common';
 import { ValidatorsService } from '../shared/validators/validators.service';
 import { DevelopmentOnlyGuard } from '../shared/guards/development-only.guard';
 import {
+  MapFeatureTemporalStatsObject,
   CategoryStatObject,
   DateRangeObject,
   EtlStatusObject,
@@ -51,7 +52,9 @@ export class MapFeaturesResolver {
     return this.loadMetadata();
   }
 
-  private async loadMetadata(retried = false): Promise<MapFeatureMetadataObject> {
+  private async loadMetadata(
+    retried = false
+  ): Promise<MapFeatureMetadataObject> {
     const datasetRevision = await this.queryService.getDatasetRevision();
     // Keep the expensive statistics scan out of a three-way fan-out on the
     // production pool (which is intentionally limited to three connections).
@@ -60,8 +63,11 @@ export class MapFeaturesResolver {
       this.queryService.getDateRange(),
       this.queryService.getCount(),
     ]);
-    if (datasetRevision !== await this.queryService.getDatasetRevision()) {
-      if (retried) throw new Error('Dataset changed during metadata loading; retry the request');
+    if (datasetRevision !== (await this.queryService.getDatasetRevision())) {
+      if (retried)
+        throw new Error(
+          'Dataset changed during metadata loading; retry the request'
+        );
       return this.loadMetadata(true);
     }
     const { categories, periods } = stats;
@@ -115,6 +121,39 @@ export class MapFeaturesResolver {
     return await this.queryService.getCategoryPeriodStats(
       this.getQueryParamsFromFilter(filter)
     );
+  }
+
+  @Query(() => MapFeatureTemporalStatsObject, {
+    name: 'mapFeaturesTemporalStats',
+    description:
+      'Monthly and category occurrence counts for a fixed area, over at most 120 calendar months. Date bounds are inclusive; absent months have zero recorded occurrences, not certified source coverage.',
+  })
+  async getTemporalStats(
+    @Args('filter', { type: () => MapFeatureFilterInput })
+    filter: MapFeatureFilterInput
+  ): Promise<MapFeatureTemporalStatsObject> {
+    const params = this.getQueryParamsFromFilter(filter);
+    if (
+      !params.afterDate ||
+      !params.beforeDate ||
+      (!filter.area && !filter.bounds)
+    ) {
+      throw new BadRequestException(
+        'Temporal analysis requires an area and both date bounds'
+      );
+    }
+    const start = new Date(params.afterDate);
+    const end = new Date(params.beforeDate);
+    const months =
+      (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+      end.getUTCMonth() -
+      start.getUTCMonth() +
+      1;
+    if (months > 120)
+      throw new BadRequestException(
+        'Temporal analysis supports at most 120 months'
+      );
+    return this.queryService.getTemporalStats(params);
   }
 
   @Query(() => MapFeatureChartsObject, { name: 'mapFeaturesCharts' })
@@ -220,7 +259,10 @@ export class MapFeaturesResolver {
     }
 
     const enrichment = await this.queryService.getImlEnrichment(feature);
-    return { ...this.mapper.toDetail(feature, enrichment.records), imlUnavailable: enrichment.unavailable };
+    return {
+      ...this.mapper.toDetail(feature, enrichment.records),
+      imlUnavailable: enrichment.unavailable,
+    };
   }
 
   @Query(() => MapFeatureDetailObject, {
@@ -241,7 +283,10 @@ export class MapFeaturesResolver {
     }
 
     const enrichment = await this.queryService.getImlEnrichment(feature);
-    return { ...this.mapper.toDetail(feature, enrichment.records), imlUnavailable: enrichment.unavailable };
+    return {
+      ...this.mapper.toDetail(feature, enrichment.records),
+      imlUnavailable: enrichment.unavailable,
+    };
   }
 
   @Query(() => DateRangeObject, { name: 'mapFeaturesDateRange' })

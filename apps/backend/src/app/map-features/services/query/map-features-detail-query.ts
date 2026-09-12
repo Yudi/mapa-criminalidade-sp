@@ -3,9 +3,7 @@ import {
   MapFeature,
   MapFeatureSummaryRecord,
 } from '../../types/map-features.types';
-import {
-  mapPrismaFeature,
-} from './map-features-result-mappers';
+import { mapPrismaFeature } from './map-features-result-mappers';
 import { buildBoWhere } from './map-features-query-sql';
 import { MapFeaturesSourceRecordHydrator } from './map-features-source-record-hydrator';
 
@@ -115,7 +113,9 @@ export class MapFeaturesDetailQuery {
       where: { id },
     });
 
-    return row ? await this.sourceHydrator.hydrate(mapPrismaFeature(row)) : null;
+    return row
+      ? await this.sourceHydrator.hydrate(mapPrismaFeature(row))
+      : null;
   }
 }
 

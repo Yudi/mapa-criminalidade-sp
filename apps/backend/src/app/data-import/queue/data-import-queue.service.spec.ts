@@ -62,11 +62,7 @@ describe('DataImportQueueService', () => {
         reason: 'daily data import check',
       },
       updateData: jest.fn().mockResolvedValue(undefined),
-    } as unknown as Job<
-      DataImportJobData,
-      DataImportJobResult,
-      DataImportQueueName
-    >);
+    } as unknown as Job<DataImportJobData, DataImportJobResult, DataImportQueueName>);
 
     expect(dataImportService.importAllCategories).toHaveBeenCalledTimes(1);
     expect(mapFeaturesEtlService.runIncrementalEtl).toHaveBeenCalledTimes(1);
@@ -91,11 +87,7 @@ describe('DataImportQueueService', () => {
           reason: 'daily data import check',
         },
         updateData: jest.fn().mockResolvedValue(undefined),
-      } as unknown as Job<
-        DataImportJobData,
-        DataImportJobResult,
-        DataImportQueueName
-      >)
+      } as unknown as Job<DataImportJobData, DataImportJobResult, DataImportQueueName>)
     ).rejects.toThrow(
       'Post-import ETL failed: Failed to process dados_criminais_2026: database unavailable'
     );
@@ -119,11 +111,7 @@ describe('DataImportQueueService', () => {
           reason: 'data import check',
         },
         updateData,
-      } as unknown as Job<
-        DataImportJobData,
-        DataImportJobResult,
-        DataImportQueueName
-      >)
+      } as unknown as Job<DataImportJobData, DataImportJobResult, DataImportQueueName>)
     ).rejects.toThrow('one source group failed');
 
     expect(updateData).not.toHaveBeenCalled();
@@ -144,11 +132,7 @@ describe('DataImportQueueService', () => {
         rawImportCompletedAt: '2026-08-23T12:00:00.000Z',
       },
       updateData: jest.fn().mockResolvedValue(undefined),
-    } as unknown as Job<
-      DataImportJobData,
-      DataImportJobResult,
-      DataImportQueueName
-    >);
+    } as unknown as Job<DataImportJobData, DataImportJobResult, DataImportQueueName>);
 
     expect(dataImportService.importAllCategories).not.toHaveBeenCalled();
     expect(mapFeaturesEtlService.runIncrementalEtl).toHaveBeenCalledTimes(1);
@@ -168,11 +152,7 @@ describe('DataImportQueueService', () => {
         reason: 'daily data import check',
       },
       updateData,
-    } as unknown as Job<
-      DataImportJobData,
-      DataImportJobResult,
-      DataImportQueueName
-    >);
+    } as unknown as Job<DataImportJobData, DataImportJobResult, DataImportQueueName>);
 
     expect(updateData).toHaveBeenCalledWith(
       expect.objectContaining({

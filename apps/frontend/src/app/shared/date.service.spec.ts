@@ -5,9 +5,7 @@ describe('DateService', () => {
   const service = new DateService();
 
   it('rejects impossible date-only values instead of allowing Date rollover', () => {
-    expect(service.parseDateOnly('2024-02-29')).toEqual(
-      new Date(2024, 1, 29)
-    );
+    expect(service.parseDateOnly('2024-02-29')).toEqual(new Date(2024, 1, 29));
     expect(service.parseDateOnly('2023-02-29')).toBeNull();
     expect(service.parseDateOnly('2024-02-31')).toBeNull();
     expect(service.formatYYYYMMDD('2024-02-31')).toBe('');

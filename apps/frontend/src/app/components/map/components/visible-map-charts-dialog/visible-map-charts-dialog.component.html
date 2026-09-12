@@ -1,9 +1,18 @@
 <header class="dialog-header">
   <div class="dialog-header__copy">
-    <h2 mat-dialog-title>Gráficos do recorte atual</h2>
+    <h2 mat-dialog-title>
+      {{
+        data.filter.area
+          ? 'Gráficos da área selecionada'
+          : 'Gráficos do recorte atual'
+      }}
+    </h2>
     <p>
-      Os gráficos respeitam a área exibida, o zoom e todos os filtros ativos no
-      mapa.
+      {{
+        data.filter.area
+          ? 'Os gráficos respeitam a área selecionada e todos os filtros ativos, independentemente do zoom.'
+          : 'Os gráficos respeitam a área exibida e todos os filtros ativos no mapa.'
+      }}
     </p>
   </div>
 
@@ -18,17 +27,56 @@
 </header>
 
 <mat-dialog-content>
+  <section class="detail-selection" aria-label="Filtros dos gráficos">
+    <p>
+      Selecione um ou mais dias, rubricas, celulares, veículos, objetos ou
+      locais para refinar o mapa.
+    </p>
+    <p class="detail-selection__scope">
+      Rubricas: {{ filter().categories?.join(', ') }}
+    </p>
+    @if (categoriesChanged()) {
+    <button mat-button type="button" (click)="resetCategories()">
+      Restaurar rubricas iniciais
+    </button>
+    } @if (detailEntries().length) {
+    <div class="detail-selection__chips">
+      @for (entry of detailEntries(); track entry.key + entry.value) {
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="clearDetail(entry.key, entry.value)"
+        [attr.aria-label]="
+          'Remover filtro ' + entry.label + ': ' + entry.displayValue
+        "
+      >
+        {{ entry.label }}: {{ entry.displayValue }} <mat-icon>close</mat-icon>
+      </button>
+      }
+      <button mat-button type="button" (click)="reset()">
+        Limpar detalhes
+      </button>
+    </div>
+    }
+    <p>
+      Os detalhes se combinam com as rubricas e consideram os registros
+      relacionados a cada ocorrência.
+    </p>
+  </section>
   @if (loading()) {
-  <div class="state-panel">
-    <mat-spinner diameter="44"></mat-spinner>
+  <div class="chart-loading" role="status">
+    <mat-spinner diameter="24"></mat-spinner>
     <span>Preparando gráficos...</span>
   </div>
-  } @else if (error()) {
+  } @if (error()) {
   <div class="state-panel state-panel--error">
     <mat-icon>error</mat-icon>
-    <span>{{ error() }}</span>
+    <span role="alert">{{ error() }}</span>
+    <button mat-button type="button" (click)="loadCharts()">
+      Tentar novamente
+    </button>
   </div>
-  } @else if (charts(); as chartData) {
+  } @if (charts(); as chartData) {
   <section class="summary-strip" aria-label="Resumo dos dados visíveis">
     @for (stat of titleStats(); track stat.label) {
     <div class="summary-strip__item">
@@ -44,26 +92,51 @@
   <section class="scope-note">
     <mat-icon>filter_alt</mat-icon>
     <span>
-      @if (hasActiveFilters()) { Recorte com filtros ativos e limites atuais do
-      mapa. } @else { Recorte limitado somente pela área atualmente visível no
-      mapa. }
+      @if (data.filter.area) { Área selecionada:
+      {{
+        data.filter.area.polygon
+          ? 'polígono desenhado'
+          : 'raio de ' + data.filter.area.radius + ' metros'
+      }}. } @else if (hasActiveFilters()) { Recorte com filtros ativos e limites
+      atuais do mapa. } @else { Recorte limitado somente pela área atualmente
+      visível no mapa. }
     </span>
   </section>
 
-  @if (chartData.totalFeatures > 0 && chartCards().length > 0) {
-  <section class="charts-grid" aria-label="Gráficos do mapa">
+  @if (chartData.totalFeatures > 0) {
+  <app-weekday-hour-heatmap
+    [buckets]="chartData.weekdayHourDistribution"
+    [busy]="loading()"
+  ></app-weekday-hour-heatmap>
+  <section
+    class="charts-grid"
+    aria-label="Gráficos do mapa"
+    [attr.aria-busy]="loading()"
+  >
     @for (card of chartCards(); track card.title) {
-    <app-chart-card [config]="card"></app-chart-card>
+    <app-chart-card
+      [config]="card"
+      [busy]="loading() || !!error()"
+      (bucketSelect)="selectBucket($event)"
+    ></app-chart-card>
     }
   </section>
   } @else {
   <div class="state-panel">
     <mat-icon>travel_explore</mat-icon>
-    <span>Não há dados visíveis no mapa para este recorte.</span>
+    <span>Não há ocorrências na área analisada para estes filtros.</span>
   </div>
   } }
 </mat-dialog-content>
 
-<!-- <mat-dialog-actions align="end">
-  <button mat-button type="button" (click)="close()">Fechar</button>
-</mat-dialog-actions> -->
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Cancelar</button>
+  <button
+    mat-flat-button
+    type="button"
+    (click)="apply()"
+    [disabled]="!changed() || loading()"
+  >
+    Aplicar ao mapa
+  </button>
+</mat-dialog-actions>

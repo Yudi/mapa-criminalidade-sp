@@ -18,9 +18,7 @@ describe('parseAllowedOrigins', () => {
     'https://example.com/path',
     'https://user:password@example.com',
   ])('rejects unsafe or malformed value %s', (value) => {
-    expect(() => parseAllowedOrigins(value, [])).toThrow(
-      /ALLOWED_ORIGINS/
-    );
+    expect(() => parseAllowedOrigins(value, [])).toThrow(/ALLOWED_ORIGINS/);
   });
 
   it('uses and validates fallback origins when no override is supplied', () => {

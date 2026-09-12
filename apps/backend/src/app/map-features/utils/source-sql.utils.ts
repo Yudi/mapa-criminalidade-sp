@@ -23,7 +23,9 @@ export function sourceNumberExpression(column: string): string {
   const normalized = normalizedSourceNumberTextExpression(column);
 
   return `CASE
-            WHEN btrim(${sourceTextColumnExpression(column)}) ~ '^[+-]?([0-9]+([.,][0-9]+)?|[0-9]{1,3}(\\.[0-9]{3})+,[0-9]+)$'
+            WHEN btrim(${sourceTextColumnExpression(
+              column
+            )}) ~ '^[+-]?([0-9]+([.,][0-9]+)?|[0-9]{1,3}(\\.[0-9]{3})+,[0-9]+)$'
               AND ${normalized} ~ '^[+-]?[0-9]+(\\.[0-9]+)?$'
             THEN ${normalized}::numeric
             ELSE NULL

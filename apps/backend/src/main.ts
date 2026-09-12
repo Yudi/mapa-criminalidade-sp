@@ -27,7 +27,9 @@ async function bootstrap() {
     logger: logLevels,
   });
   app.enableShutdownHooks();
-  const trustedProxies = process.env.TRUSTED_PROXY_CIDRS?.split(',').map((value) => value.trim()).filter(Boolean);
+  const trustedProxies = process.env.TRUSTED_PROXY_CIDRS?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
   if (trustedProxies?.length) app.set('trust proxy', trustedProxies);
 
   app.enableCors({

@@ -31,7 +31,9 @@ export class MapFeaturesQueryService {
     private readonly prisma: PrismaService,
     @Optional() cache?: RedisCacheService
   ) {
-    this.cacheCoordinator = new MapFeaturesQueryCacheCoordinator(cache, () => this.getDatasetRevision());
+    this.cacheCoordinator = new MapFeaturesQueryCacheCoordinator(cache, () =>
+      this.getDatasetRevision()
+    );
     const sourceHydrator = new MapFeaturesSourceRecordHydrator(
       prisma,
       process.env.MAP_FEATURES_HYDRATE_MISSING_SOURCE_RECORDS === 'true'
@@ -104,6 +106,10 @@ export class MapFeaturesQueryService {
     return await this.statsQuery.getCategoryPeriodStats(params);
   }
 
+  getTemporalStats(params: MapFeaturesFilterParams) {
+    return this.statsQuery.getTemporalStats(params);
+  }
+
   async getCharts(params?: MapFeaturesFilterParams): Promise<MapFeatureCharts> {
     return await this.statsQuery.getCharts(params);
   }
@@ -140,11 +146,24 @@ export class MapFeaturesQueryService {
     return await this.detailQuery.getFeatureById(id);
   }
 
-  async getImlEnrichment(feature: MapFeature): Promise<{ records: ImlRecord[]; unavailable: boolean }> {
+  async getImlEnrichment(
+    feature: MapFeature
+  ): Promise<{ records: ImlRecord[]; unavailable: boolean }> {
     try {
-      return { records: await this.getImlRecordsByBo(feature.num_bo, feature.ano_bo, feature.delegacia), unavailable: false };
+      return {
+        records: await this.getImlRecordsByBo(
+          feature.num_bo,
+          feature.ano_bo,
+          feature.delegacia
+        ),
+        unavailable: false,
+      };
     } catch (error) {
-      new Logger(MapFeaturesQueryService.name).warn(`IML enrichment unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      new Logger(MapFeaturesQueryService.name).warn(
+        `IML enrichment unavailable: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
       return { records: [], unavailable: true };
     }
   }

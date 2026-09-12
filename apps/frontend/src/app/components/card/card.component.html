@@ -1,18 +1,77 @@
-<mat-card appearance="outlined">
-  <mat-card-content>
-    <form [formGroup]="dataForm">
-      <section class="address-lookup">
-        <h3>Endereço</h3>
+<div class="filter-panel">
+  <header class="panel-heading">
+    <h2>Filtros do mapa</h2>
+    <p class="filter-note">
+      {{
+        analysisAreaSelected()
+          ? 'Área selecionada no mapa'
+          : 'Ocorrências na área visível do mapa'
+      }}
+    </p>
+  </header>
 
-        <mat-form-field>
-          <mat-label>Nome da via e número</mat-label>
-          <input
-            matInput
-            formControlName="street"
-            (keydown.enter)="onAddressEnter($event)"
-          />
-        </mat-form-field>
-        <mat-form-field>
+  <form [formGroup]="dataForm" class="date-filter">
+    <div class="section-heading">
+      <h3>Datas</h3>
+      <button mat-button type="button" (click)="cleanForm('date')">
+        Limpar datas
+      </button>
+    </div>
+    <div class="date-fields">
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>Início</mat-label>
+        <input
+          matInput
+          [matDatepicker]="startDatePicker"
+          [min]="minDate"
+          [max]="maxDate"
+          formControlName="afterDate"
+        />
+        <mat-datepicker-toggle matIconSuffix [for]="startDatePicker" />
+        <mat-datepicker #startDatePicker />
+      </mat-form-field>
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>Fim</mat-label>
+        <input
+          matInput
+          [matDatepicker]="endDatePicker"
+          [min]="minDate"
+          [max]="maxDate"
+          formControlName="beforeDate"
+        />
+        <mat-datepicker-toggle matIconSuffix [for]="endDatePicker" />
+        <mat-datepicker #endDatePicker />
+      </mat-form-field>
+    </div>
+    @if (dataForm.invalid) {
+    <p class="filter-error" role="alert">
+      Informe datas válidas, com o início anterior ou igual ao fim.
+    </p>
+    }
+    <button
+      mat-flat-button
+      type="button"
+      class="apply-dates"
+      (click)="onSubmit()"
+      [disabled]="!dataForm.valid"
+    >
+      Atualizar pesquisa
+    </button>
+  </form>
+
+  <details class="filter-disclosure address-lookup">
+    <summary><mat-icon>search</mat-icon><span>Buscar endereço</span></summary>
+    <form [formGroup]="dataForm" class="disclosure-content">
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>Nome da via e número</mat-label>
+        <input
+          matInput
+          formControlName="street"
+          (keydown.enter)="onAddressEnter($event)"
+        />
+      </mat-form-field>
+      <div class="address-fields">
+        <mat-form-field subscriptSizing="dynamic">
           <mat-label>Cidade</mat-label>
           <input
             matInput
@@ -20,7 +79,7 @@
             (keydown.enter)="onAddressEnter($event)"
           />
         </mat-form-field>
-        <mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
           <mat-label>Estado</mat-label>
           <input
             matInput
@@ -28,8 +87,10 @@
             (keydown.enter)="onAddressEnter($event)"
           />
         </mat-form-field>
+      </div>
+      <div class="address-actions">
         <button
-          mat-flat-button
+          mat-stroked-button
           type="button"
           class="address-lookup__submit"
           [disabled]="!dataForm.valid"
@@ -38,143 +99,115 @@
           Buscar endereço
         </button>
         <button mat-button type="button" (click)="cleanForm('address')">
-          Limpar
+          Limpar endereço
         </button>
-      </section>
-
-      <br />
-      <h3>Data</h3>
-      @if (dateRange()?.earliest && dateRange()?.latest) {
-      <p>
-        Dados disponíveis de {{ dateRange()?.earliest }} até
-        {{ dateRange()?.latest }}
-      </p>
-      }
-      <mat-form-field>
-        <mat-label>Início</mat-label>
-        <input
-          matInput
-          [matDatepicker]="picker"
-          [min]="minDate"
-          [max]="maxDate"
-          formControlName="afterDate"
-        />
-        <mat-hint>DD/MM/YYYY</mat-hint>
-        <mat-datepicker-toggle
-          matIconSuffix
-          [for]="picker"
-        ></mat-datepicker-toggle>
-        <mat-datepicker #picker></mat-datepicker>
-      </mat-form-field>
-
-      <mat-form-field>
-        <mat-label>Fim</mat-label>
-        <input
-          matInput
-          [matDatepicker]="picker2"
-          [min]="minDate"
-          [max]="maxDate"
-          formControlName="beforeDate"
-        />
-        <mat-hint>DD/MM/YYYY</mat-hint>
-        <mat-datepicker-toggle
-          matIconSuffix
-          [for]="picker2"
-        ></mat-datepicker-toggle>
-        <mat-datepicker #picker2></mat-datepicker>
-      </mat-form-field>
-      <br />
-      <button mat-button type="button" (click)="cleanForm('date')">
-        Limpar
-      </button>
-      <br />
-      <br />
-      <button
-        mat-flat-button
-        type="button"
-        (click)="onSubmit()"
-        [disabled]="!dataForm.valid"
-      >
-        Atualizar pesquisa
-      </button>
-    </form>
-
-    <section class="map-charts-action" aria-label="Gráficos do mapa">
-      <button
-        mat-flat-button
-        type="button"
-        class="map-charts-action__button"
-        [disabled]="!canOpenVisibleCharts()"
-        (click)="openVisibleCharts()"
-      >
-        <mat-icon>analytics</mat-icon>
-        Gráficos do mapa
-      </button>
-      <p>Os gráficos usam somente as ocorrências que estão visíveis no mapa.</p>
-    </section>
-
-    <h3>Período</h3>
-    @if (displayedPeriods(); as periods) {
-    <mat-form-field>
-      <mat-label>Período</mat-label>
-      <mat-select [formControl]="periodControl">
-        <mat-option value="__all_periods__">Todos</mat-option>
-        @for (period of periods; track period.name) {
-        <mat-option [value]="period.name">
-          {{ period.name }} ({{ period.count }})
-        </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-    }
-    <h3>Horário</h3>
-    <p class="filter-explanation">
-      Ao combinar data e horário, o filtro considera essas horas dentro de cada
-      dia selecionado. Ex.: 08:00-19:00 em um intervalo de datas busca somente
-      ocorrências entre 08:00 e 19:00 em cada dia.
-    </p>
-    <form class="hour-form" [formGroup]="hourForm">
-      <mat-checkbox formControlName="enabled">Filtrar por horário</mat-checkbox>
-      <div class="hour-form__fields">
-        <mat-form-field>
-          <mat-label>De</mat-label>
-          <input
-            matInput
-            [matTimepicker]="startTimePicker"
-            formControlName="startTime"
-          />
-          <mat-hint>HH:mm</mat-hint>
-          <mat-timepicker-toggle
-            matIconSuffix
-            [for]="startTimePicker"
-          ></mat-timepicker-toggle>
-          <mat-timepicker #startTimePicker interval="60m"></mat-timepicker>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Até</mat-label>
-          <input
-            matInput
-            [matTimepicker]="endTimePicker"
-            formControlName="endTime"
-          />
-          <mat-hint>HH:mm</mat-hint>
-          <mat-timepicker-toggle
-            matIconSuffix
-            [for]="endTimePicker"
-          ></mat-timepicker-toggle>
-          <mat-timepicker #endTimePicker interval="60m"></mat-timepicker>
-        </mat-form-field>
       </div>
     </form>
-    @if (displayedRubricas(); as rubricas) {
-    <h3>Lista de ocorrências</h3>
-    <p>
-      @if (viewportStatsLoading()) { Atualizando categorias do recorte
-      visível... } @else { O mapa é atualizado automaticamente na seleção }
+  </details>
+
+  <details class="filter-disclosure">
+    <summary>
+      <mat-icon>schedule</mat-icon
+      ><span
+        >Período e horário<small>{{ timeFilterSummary() }}</small></span
+      >
+    </summary>
+    <div class="disclosure-content">
+      @if (displayedPeriods(); as periods) {
+      <mat-form-field>
+        <mat-label>Período do dia</mat-label>
+        <mat-select [formControl]="periodControl">
+          <mat-option value="__all_periods__">Todos</mat-option>
+          @for (period of periods; track period.name) {
+          <mat-option [value]="period.name">
+            {{ period.name }} @if (!statsUnavailable()) { ({{ period.count }}) }
+          </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      }
+      <form class="hour-form" [formGroup]="hourForm">
+        <mat-checkbox formControlName="enabled"
+          >Filtrar por horário</mat-checkbox
+        >
+        @if (hourForm.controls.enabled.value) {
+        <p class="filter-note">
+          O horário se aplica a cada dia do intervalo selecionado.
+        </p>
+        <div class="hour-form__fields">
+          <mat-form-field>
+            <mat-label>De</mat-label>
+            <input
+              matInput
+              [matTimepicker]="startTimePicker"
+              formControlName="startTime"
+            />
+            <mat-hint>HH:mm</mat-hint>
+            <mat-timepicker-toggle
+              matIconSuffix
+              [for]="startTimePicker"
+            ></mat-timepicker-toggle>
+            <mat-timepicker #startTimePicker interval="60m"></mat-timepicker>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Até</mat-label>
+            <input
+              matInput
+              [matTimepicker]="endTimePicker"
+              formControlName="endTime"
+            />
+            <mat-hint>HH:mm</mat-hint>
+            <mat-timepicker-toggle
+              matIconSuffix
+              [for]="endTimePicker"
+            ></mat-timepicker-toggle>
+            <mat-timepicker #endTimePicker interval="60m"></mat-timepicker>
+          </mat-form-field>
+        </div>
+        }
+      </form>
+    </div>
+  </details>
+  @if (detailEntries().length) {
+  <section class="detail-filters" aria-label="Detalhes filtrados no mapa">
+    <h3>Detalhes ativos</h3>
+    @for (entry of detailEntries(); track entry.key + entry.value) {
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="removeDetailEvent.emit(entry)"
+      [attr.aria-label]="
+        'Remover filtro ' + entry.label + ': ' + entry.displayValue
+      "
+    >
+      {{ entry.label }}: {{ entry.displayValue }} <mat-icon>close</mat-icon>
+    </button>
+    }
+  </section>
+  }
+  <section class="category-section" aria-label="Tipos de ocorrência">
+    @if (filteredRubricas(); as rubricas) {
+    <div class="section-heading">
+      <h3>Ocorrências</h3>
+      <span>{{ selectedRubricasCount() }} selecionadas</span>
+    </div>
+    <p class="filter-note" role="status">
+      @if (viewportStatsLoading()) { Atualizando categorias da área analisada...
+      } @else { Selecione para atualizar o mapa }
     </p>
+    <mat-form-field subscriptSizing="dynamic" class="category-search">
+      <mat-label>Buscar tipo de ocorrência</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input
+        matInput
+        #categoryInput
+        [value]="categorySearch()"
+        (input)="categorySearch.set(categoryInput.value)"
+      />
+    </mat-form-field>
     <div class="rubricas-actions">
       <button
-        mat-stroked-button
+        mat-button
         type="button"
         [disabled]="!hasRubricas()"
         (click)="selectAllRubricas()"
@@ -182,7 +215,7 @@
         Selecionar todas
       </button>
       <button
-        mat-stroked-button
+        mat-button
         type="button"
         [disabled]="!hasRubricas()"
         (click)="unselectAllRubricas()"
@@ -192,7 +225,7 @@
     </div>
     <div
       class="rubricas-list"
-      role="list"
+      [attr.role]="rubricas.length ? 'list' : null"
       [attr.aria-busy]="viewportStatsLoading()"
     >
       <form class="rubricas-form" [formGroup]="rubricasForm">
@@ -212,9 +245,10 @@
               />
               <span class="rubrica-option__text">
                 <span class="rubrica-option__name">{{ rubrica.name }}</span>
-                <span class="rubrica-option__count">({{ rubrica.count }})</span>
-                @if (rubrica.count === 0) {
-                <span class="rubrica-option__count">
+                @if (!statsUnavailable()) {
+                <span class="rubrica-option__count">{{ rubrica.count }}</span> }
+                @if (!statsUnavailable() && rubrica.count === 0) {
+                <span class="rubrica-option__empty">
                   Selecionada, sem ocorrências neste recorte
                 </span>
                 }
@@ -222,9 +256,48 @@
             </span>
           </mat-checkbox>
         </div>
+        } @empty {
+        <p class="filter-note">
+          {{
+            categorySearch()
+              ? 'Nenhum tipo encontrado. Tente outro termo.'
+              : 'As categorias aparecem quando os dados da área estão disponíveis.'
+          }}
+        </p>
         }
       </form>
     </div>
     }
-  </mat-card-content>
-</mat-card>
+  </section>
+
+  <section class="analysis-actions" aria-label="Análise do mapa">
+    <h3>Analisar ocorrências</h3>
+    <button
+      mat-stroked-button
+      type="button"
+      [disabled]="!canOpenVisibleCharts()"
+      (click)="openVisibleCharts()"
+    >
+      <mat-icon>analytics</mat-icon
+      >{{
+        analysisAreaSelected()
+          ? 'Gráficos da área selecionada'
+          : 'Gráficos do mapa'
+      }}
+    </button>
+    @if (showTemporalAnalysis()) {
+    <button
+      mat-button
+      type="button"
+      [disabled]="!canOpenTemporalAnalysis()"
+      (click)="temporalAnalysisEvent.emit()"
+    >
+      <mat-icon>date_range</mat-icon>Comparar períodos e ver evolução
+    </button>
+    }
+    <p class="filter-note">
+      Nos gráficos, selecione dias, objetos, celulares, veículos e locais para
+      refinar o mapa.
+    </p>
+  </section>
+</div>

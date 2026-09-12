@@ -1,4 +1,14 @@
 import {
+  MapDisplayMode,
+  MapFeatureDetailFilters,
+} from '@mapa-criminalidade/shared-types';
+import { MatSelectModule } from '@angular/material/select';
+import {
+  createDensityStyleFunction,
+  DENSITY_BANDS,
+} from './utils/map-density-style.utils';
+import type { TemporalMapState } from '../temporal-analysis/temporal-analysis.utils';
+import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
@@ -15,12 +25,21 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import OlMap from 'ol/Map';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorLayer from 'ol/layer/Vector';
+import Heatmap from 'ol/layer/Heatmap';
+import { buffer } from 'ol/extent';
+import {
+  createOccurrenceHeatmap,
+  HEATMAP_BLUR,
+  HEATMAP_RADIUS,
+  synchronizeHeatmapPoints,
+} from './utils/map-heatmap.utils';
 import VectorTileSource from 'ol/source/VectorTile';
 import VectorSource from 'ol/source/Vector';
 import ClusterSource from 'ol/source/Cluster';
@@ -31,6 +50,18 @@ import { FeatureLike } from 'ol/Feature';
 import { unByKey } from 'ol/Observable';
 import { EventsKey } from 'ol/events';
 import Point from 'ol/geom/Point';
+import Draw from 'ol/interaction/Draw';
+import GeoJSON from 'ol/format/GeoJSON';
+import { circular } from 'ol/geom/Polygon';
+import { Fill, Stroke, Style } from 'ol/style';
+import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import {
+  AnalysisArea,
+  ANALYSIS_AREA_LIMITS,
+  isValidAnalysisArea,
+} from '@mapa-criminalidade/shared-types';
 import type { LoadFunction } from 'ol/Tile';
 
 import { MapMarkersService } from '../../shared/map-markers.service';
@@ -38,9 +69,7 @@ import {
   VectorTileService,
   ExtendedTileFilterParams,
 } from '../../shared/vector-tile.service';
-import {
-  VectorTileMapSetupService,
-} from './services/vector-tile-map-setup.service';
+import { VectorTileMapSetupService } from './services/vector-tile-map-setup.service';
 import { MAP_INTERACTIVE_LAYER_PROPERTY } from './utils/map-layer.constants';
 import { DateService } from '../../shared/date.service';
 import {
@@ -91,12 +120,29 @@ type HourFilter = { enabled: boolean; startHour: number; endHour: number };
 
 @Component({
   selector: 'app-map',
-  imports: [MatButtonModule],
+  imports: [
+    MatButtonModule,
+    MatIconModule,
+    ReactiveFormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+  ],
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
+  readonly displayMode = signal<MapDisplayMode>('auto');
+  readonly densityBands = DENSITY_BANDS;
+
+  setDisplayMode(mode: MapDisplayMode): void {
+    if (mode === this.displayMode()) return;
+    this.displayMode.set(mode);
+    this.currentFilters.update((filters) => ({ ...filters, mode }));
+    if (this.olMap) this.mapSetupService.disposeMapState(this.olMap);
+    this.updateTileLayer();
+  }
   readonly addressCenter = input.required<{
     lon: number | null;
     lat: number | null;
@@ -106,6 +152,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     before: string | null;
     after: string | null;
   }>();
+  readonly detailFilters = input<MapFeatureDetailFilters>({});
   readonly datasetRevision = input<string | null>(null);
   readonly periodFilter = input.required<string | null>();
   readonly hourFilter = input.required<HourFilter>();
@@ -117,6 +164,111 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     input.required<WritableSignal<boolean>>();
   readonly progressBarPercentage = input.required<WritableSignal<number>>();
   readonly boundsChange = output<MapBounds>();
+  readonly areaChange = output<AnalysisArea | null>();
+  readonly temporalState = output<TemporalMapState>();
+  private temporalRenderKey: EventsKey | null = null;
+  private temporalDates: Pick<TemporalMapState, 'after' | 'before'> = {
+    after: null,
+    before: null,
+  };
+  readonly drawing = signal(false);
+  readonly areaControlsOpen = signal(false);
+  readonly selectedArea = signal<AnalysisArea | null>(null);
+  readonly areaError = signal<string | null>(null);
+  readonly radiusControl = new FormControl(500, {
+    nonNullable: true,
+    validators: [Validators.required, Validators.min(1), Validators.max(10000)],
+  });
+  private readonly areaSource = new VectorSource();
+  private areaLayer: VectorLayer | null = null;
+  private drawInteraction: Draw | null = null;
+
+  startDrawing(): void {
+    if (!this.olMap) return;
+    const map = this.olMap;
+    this.cancelDrawing();
+    this.areaError.set(null);
+    this.drawing.set(true);
+    this.drawInteraction = new Draw({
+      type: 'Polygon',
+      maxPoints: ANALYSIS_AREA_LIMITS.maxVertices,
+      stopClick: true,
+    });
+    this.drawInteraction.on('drawend', (event) => {
+      const geometry = event.feature.getGeometry();
+      if (!geometry) return;
+      const polygon = new GeoJSON().writeGeometry(geometry, {
+        featureProjection: map.getView().getProjection(),
+        dataProjection: 'EPSG:4326',
+      });
+      const area = { polygon };
+      if (!isValidAnalysisArea(area)) {
+        this.areaError.set(
+          'Área inválida ou muito extensa. Use até 100 pontos, sem cruzar linhas, em um recorte de até 10.000 km² e 200 km de extensão.'
+        );
+      } else {
+        this.areaSource.clear();
+        this.areaSource.addFeature(event.feature);
+        this.areaControlsOpen.set(false);
+        this.selectedArea.set(area);
+        this.areaChange.emit(area);
+      }
+      this.cancelDrawing();
+    });
+    this.olMap.addInteraction(this.drawInteraction);
+  }
+
+  finishDrawing(): void {
+    this.drawInteraction?.finishDrawing();
+  }
+
+  undoVertex(): void {
+    this.drawInteraction?.removeLastPoint();
+  }
+
+  cancelDrawing(): void {
+    if (this.drawInteraction) {
+      this.drawInteraction.abortDrawing();
+      this.olMap?.removeInteraction(this.drawInteraction);
+      this.drawInteraction.dispose();
+      this.drawInteraction = null;
+    }
+    this.drawing.set(false);
+  }
+
+  selectRadius(): void {
+    const { lon, lat } = this.addressCenter();
+    if (!this.olMap || lon == null || lat == null || this.radiusControl.invalid)
+      return;
+    const area = {
+      longitude: lon,
+      latitude: lat,
+      radius: this.radiusControl.value,
+    };
+    if (!isValidAnalysisArea(area)) return;
+    this.cancelDrawing();
+    this.areaError.set(null);
+    const geometry = circular([lon, lat], area.radius, 128).transform(
+      'EPSG:4326',
+      this.olMap.getView().getProjection()
+    );
+    this.areaSource.clear();
+    this.areaSource.addFeature(new Feature(geometry));
+    this.areaControlsOpen.set(false);
+    this.selectedArea.set(area);
+    this.areaChange.emit(area);
+    this.olMap
+      .getView()
+      .fit(geometry, { padding: [50, 50, 220, 50], maxZoom: 17 });
+  }
+
+  clearArea(): void {
+    this.cancelDrawing();
+    this.areaSource.clear();
+    this.areaError.set(null);
+    this.selectedArea.set(null);
+    this.areaChange.emit(null);
+  }
 
   private readonly markersService = inject(MapMarkersService);
   private readonly vectorTileService = inject(VectorTileService);
@@ -133,6 +285,8 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
   olMap: OlMap | null = null;
   private tileLayer: VectorTileLayer | null = null;
   private tileSource: VectorTileSource | null = null;
+  private heatmapLayer: Heatmap<Feature<Point>> | null = null;
+  private heatmapRenderKey: EventsKey | null = null;
 
   private moveEndListenerKey: EventsKey | null = null;
   private tileLoadEndListenerKey: EventsKey | null = null;
@@ -171,6 +325,19 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.handleDatasetRevisionChange();
     }
 
+    if (changes['detailFilters']) {
+      const details = this.detailFilters();
+      this.currentFilters.update((filters) => ({
+        ...filters,
+        vehicleBrands: details.vehicleBrands,
+        objectTypes: details.objectTypes,
+        phoneBrandModels: details.phoneBrandModels,
+        locationTypes: details.locationTypes,
+        weekdays: details.weekdays,
+      }));
+      this.scheduleTileLayerUpdate();
+    }
+
     if (changes['periodFilter'] || changes['hourFilter']) {
       this.handlePeriodAndHourFiltersChange();
     }
@@ -192,6 +359,11 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.isDestroyed = true;
+    this.disposeHeatmapLayer();
+    if (this.temporalRenderKey) unByKey(this.temporalRenderKey);
+    this.cancelDrawing();
+    this.areaSource.clear();
+    this.areaLayer?.dispose();
     this.destroy$.next();
     this.destroy$.complete();
     this.cancelPendingTileRequests();
@@ -237,6 +409,16 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.olMap = this.mapSetupService.setupMap(this.document);
 
     if (!this.olMap) return;
+
+    this.areaLayer = new VectorLayer({
+      source: this.areaSource,
+      style: new Style({
+        stroke: new Stroke({ color: '#1565c0', width: 3 }),
+        fill: new Fill({ color: 'rgba(21, 101, 192, 0.12)' }),
+      }),
+      zIndex: 100,
+    });
+    this.olMap.addLayer(this.areaLayer);
 
     // Listen for map moveend to emit bounds changes
     this.moveEndListenerKey = this.olMap.on('moveend', () => {
@@ -365,11 +547,19 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     this.cancelPendingTileRequests();
     this.tileLayerVersion++;
+    if (this.temporalRenderKey) unByKey(this.temporalRenderKey);
+    this.temporalRenderKey = null;
+    this.temporalDates = {
+      after: this.currentFilters().after ?? null,
+      before: this.currentFilters().before ?? null,
+    };
+    this.emitTemporalState('loading');
     const tileLayerVersion = this.tileLayerVersion;
     this.tileTimeoutDialogOpen = false;
     this.tileError.set(null);
     this.tileCompleteness.set(false);
     this.disposeClusterLayer();
+    this.disposeHeatmapLayer();
 
     if (this.tileLoadEndListenerKey) {
       unByKey(this.tileLoadEndListenerKey);
@@ -377,6 +567,15 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     const filters = this.currentFilters();
+    const density = this.displayMode() === 'density';
+    const heatmap = this.displayMode() === 'heatmap';
+    const style = heatmap
+      ? new Style({})
+      : density
+      ? createDensityStyleFunction()
+      : createOccurrenceStyleFunction(this.activeCategories(), (category) =>
+          this.markersService.markerChooser(category)
+        );
 
     // Don't show layer if no categories are selected
     if (!filters.categories || filters.categories.length === 0) {
@@ -393,17 +592,19 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.tileRequestCancellation$
     );
     const existingSource = this.tileSource;
-    const source = existingSource ?? new VectorTileSource({
-      format: new MVTFormat({
-        // Don't use idProperty - we need num_bo as a regular property for click handling
-        layers: ['occurrences'], // Must match the layer name in ST_AsMVT
-      }),
-      url: tileUrl,
-      maxZoom: MAX_CRIME_TILE_ZOOM,
-      cacheSize: TILE_SOURCE_CACHE_SIZE,
-      transition: 0,
-      tileLoadFunction,
-    });
+    const source =
+      existingSource ??
+      new VectorTileSource({
+        format: new MVTFormat({
+          // Don't use idProperty - we need num_bo as a regular property for click handling
+          layers: ['occurrences'], // Must match the layer name in ST_AsMVT
+        }),
+        url: tileUrl,
+        maxZoom: MAX_CRIME_TILE_ZOOM,
+        cacheSize: TILE_SOURCE_CACHE_SIZE,
+        transition: 0,
+        tileLoadFunction,
+      });
 
     this.tileSource = source;
     if (existingSource) {
@@ -422,10 +623,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (!this.tileLayer) {
       this.tileLayer = new VectorTileLayer({
         source,
-        style: createOccurrenceStyleFunction(
-          this.activeCategories(),
-          (category) => this.markersService.markerChooser(category)
-        ),
+        style,
         declutter: false,
         renderMode: 'hybrid',
         preload: 0,
@@ -433,21 +631,52 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
         maxZoom: LAYER_MAX_ZOOM,
       });
     } else {
-      this.tileLayer.setStyle(
-        createOccurrenceStyleFunction(
-          this.activeCategories(),
-          (category) => this.markersService.markerChooser(category)
-        )
-      );
+      this.tileLayer.setStyle(style);
     }
 
-    this.tileLayer.set(MAP_INTERACTIVE_LAYER_PROPERTY, true);
-    this.clusterLayer = this.createClusterLayer(this.activeCategories());
+    this.tileLayer.set(MAP_INTERACTIVE_LAYER_PROPERTY, !density && !heatmap);
     if (!this.olMap.getLayers().getArray().includes(this.tileLayer)) {
       this.olMap.addLayer(this.tileLayer);
     }
-    this.olMap.addLayer(this.clusterLayer);
+    if (this.displayMode() === 'auto') {
+      this.clusterLayer = this.createClusterLayer(this.activeCategories());
+      this.olMap.addLayer(this.clusterLayer);
+    }
+    if (heatmap) {
+      this.heatmapLayer = createOccurrenceHeatmap(
+        new VectorSource<Feature<Point>>({ wrapX: false })
+      );
+      this.heatmapLayer.setMinZoom(TILE_LAYER_MIN_ZOOM);
+      this.heatmapLayer.setMaxZoom(LAYER_MAX_ZOOM);
+      this.olMap.addLayer(this.heatmapLayer);
+      this.heatmapRenderKey = this.tileLayer.on('postrender', () =>
+        this.scheduleVisibleClusterRefresh(tileLayerVersion)
+      );
+    }
     this.scheduleVisibleClusterRefresh(tileLayerVersion);
+    this.temporalRenderKey = this.olMap.once('rendercomplete', () => {
+      this.temporalRenderKey = null;
+      if (tileLayerVersion === this.tileLayerVersion) {
+        this.emitTemporalState(
+          this.tileError() || this.tileCompleteness() ? 'error' : 'ready'
+        );
+      }
+    });
+  }
+
+  private emitTemporalState(status: TemporalMapState['status']): void {
+    this.temporalState.emit({ ...this.temporalDates, status });
+  }
+
+  private disposeHeatmapLayer(): void {
+    if (this.heatmapRenderKey) unByKey(this.heatmapRenderKey);
+    this.heatmapRenderKey = null;
+    if (!this.heatmapLayer) return;
+    this.olMap?.removeLayer(this.heatmapLayer);
+    this.heatmapLayer.getSource()?.clear();
+    this.heatmapLayer.getSource()?.dispose();
+    this.heatmapLayer.dispose();
+    this.heatmapLayer = null;
   }
 
   private cancelPendingTileRequests(): void {
@@ -473,6 +702,11 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
         this.isDestroyed || tileLayerVersion !== this.tileLayerVersion,
       onError: (error) => {
         this.handleTileLoadError(error, tileLayerVersion);
+        if (
+          error.kind !== 'cancelled' &&
+          tileLayerVersion === this.tileLayerVersion
+        )
+          this.emitTemporalState('error');
         if (error.kind !== 'cancelled') {
           console.warn('[MapComponent] Vector tile load failed', {
             kind: error.kind,
@@ -498,31 +732,33 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     void import(
       './components/tile-timeout-dialog/tile-timeout-dialog.component'
-    ).then(({ TileTimeoutDialogComponent }) => {
-      if (this.isDestroyed || tileLayerVersion !== this.tileLayerVersion) {
-        this.tileTimeoutDialogOpen = false;
-        return;
-      }
+    )
+      .then(({ TileTimeoutDialogComponent }) => {
+        if (this.isDestroyed || tileLayerVersion !== this.tileLayerVersion) {
+          this.tileTimeoutDialogOpen = false;
+          return;
+        }
 
-      this.dialog
-        .open(TileTimeoutDialogComponent, {
-          width: 'min(420px, calc(100vw - 32px))',
-        })
-        .afterClosed()
-        .pipe(take(1))
-        .subscribe({
-          next: () => {
-            this.tileTimeoutDialogOpen = false;
-          },
-          error: (error: unknown) => {
-            this.tileTimeoutDialogOpen = false;
-            console.error('[MapComponent] Tile timeout dialog failed', error);
-          },
-        });
-    }).catch((error: unknown) => {
-      this.tileTimeoutDialogOpen = false;
-      console.error('[MapComponent] Tile timeout dialog chunk failed', error);
-    });
+        this.dialog
+          .open(TileTimeoutDialogComponent, {
+            width: 'min(420px, calc(100vw - 32px))',
+          })
+          .afterClosed()
+          .pipe(take(1))
+          .subscribe({
+            next: () => {
+              this.tileTimeoutDialogOpen = false;
+            },
+            error: (error: unknown) => {
+              this.tileTimeoutDialogOpen = false;
+              console.error('[MapComponent] Tile timeout dialog failed', error);
+            },
+          });
+      })
+      .catch((error: unknown) => {
+        this.tileTimeoutDialogOpen = false;
+        console.error('[MapComponent] Tile timeout dialog chunk failed', error);
+      });
   }
 
   private createClusterLayer(
@@ -685,6 +921,16 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (!mapSize) return;
 
     const extent = this.olMap.getView().calculateExtent(mapSize);
+    if (this.heatmapLayer) {
+      const margin =
+        (HEATMAP_RADIUS + HEATMAP_BLUR) *
+        (this.olMap.getView().getResolution() ?? 0);
+      const points = this.tileLayer.getFeaturesInExtent(buffer(extent, margin));
+      this.updateVisibleTileCompleteness(points);
+      const source = this.heatmapLayer.getSource();
+      if (source) synchronizeHeatmapPoints(source, points);
+      return;
+    }
     const features = this.tileLayer.getFeaturesInExtent(extent);
     this.updateVisibleTileCompleteness(features);
 
@@ -699,5 +945,4 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.clusterFeatureSource.clear(true);
     this.addClusterFeatures(features, new Set(this.activeCategories()));
   }
-
 }

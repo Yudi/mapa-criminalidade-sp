@@ -3,7 +3,8 @@ const ISO_DATE_TIME_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](\d{2}):?(\d{2}))?$/;
 const BRAZILIAN_DATE_PATTERN = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 const BRAZILIAN_DASH_DATE_PATTERN = /^(\d{1,2})-(\d{1,2})-(\d{4})$/;
-const SOURCE_NUMBER_PATTERN = /^[+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:\.\d{3})+[,]\d+)$/;
+const SOURCE_NUMBER_PATTERN =
+  /^[+-]?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:\.\d{3})+[,]\d+)$/;
 const EXCEL_SERIAL_MIN = 41275;
 const EXCEL_SERIAL_MAX = 73050;
 

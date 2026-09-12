@@ -38,9 +38,6 @@ import { DataImportService } from './data-import-orchestrator.service';
     DataImportQueueService,
     DevelopmentOnlyGuard,
   ],
-  exports: [
-    DataImportService,
-    DataImportQueueService,
-  ],
+  exports: [DataImportService, DataImportQueueService],
 })
 export class DataImportModule {}

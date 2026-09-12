@@ -23,7 +23,9 @@ export class ValidatorsService {
     }
 
     const parsed = new Date(`${date}T00:00:00.000Z`);
-    return !isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+    return (
+      !isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date
+    );
   }
 
   isBeforeAfterValid(beforeDate: string, afterDate: string): boolean {

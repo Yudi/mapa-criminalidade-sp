@@ -8,13 +8,19 @@ import {
   SimpleChanges,
   ViewChild,
   input,
+  output,
 } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import type { ECharts, EChartsOption } from 'echarts';
 import * as echarts from 'echarts';
 import { MapFeatureChartBucket } from '@mapa-criminalidade/shared-types';
 
-export type ChartDisplayType = 'bar' | 'pie';
+import { DetailFilterKey } from '../../../../shared/map-detail-filters';
+
+export type ChartDisplayType = 'bar' | 'pie' | 'line';
+export type ChartFilterKey = DetailFilterKey | 'categories';
+export type ChartFilterValue = string | number;
 
 export interface VisibleMapChartConfig {
   title: string;
@@ -24,19 +30,45 @@ export interface VisibleMapChartConfig {
   buckets: MapFeatureChartBucket[];
   amountLabel?: string;
   emptyText?: string;
+  missingLabels?: string[];
+  compact?: boolean;
+  filterKey?: ChartFilterKey;
+  selectedValues?: ChartFilterValue[];
 }
 
 @Component({
   selector: 'app-chart-card',
-  imports: [MatIconModule],
+  imports: [MatIconModule, MatButtonModule],
   templateUrl: './chart-card.component.html',
   styleUrl: './chart-card.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartCardComponent
-  implements AfterViewInit, OnChanges, OnDestroy
-{
+export class ChartCardComponent implements AfterViewInit, OnChanges, OnDestroy {
   readonly config = input.required<VisibleMapChartConfig>();
+  readonly busy = input(false);
+  readonly bucketSelect = output<{
+    key: ChartFilterKey;
+    value: ChartFilterValue;
+  }>();
+
+  filterValue(bucket: MapFeatureChartBucket): ChartFilterValue | null {
+    const key = this.config().filterKey;
+    if (key === 'categories') return bucket.label;
+    if (key === 'weekdays') {
+      const weekday = Number(bucket.filterValue);
+      return Number.isInteger(weekday) && weekday >= 1 && weekday <= 7
+        ? weekday
+        : null;
+    }
+    return bucket.filterValue ?? null;
+  }
+
+  selectBucket(bucket: MapFeatureChartBucket): void {
+    if (this.busy()) return;
+    const key = this.config().filterKey;
+    const value = this.filterValue(bucket);
+    if (key && value) this.bucketSelect.emit({ key, value });
+  }
 
   @ViewChild('chartHost')
   private chartHost?: ElementRef<HTMLDivElement>;
@@ -87,6 +119,15 @@ export class ChartCardComponent
 
     if (!this.chart) {
       this.chart = echarts.init(host, undefined, { renderer: 'canvas' });
+      this.chart.on('click', (event) => {
+        if (
+          event.componentType !== 'series' ||
+          typeof event.dataIndex !== 'number'
+        )
+          return;
+        const bucket = this.config().buckets[event.dataIndex];
+        if (bucket) this.selectBucket(bucket);
+      });
     }
 
     this.chart.setOption(this.buildOption(), true);
@@ -125,7 +166,14 @@ export class ChartCardComponent
         name: bucket.label,
         value: bucket.count,
         amount: bucket.amount,
-        itemStyle: { color },
+        itemStyle: {
+          color,
+          opacity:
+            config.selectedValues?.length &&
+            !config.selectedValues.includes(this.filterValue(bucket) ?? '')
+              ? 0.4
+              : 1,
+        },
         emphasis: {
           itemStyle: {
             color,
@@ -136,8 +184,51 @@ export class ChartCardComponent
       };
     });
 
+    if (config.displayType === 'line') {
+      return {
+        animation: false,
+        textStyle: { color: colors.onSurface, fontFamily: colors.fontFamily },
+        tooltip: this.tooltip(colors),
+        grid: { left: 8, right: 16, top: 24, bottom: 48, containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: config.buckets.map((bucket) => bucket.label),
+          axisLabel: { color: colors.onSurfaceVariant, hideOverlap: true },
+        },
+        yAxis: {
+          type: 'value',
+          minInterval: 1,
+          axisLabel: { color: colors.onSurfaceVariant },
+          splitLine: { lineStyle: { color: colors.outlineVariant } },
+        },
+        dataZoom: [
+          {
+            type: 'slider',
+            bottom: 0,
+            height: 20,
+            textStyle: { color: colors.onSurfaceVariant },
+          },
+        ],
+        series: [
+          {
+            type: 'line',
+            data: config.buckets.map((bucket) => ({
+              name: bucket.label,
+              value: config.missingLabels?.includes(bucket.label)
+                ? null
+                : bucket.count,
+            })),
+            itemStyle: { color: colors.series[0] },
+            lineStyle: { color: colors.series[0] },
+            symbolSize: 6,
+          },
+        ],
+      };
+    }
+
     if (config.displayType === 'pie') {
       return {
+        animation: !config.filterKey,
         color: colors.series,
         textStyle: {
           color: colors.onSurface,
@@ -147,11 +238,13 @@ export class ChartCardComponent
         legend: {
           bottom: 0,
           type: 'scroll',
+          selectedMode: config.filterKey ? false : true,
           textStyle: { color: colors.onSurfaceVariant },
         },
         series: [
           {
             type: 'pie',
+            cursor: config.filterKey ? 'pointer' : 'default',
             radius: ['48%', '72%'],
             center: ['50%', '42%'],
             avoidLabelOverlap: true,
@@ -184,6 +277,7 @@ export class ChartCardComponent
     const labels = config.buckets.map((bucket) => bucket.label);
 
     return {
+      animation: !config.filterKey,
       color: colors.series,
       textStyle: {
         color: colors.onSurface,
@@ -217,6 +311,7 @@ export class ChartCardComponent
       series: [
         {
           type: 'bar',
+          cursor: config.filterKey ? 'pointer' : 'default',
           data: chartData,
           barMaxWidth: 18,
           itemStyle: {

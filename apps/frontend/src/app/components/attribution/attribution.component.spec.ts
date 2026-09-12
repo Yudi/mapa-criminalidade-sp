@@ -16,8 +16,7 @@ describe('AttributionComponent', () => {
     await TestBed.configureTestingModule({
       imports: [AttributionComponent],
       providers: [provideHttpClient(withXhr()), provideHttpClientTesting()],
-    })
-    .compileComponents();
+    }).compileComponents();
 
     fixture = TestBed.createComponent(AttributionComponent);
     component = fixture.componentInstance;

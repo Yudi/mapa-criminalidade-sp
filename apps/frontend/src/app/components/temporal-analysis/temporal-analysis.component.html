@@ -1,0 +1,253 @@
+<section aria-labelledby="temporal-title">
+  <div class="heading">
+    <h2 id="temporal-title">Análise temporal</h2>
+    <button
+      mat-icon-button
+      type="button"
+      aria-label="Fechar análise"
+      (click)="closed.emit()"
+    >
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+  <p class="scope">{{ filter().area ? 'Área selecionada' : 'Área visível' }}</p>
+
+  <mat-tab-group dynamicHeight (selectedIndexChange)="pause()">
+    <mat-tab label="Comparar">
+      <ng-template matTabContent>
+        <div class="tab-content">
+          <mat-form-field>
+            <mat-label>Comparar por</mat-label>
+            <mat-select
+              [value]="mode()"
+              (selectionChange)="setMode($event.value)"
+            >
+              <mat-option value="month">Mês</mat-option>
+              <mat-option value="year">Ano</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <form [formGroup]="comparisonForm" (ngSubmit)="loadComparison()">
+            <div class="date-fields">
+              <mat-form-field>
+                <mat-label>A · referência</mat-label>
+                <input
+                  matInput
+                  [type]="mode() === 'month' ? 'month' : 'text'"
+                  formControlName="first"
+                  required
+                />
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>B</mat-label>
+                <input
+                  matInput
+                  [type]="mode() === 'month' ? 'month' : 'text'"
+                  formControlName="second"
+                  required
+                />
+              </mat-form-field>
+            </div>
+            <button mat-flat-button type="submit" [disabled]="comparing()">
+              {{ comparing() ? 'Comparando…' : 'Comparar' }}
+            </button>
+          </form>
+          @if (comparisonError()) {
+          <p role="alert">{{ comparisonError() }}</p>
+          } @if (comparable(); as ranges) {
+          <div class="ranges" aria-live="polite">
+            @if (ranges.partial) {
+            <p><strong>Períodos parciais · datas alinhadas</strong></p>
+            }
+            <p>
+              A: {{ displayDate(ranges.first.afterDate) }} –
+              {{ displayDate(ranges.first.beforeDate) }} ·
+              {{ ranges.days[0] }} dias
+            </p>
+            <p>
+              B: {{ displayDate(ranges.second.afterDate) }} –
+              {{ displayDate(ranges.second.beforeDate) }} ·
+              {{ ranges.days[1] }} dias
+            </p>
+          </div>
+          } @if (results(); as stats) {
+          <p>
+            Ocorrências: A <strong>{{ stats.first.total | number }}</strong> · B
+            <strong>{{ stats.second.total | number }}</strong>
+          </p>
+          @if (!changes().length) {
+          <p>Nenhuma ocorrência.</p>
+          } @else {
+          <div
+            class="table-scroll"
+            tabindex="0"
+            role="region"
+            aria-label="Variação por categoria"
+          >
+            <table>
+              <caption>
+                Variação de B em relação a A
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Categoria</th>
+                  <th scope="col">A</th>
+                  <th scope="col">B</th>
+                  <th scope="col">Variação</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of changes(); track row.label) {
+                <tr>
+                  <th scope="row">{{ row.label }}</th>
+                  <td>{{ row.baseline | number }}</td>
+                  <td>{{ row.current | number }}</td>
+                  <td>
+                    {{ row.delta > 0 ? '+' : '' }}{{ row.delta | number }}
+                    <span class="percent"
+                      >@if (row.percent !== null) {
+                      {{ row.percent > 0 ? '+' : ''
+                      }}{{ row.percent | number : '1.0-1' }}% } @else {
+                      <span aria-label="Sem base percentual">—</span> }</span
+                    >
+                  </td>
+                </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          } }
+        </div>
+      </ng-template>
+    </mat-tab>
+
+    <mat-tab label="Evolução">
+      <ng-template matTabContent>
+        <div class="tab-content">
+          <form [formGroup]="trendForm" (ngSubmit)="loadTrends()">
+            <div class="date-fields">
+              <mat-form-field
+                ><mat-label>Início</mat-label
+                ><input
+                  matInput
+                  type="date"
+                  formControlName="afterDate"
+                  required
+              /></mat-form-field>
+              <mat-form-field
+                ><mat-label>Fim</mat-label
+                ><input
+                  matInput
+                  type="date"
+                  formControlName="beforeDate"
+                  required
+              /></mat-form-field>
+            </div>
+            <button mat-stroked-button type="submit" [disabled]="loading()">
+              {{ loading() ? 'Carregando…' : 'Atualizar' }}
+            </button>
+          </form>
+          @if (error()) {
+          <p role="alert">{{ error() }}</p>
+          } @if (frames().length) {
+          <app-chart-card [config]="chart()" />
+          <mat-form-field>
+            <mat-label>Mês no mapa</mat-label>
+            <mat-select
+              [value]="activeIndex()"
+              (selectionChange)="selectFrame($event.value)"
+              [disabled]="!playbackEnabled()"
+            >
+              @for (frame of frames(); track frame.month; let i = $index) {
+              <mat-option [value]="i" [disabled]="frame.count === null"
+                >{{ frame.label
+                }}{{ frame.partial ? ' · Parcial' : '' }}</mat-option
+              >
+              }
+            </mat-select>
+          </mat-form-field>
+          @if (!playbackEnabled()) {
+          <p>Aproxime o mapa para reproduzir.</p>
+          }
+          <div class="playback-controls">
+            <button
+              mat-flat-button
+              type="button"
+              (click)="play()"
+              [disabled]="!hasPlayableFrames() || !playbackEnabled()"
+            >
+              <mat-icon>{{ playing() ? 'pause' : 'play_arrow' }}</mat-icon
+              >{{ playing() ? 'Pausar' : 'Reproduzir' }}
+            </button>
+            <button
+              mat-button
+              type="button"
+              (click)="restore()"
+              [disabled]="activeIndex() === null"
+            >
+              Restaurar período
+            </button>
+          </div>
+          @if (active(); as frame) {
+          <p role="status">
+            {{ frame.label }}{{ frame.partial ? ' · Parcial' : '' }} ·
+            {{ playing() ? 'Reproduzindo' : 'Pausado' }}
+          </p>
+          } @if (playbackError()) {
+          <p role="alert">{{ playbackError() }}</p>
+          }
+          <details>
+            <summary>Valores mensais</summary>
+            <div class="table-scroll months">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Mês</th>
+                    <th scope="col">Ocorrências</th>
+                    <th scope="col">Intervalo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (frame of frames(); track frame.month; let i = $index) {
+                  <tr [class.active]="activeIndex() === i">
+                    <th scope="row">{{ frame.label }}</th>
+                    <td>
+                      {{ frame.count === null ? '—' : (frame.count | number) }}
+                    </td>
+                    <td>
+                      {{
+                        frame.count === null
+                          ? 'Sem cobertura'
+                          : frame.partial
+                          ? 'Parcial'
+                          : 'Inteiro'
+                      }}
+                    </td>
+                  </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </details>
+          }
+        </div>
+      </ng-template>
+    </mat-tab>
+  </mat-tab-group>
+
+  <details class="data-notes">
+    <summary>Sobre os dados</summary>
+    <p>
+      {{ displayDate(coverage().earliest ?? '') }} a
+      {{ displayDate(coverageEnd()) }}. Importação mensal não certificada; zero
+      indica ausência de registros neste recorte.
+    </p>
+    <p>
+      Comparação por datas equivalentes, até o último dia comum disponível.
+      Exclui hoje; anos bissextos podem ter um dia extra.
+    </p>
+    <p>
+      Uma ocorrência pode ter várias categorias. Percentual sem referência
+      aparece como —.
+    </p>
+  </details>
+</section>

@@ -14,7 +14,7 @@
 .map-status-stack {
   display: grid;
   gap: 0.5rem;
-  inset: 1rem 1rem auto;
+  inset: 0.75rem 0.75rem auto auto;
   max-width: min(32rem, calc(100% - 2rem));
   pointer-events: none;
   position: absolute;
@@ -62,4 +62,121 @@
   .map-container {
     min-height: 0;
   }
+}
+
+.area-controls {
+  position: absolute;
+  inset: auto 0.75rem 0.75rem;
+  z-index: 3;
+  max-width: 44rem;
+  padding: 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 0.75rem;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-small);
+}
+.area-controls p {
+  margin: 0.5rem 0 0;
+}
+.area-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.area-actions mat-form-field {
+  width: 9rem;
+}
+
+.area-controls--compact {
+  width: fit-content;
+  max-width: calc(100% - 1.5rem);
+  padding: 0.25rem;
+}
+.area-summary,
+.area-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.area-summary > span {
+  padding-inline-start: 0.5rem;
+  min-width: 0;
+}
+.area-summary > button {
+  flex-shrink: 0;
+}
+.area-heading {
+  justify-content: space-between;
+}
+
+.display-controls {
+  pointer-events: auto;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+  max-width: 21rem;
+  font: var(--mat-sys-body-small);
+}
+.display-controls mat-form-field {
+  width: 100%;
+}
+.display-controls p {
+  margin: 0.5rem 0 0;
+}
+.density-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+.density-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.density-swatch {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 1px solid var(--mat-sys-outline);
+}
+.density-swatch--0 {
+  background: #deebf7;
+}
+.density-swatch--1 {
+  background: #9ecae1;
+}
+.density-swatch--2 {
+  background: #4292c6;
+}
+.density-swatch--3 {
+  background: #08519c;
+}
+.density-swatch--4 {
+  background: #08306b;
+}
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+.heatmap-gradient {
+  flex: 1;
+  height: 0.875rem;
+  background: linear-gradient(
+    to right,
+    #0000ff,
+    #00ffff,
+    #00ff00,
+    #ffff00,
+    #ff0000
+  );
+  border: 1px solid var(--mat-sys-outline);
 }

@@ -138,9 +138,7 @@ export class CsvTransformationService {
         await fs.access(datasetHandlingPath);
         this.logger.debug(`Rust binary exists at: ${datasetHandlingPath}`);
       } catch {
-        this.logger.error(
-          `Rust binary not found at: ${datasetHandlingPath}`
-        );
+        this.logger.error(`Rust binary not found at: ${datasetHandlingPath}`);
         throw new Error(
           `Rust dataset-handling binary not found at: ${datasetHandlingPath}. Please run 'cargo build --release' in the dataset-handling directory.`
         );

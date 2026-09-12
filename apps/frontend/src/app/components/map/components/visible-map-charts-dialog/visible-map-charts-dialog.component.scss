@@ -1,8 +1,12 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  max-height: 94dvh;
+  min-height: 0;
 }
 
 .dialog-header {
+  flex: 0 0 auto;
   align-items: flex-start;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
   display: flex;
@@ -33,7 +37,10 @@ h2[mat-dialog-title] {
 
 mat-dialog-content {
   background: var(--mat-sys-surface);
-  max-height: min(76dvh, 52rem);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  box-sizing: border-box;
   min-width: min(72rem, 92vw);
   padding: 1rem 1.5rem 1.5rem;
 }
@@ -126,6 +133,7 @@ mat-dialog-content {
 }
 
 mat-dialog-actions {
+  flex: 0 0 auto;
   border-top: 1px solid var(--mat-sys-outline-variant);
   padding: 0.75rem 1.5rem;
 }
@@ -140,4 +148,33 @@ mat-dialog-actions {
   .charts-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.detail-selection {
+  margin-block-end: 1rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+.detail-selection__scope {
+  color: var(--mat-sys-on-surface);
+  overflow-wrap: anywhere;
+}
+.detail-selection__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.detail-selection__chips button {
+  height: auto;
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.chart-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-block: 1rem;
+  color: var(--mat-sys-on-surface-variant);
 }

@@ -7,16 +7,32 @@
 
 <main class="app-layout">
   @if (isBrowserOnly) {
-  <section class="map-section" aria-label="Mapa de ocorrências">
+  <section #mapSection class="map-section" aria-label="Mapa de ocorrências">
     <ng-container #mapOutlet></ng-container>
-
-    @if (!isMapComponentLoaded() && !mapLoadError()) {
+    @if (temporalFrame(); as frame) {
+    <div class="temporal-map-caption" role="status">
+      <span
+        >Mapa: {{ displayDate(frame.afterDate) }} a
+        {{ displayDate(frame.beforeDate) }}</span
+      >
+      @if (temporalPanel()?.playing()) {
+      <button mat-button type="button" (click)="temporalPanel()?.pause()">
+        Pausar
+      </button>
+      } @else {
+      <button mat-button type="button" (click)="temporalPanel()?.play()">
+        Continuar
+      </button>
+      }
+      <button mat-button type="button" (click)="temporalPanel()?.restore()">
+        Restaurar período
+      </button>
+    </div>
+    } @if (!isMapComponentLoaded() && !mapLoadError()) {
     <div class="map-placeholder" aria-busy="true">
       <span>Carregando mapa...</span>
     </div>
-    }
-
-    @if (mapLoadError()) {
+    } @if (mapLoadError()) {
     <div class="map-placeholder map-placeholder--error" role="alert">
       <span>Não foi possível carregar o mapa.</span>
       <button type="button" mat-flat-button (click)="retryMapLoad()">
@@ -39,18 +55,59 @@
         Tentar novamente
       </button>
     </div>
-    }
-    <app-card
-      (submitEvent)="onSubmitEvent($event)"
-      (rubricasFormEvent)="onRubricasFormChange($event)"
-      (periodFilterEvent)="onPeriodFilterChange($event)"
-      (hourFilterEvent)="onHourFilterChange($event)"
-      (visibleChartsEvent)="onVisibleChartsClick()"
-      [canOpenVisibleCharts]="canOpenVisibleCharts"
-      [dateRange]="dateRange"
-      [periods]="periods"
-      [rubricas]="categories"
-      [viewportStatsLoading]="viewportStatsLoading()"
-    ></app-card>
+    } @if (statsError()) {
+    <div class="metadata-status" role="alert">
+      <span
+        >Não foi possível calcular as estatísticas desta área. Tente novamente
+        ou reduza a área e o intervalo de datas.</span
+      >
+      <button mat-button type="button" (click)="retryStats()">
+        Tentar novamente
+      </button>
+    </div>
+    } @if (temporalFilter(); as filter) { @defer (when temporalFilter()) {
+    <app-temporal-analysis
+      #temporalPanel
+      [filter]="filter"
+      [coverage]="dateRange!"
+      [mapState]="temporalMapState()"
+      [playbackEnabled]="!!currentBounds && currentBounds.zoom >= 10"
+      (frameChange)="onTemporalFrame($event)"
+      (focusMap)="focusTemporalMap()"
+      (closed)="closeTemporal()"
+    />
+    } @placeholder {
+    <p>Carregando análise temporal…</p>
+    } @error {
+    <p role="alert">
+      Não foi possível abrir a análise. Feche e tente novamente.
+    </p>
+    <button mat-button (click)="closeTemporal()">Fechar</button> } }
+    <div [hidden]="temporalFilter() !== null">
+      <app-card
+        [showTemporalAnalysis]="true"
+        [canOpenTemporalAnalysis]="
+          canOpenVisibleCharts && !!dateRange && isBrowserOnly
+        "
+        (temporalAnalysisEvent)="openTemporal()"
+        (submitEvent)="onSubmitEvent($event)"
+        (rubricasFormEvent)="onRubricasFormChange($event)"
+        (periodFilterEvent)="onPeriodFilterChange($event)"
+        (hourFilterEvent)="onHourFilterChange($event)"
+        (visibleChartsEvent)="onVisibleChartsClick()"
+        [statsUnavailable]="
+          statsError() || viewportStatsLoading() || !canLoadStats
+        "
+        [analysisAreaSelected]="analysisArea() !== null"
+        [canOpenVisibleCharts]="canOpenVisibleCharts"
+        [selectedRubricas]="categoriesFormValues"
+        [detailEntries]="detailEntries()"
+        (removeDetailEvent)="removeDetailFilter($event)"
+        [dateRange]="dateRange"
+        [periods]="periods"
+        [rubricas]="categories"
+        [viewportStatsLoading]="viewportStatsLoading()"
+      ></app-card>
+    </div>
   </section>
 </main>

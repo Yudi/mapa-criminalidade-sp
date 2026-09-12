@@ -192,7 +192,8 @@ export class PythonToolService implements OnModuleDestroy {
   ): Promise<boolean> {
     if (child.exitCode !== null || child.signalCode !== null) return true;
     const closed =
-      closedPromise ?? new Promise<void>((resolve) => child.once('close', resolve));
+      closedPromise ??
+      new Promise<void>((resolve) => child.once('close', resolve));
     this.signalProcessGroup(child, forceImmediately ? 'SIGKILL' : 'SIGTERM');
 
     if (
@@ -208,7 +209,10 @@ export class PythonToolService implements OnModuleDestroy {
     return await this.waitForClose(closed, PROCESS_TERMINATION_GRACE_MS);
   }
 
-  private signalProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
+  private signalProcessGroup(
+    child: ChildProcess,
+    signal: NodeJS.Signals
+  ): void {
     if (child.pid && process.platform !== 'win32') {
       try {
         process.kill(-child.pid, signal);

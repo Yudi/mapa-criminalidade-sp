@@ -77,7 +77,9 @@ describe('CsvProcessingService', () => {
     );
 
     expect(recordCount).toBe(2);
-    expect(databaseService.createTableFromCSVWithTypes).toHaveBeenCalledTimes(1);
+    expect(databaseService.createTableFromCSVWithTypes).toHaveBeenCalledTimes(
+      1
+    );
     expect(databaseService.ensureTableMatchesCSV).toHaveBeenCalledTimes(1);
     expect(databaseService.runImportTransaction).toHaveBeenCalledTimes(1);
     expect(databaseService.truncateTable).toHaveBeenCalledTimes(1);
@@ -101,9 +103,9 @@ describe('CsvProcessingService', () => {
     expect(databaseService.markTableForMapFeaturesEtl).toHaveBeenCalledWith(
       'dados_criminais_2024'
     );
-    expect(csvTransformationService.transformCsvForDatabase).toHaveBeenCalledTimes(
-      2
-    );
+    expect(
+      csvTransformationService.transformCsvForDatabase
+    ).toHaveBeenCalledTimes(2);
     expect(
       csvTransformationService.transformCsvForDatabase
     ).toHaveBeenNthCalledWith(
@@ -141,10 +143,7 @@ describe('CsvProcessingService', () => {
     const category = DataCategoryConfig.getImlCategory();
     const csvPath = path.join(tempDir, 'registro_obitos_iml_2026_05.csv');
     const transactionClient = {};
-    await writeFile(
-      csvPath,
-      '"ANO_REFERENCIA";"MES_REFERENCIA"\n"2026";"5"\n'
-    );
+    await writeFile(csvPath, '"ANO_REFERENCIA";"MES_REFERENCIA"\n"2026";"5"\n');
 
     const fileOperationsService = {
       fileExists: jest.fn().mockResolvedValue(true),

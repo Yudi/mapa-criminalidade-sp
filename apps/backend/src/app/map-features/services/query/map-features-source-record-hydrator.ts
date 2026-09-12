@@ -1,10 +1,7 @@
 import { PrismaService } from '../../../prisma/prisma.service';
 import { qualifiedTableName } from '../../../prisma/sql.utils';
 import { getSourceTableConfig } from '../../config/source-tables.config';
-import {
-  MapFeature,
-  SourceRecord,
-} from '../../types/map-features.types';
+import { MapFeature, SourceRecord } from '../../types/map-features.types';
 import {
   sourceIntegerExpression,
   sourceNumberExpression,
@@ -81,7 +78,9 @@ export class MapFeaturesSourceRecordHydrator {
         config.columnMappings.num_bo
       )}), '')) = UPPER($1)
         AND ${sourceIntegerExpression(config.columnMappings.ano_bo)} = $2
-        AND UPPER(${sourceTextExpression(config.columnMappings.delegacia)}) = UPPER($3)
+        AND UPPER(${sourceTextExpression(
+          config.columnMappings.delegacia
+        )}) = UPPER($3)
         AND ROUND(${sourceNumberExpression(
           config.columnMappings.latitude
         )}, 6) = ROUND($4::numeric, 6)

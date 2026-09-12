@@ -7,14 +7,12 @@ describe('MapFeaturesVectorTileQuery', () => {
     const tile = Buffer.from([1, 2, 3]);
     const executeRawUnsafe = jest.fn().mockResolvedValue(undefined);
     const queryRawUnsafe = jest.fn().mockResolvedValue([{ mvt: tile }]);
-    const transaction = jest
-      .fn()
-      .mockImplementation(async (operation) =>
-        operation({
-          $executeRawUnsafe: executeRawUnsafe,
-          $queryRawUnsafe: queryRawUnsafe,
-        })
-      );
+    const transaction = jest.fn().mockImplementation(async (operation) =>
+      operation({
+        $executeRawUnsafe: executeRawUnsafe,
+        $queryRawUnsafe: queryRawUnsafe,
+      })
+    );
     const prisma = {
       $transaction: transaction,
     } as unknown as PrismaService;
@@ -105,12 +103,22 @@ describe('MapFeaturesVectorTileQuery', () => {
       y: 200,
       categories: ['Roubo, furto e perda'],
       periods: ['Noite, madrugada'],
+      vehicleBrands: ['Marca, especial'],
+      objectTypes: ['Celular'],
+      phoneBrandModels: ['Samsung · Galaxy'],
+      locationTypes: ['Via pública'],
+      weekdays: [7, 1, 7],
     });
 
     const json = queryRawUnsafe.mock.calls[0][4] as string;
     expect(JSON.parse(json)).toMatchObject({
       categories: ['Roubo, furto e perda'],
       periods: ['Noite, madrugada'],
+      vehicleBrands: ['Marca, especial'],
+      objectTypes: ['Celular'],
+      phoneBrandModels: ['Samsung · Galaxy'],
+      locationTypes: ['Via pública'],
+      weekdays: [1, 7],
     });
   });
 });

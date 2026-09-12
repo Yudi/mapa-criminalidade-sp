@@ -28,8 +28,9 @@ describe('ImlImportService', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-06-14T12:00:00Z'));
 
     pythonToolService = {
-      runAssetScript: jest.fn().mockImplementation(
-        (_scriptName: string, args: string[]) => {
+      runAssetScript: jest
+        .fn()
+        .mockImplementation((_scriptName: string, args: string[]) => {
           const year = Number(args[args.indexOf('--year') + 1]);
           const months = args[args.indexOf('--months') + 1]
             .split(',')
@@ -47,14 +48,16 @@ describe('ImlImportService', () => {
                 recordCount: 10,
                 outputPath: path.join(
                   outputDir,
-                  `registro_obitos_iml_${year}_${String(month).padStart(2, '0')}.csv`
+                  `registro_obitos_iml_${year}_${String(month).padStart(
+                    2,
+                    '0'
+                  )}.csv`
                 ),
               })),
             }),
             stderr: '',
           });
-        }
-      ),
+        }),
     } as unknown as PythonToolService;
 
     fileOperationsService = {
@@ -278,10 +281,7 @@ describe('ImlImportService', () => {
 
     await service.importCategory(olderCategory, true);
 
-    expect(getScraperMonths()).toEqual([
-      '1,2,3,4,5,6,7,8,9,10,11,12',
-      '1',
-    ]);
+    expect(getScraperMonths()).toEqual(['1,2,3,4,5,6,7,8,9,10,11,12', '1']);
   });
 
   it('uses the São Paulo calendar when UTC has already entered a new year', async () => {

@@ -75,9 +75,7 @@ export async function getImlRecordsByBo(
       causa_mortis: string | null;
     }>
   >(
-    `SELECT * FROM (${selects.join(
-      ' UNION ALL '
-    )}) AS iml_records
+    `SELECT * FROM (${selects.join(' UNION ALL ')}) AS iml_records
     ORDER BY source_table,
       source_id`,
     normalizeImlLookupValue(numBo),
@@ -86,7 +84,10 @@ export async function getImlRecordsByBo(
   );
 
   // The raw date is dirty text. Never cast it inside an otherwise valid detail query.
-  rows.sort((left, right) => imlDateOrder(left.data_entrada_iml) - imlDateOrder(right.data_entrada_iml));
+  rows.sort(
+    (left, right) =>
+      imlDateOrder(left.data_entrada_iml) - imlDateOrder(right.data_entrada_iml)
+  );
   return rows.map((row) => ({
     sourceId: Number(row.source_id),
     sourceTable: row.source_table,
@@ -105,12 +106,16 @@ export async function getImlRecordsByBo(
 }
 
 function imlDateOrder(value: string | null): number {
-  const match = /^(\d{2}\/\d{2}\/\d{4})(?: (\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value ?? '');
+  const match =
+    /^(\d{2}\/\d{2}\/\d{4})(?: (\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(
+      value ?? ''
+    );
   if (!match) return Number.MAX_SAFE_INTEGER;
   const date = parseSourceDate(match[1]);
   const hour = Number(match[2] ?? 0);
   const minute = Number(match[3] ?? 0);
   const second = Number(match[4] ?? 0);
-  if (!date || hour > 23 || minute > 59 || second > 59) return Number.MAX_SAFE_INTEGER;
+  if (!date || hour > 23 || minute > 59 || second > 59)
+    return Number.MAX_SAFE_INTEGER;
   return date.getTime() + (hour * 3600 + minute * 60 + second) * 1000;
 }

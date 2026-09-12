@@ -134,7 +134,9 @@ export class MapFeaturesEtlService {
       await this.removeSourceTableFeatures(tableName, tx);
       const count = await this.processSourceTable(tableName, tx, false);
       if (previousFeature && count === 0) {
-        throw new Error(`Refusing to replace ${tableName}: no eligible features remain in a previously published source`);
+        throw new Error(
+          `Refusing to replace ${tableName}: no eligible features remain in a previously published source`
+        );
       }
       await tx.$executeRawUnsafe(
         'SELECT public.refresh_map_features_date_range()'
@@ -209,13 +211,16 @@ export class MapFeaturesEtlService {
     // Retain IDs for the logical locations that are deleted and rebuilt below.
     // A transaction-local table keeps this bounded in application memory and
     // preserves the IDs already held by open maps and cached tiles.
-    await db.$executeRawUnsafe(`
+    await db.$executeRawUnsafe(
+      `
       CREATE TEMP TABLE map_feature_previous_ids ON COMMIT DROP AS
       SELECT id, num_bo, ano_bo, delegacia, location_hash
       FROM map_features
       WHERE source_tables @> ARRAY[$1]::text[]
         AND cardinality(source_tables) = 1
-    `, tableName);
+    `,
+      tableName
+    );
     await db.$executeRawUnsafe(`
       CREATE UNIQUE INDEX ON map_feature_previous_ids
         (num_bo, ano_bo, COALESCE(delegacia, ''), location_hash)
@@ -229,10 +234,7 @@ export class MapFeaturesEtlService {
       tableName
     );
 
-    await db.$executeRawUnsafe(
-      buildRemoveSourceTableFeaturesSql(),
-      tableName
-    );
+    await db.$executeRawUnsafe(buildRemoveSourceTableFeaturesSql(), tableName);
   }
 
   private async processSourceTable(
@@ -451,14 +453,20 @@ export class MapFeaturesEtlService {
         feature.source_tables,
         JSON.stringify({
           ...feature.feature_data,
-          _source_metadata: Object.fromEntries(feature.source_tables.map((source) => [source, {
-            location: feature.feature_data.location,
-            occurrence: feature.feature_data.occurrence,
-            all_rubricas: feature.feature_data.all_rubricas,
-            category: feature.category,
-            rubrica_for_styling: feature.rubrica_for_styling,
-            data_ocorrencia: feature.data_ocorrencia?.toISOString().slice(0, 10) ?? null,
-          }])),
+          _source_metadata: Object.fromEntries(
+            feature.source_tables.map((source) => [
+              source,
+              {
+                location: feature.feature_data.location,
+                occurrence: feature.feature_data.occurrence,
+                all_rubricas: feature.feature_data.all_rubricas,
+                category: feature.category,
+                rubrica_for_styling: feature.rubrica_for_styling,
+                data_ocorrencia:
+                  feature.data_ocorrencia?.toISOString().slice(0, 10) ?? null,
+              },
+            ])
+          ),
         })
       );
     }
@@ -507,7 +515,9 @@ export class MapFeaturesEtlService {
     const result = dynamicTableColumnsJsonSchema.safeParse(row.columns_json);
     if (!result.success) {
       this.logger.warn(
-        `Ignoring source table ${row.table_name} because columns_json is invalid: ${result.error.issues
+        `Ignoring source table ${
+          row.table_name
+        } because columns_json is invalid: ${result.error.issues
           .map((issue) => issue.message)
           .join('; ')}`
       );
@@ -521,9 +531,7 @@ export class MapFeaturesEtlService {
     tableName: string,
     db: DatabaseExecutor = this.prisma
   ): Promise<string[]> {
-    const result = await db.$queryRaw<
-      { column_name: string }[]
-    >(Prisma.sql`
+    const result = await db.$queryRaw<{ column_name: string }[]>(Prisma.sql`
       SELECT column_name
       FROM information_schema.columns
       WHERE table_schema = 'raw'

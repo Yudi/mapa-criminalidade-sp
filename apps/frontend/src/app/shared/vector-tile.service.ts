@@ -10,7 +10,7 @@ import {
 import { GraphqlClientService } from './graphql-client.service';
 import { MAP_FEATURES_METADATA_QUERY } from './map-features.graphql';
 
-const TILE_SCHEMA_VERSION = 'v2';
+const TILE_SCHEMA_VERSION = 'v3';
 
 export type { TileMetadata, TileFilterParams };
 export interface ExtendedTileFilterParams extends TileFilterParams {
@@ -23,13 +23,18 @@ export class VectorTileService {
   private graphql = inject(GraphqlClientService);
   private metadataCache$: Observable<OccurrenceTileMetadata> | null = null;
   buildTileUrl(params?: ExtendedTileFilterParams): string {
+    // Smooth heatmaps require raw points, never zoom-dependent cluster centers.
+    const mode = params?.mode === 'heatmap' ? 'markers' : params?.mode;
     const baseUrl =
-      environment.tileUrlTemplate ??
-      `${environment.apiUrl}/tiles/{z}/{x}/{y}.mvt`;
+      mode === 'density' || mode === 'markers'
+        ? `${environment.apiUrl}/tiles/{z}/{x}/{y}.mvt`
+        : environment.tileUrlTemplate ??
+          `${environment.apiUrl}/tiles/{z}/{x}/{y}.mvt`;
 
     const queryParams = [
       `tileSchema=${encodeURIComponent(TILE_SCHEMA_VERSION)}`,
     ];
+    if (mode && mode !== 'auto') queryParams.push(`mode=${mode}`);
 
     if (params?.datasetRevision) {
       queryParams.push(
@@ -55,6 +60,26 @@ export class VectorTileService {
       );
     }
 
+    for (const key of [
+      'vehicleBrands',
+      'objectTypes',
+      'phoneBrandModels',
+      'locationTypes',
+    ] as const) {
+      const values = this.normalizeList(params?.[key]);
+      if (values.length)
+        queryParams.push(
+          `${key}=${encodeURIComponent(JSON.stringify(values))}`
+        );
+    }
+
+    const weekdays = this.normalizeWeekdays(params?.weekdays);
+    if (weekdays.length) {
+      queryParams.push(
+        `weekdays=${encodeURIComponent(JSON.stringify(weekdays))}`
+      );
+    }
+
     const periods = this.normalizeList(params?.periods);
     if (periods.length > 0) {
       queryParams.push(
@@ -73,6 +98,15 @@ export class VectorTileService {
     return [
       ...new Set(values?.map((value) => value.trim()).filter(Boolean)),
     ].sort((left, right) => left.localeCompare(right));
+  }
+  private normalizeWeekdays(values?: number[]): number[] {
+    return [
+      ...new Set(
+        values?.filter(
+          (value) => Number.isInteger(value) && value >= 1 && value <= 7
+        )
+      ),
+    ].sort((left, right) => left - right);
   }
   getMetadata(): Observable<OccurrenceTileMetadata> {
     if (!this.metadataCache$) {

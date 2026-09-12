@@ -36,7 +36,10 @@ describe('RustToolService process boundary', () => {
     process.env.RUST_BINARY_PATH = '/bin/sh';
     const service = new RustToolService();
 
-    const active = service.runDatasetHandlingCommand(['-c', 'sleep 30'], 30_000);
+    const active = service.runDatasetHandlingCommand(
+      ['-c', 'sleep 30'],
+      30_000
+    );
     await new Promise((resolve) => setTimeout(resolve, 50));
     const queued = service.runDatasetHandlingCommand(
       ['-c', 'printf queued'],

@@ -146,8 +146,7 @@ export class MapFeaturesMapperService {
         celulares_count: featureData.summary?.celulares_count ?? 0,
         veiculos_count: featureData.summary?.veiculos_count ?? 0,
         objetos_count: featureData.summary?.objetos_count ?? 0,
-        dados_criminais_count:
-          featureData.summary?.dados_criminais_count ?? 0,
+        dados_criminais_count: featureData.summary?.dados_criminais_count ?? 0,
         produtividade_count: featureData.summary?.produtividade_count ?? 0,
       },
     };

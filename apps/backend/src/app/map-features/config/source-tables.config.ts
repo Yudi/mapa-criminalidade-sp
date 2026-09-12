@@ -375,7 +375,9 @@ export function getSourceTableConfig(
           ]
         : [config.tablePattern];
 
-    if (allowedPrefixes.some((prefix) => matchesSourceTable(prefix, tableName))) {
+    if (
+      allowedPrefixes.some((prefix) => matchesSourceTable(prefix, tableName))
+    ) {
       return config;
     }
   }
@@ -383,10 +385,7 @@ export function getSourceTableConfig(
 }
 
 function matchesSourceTable(prefix: string, tableName: string): boolean {
-  const escapedPattern = prefix.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      '\\$&'
-    );
+  const escapedPattern = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^${escapedPattern}_[0-9]{4}$`).test(tableName);
 }
 export function isMapFeaturesSourceTable(tableName: string): boolean {

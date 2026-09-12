@@ -42,8 +42,14 @@ describe('MapFeaturesQueryCacheCoordinator', () => {
   it('uses distinct cache entries when the committed dataset revision changes', async () => {
     const cache = createCacheMock();
     let revision = 'A';
-    const coordinator = new MapFeaturesQueryCacheCoordinator(cache as unknown as RedisCacheService, async () => revision);
-    const load = jest.fn().mockResolvedValueOnce('old').mockResolvedValueOnce('new');
+    const coordinator = new MapFeaturesQueryCacheCoordinator(
+      cache as unknown as RedisCacheService,
+      async () => revision
+    );
+    const load = jest
+      .fn()
+      .mockResolvedValueOnce('old')
+      .mockResolvedValueOnce('new');
     expect(await coordinator.getJson('count', {}, 60, load)).toBe('old');
     revision = 'B';
     expect(await coordinator.getJson('count', {}, 60, load)).toBe('new');

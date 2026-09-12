@@ -72,3 +72,56 @@
   height: 2rem;
   width: 2rem;
 }
+
+.chart-card--plain {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  min-height: 0;
+}
+.chart-card--plain .chart-card__chart {
+  height: 15rem;
+}
+
+.chart-card__chart--filterable {
+  cursor: pointer;
+}
+
+.chart-card__values {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.chart-card__values summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding-block: 0.75rem;
+}
+
+.chart-card__values summary:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
+.chart-card__values summary span {
+  color: var(--mat-sys-primary);
+}
+
+.chart-card__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.chart-card__options button {
+  height: auto;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.chart-card__options button[aria-pressed='true'] {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}

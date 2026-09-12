@@ -14,9 +14,7 @@ import {
   timeout,
   throwError,
 } from 'rxjs';
-import {
-  GroupedOccurrence,
-} from '@mapa-criminalidade/shared-types';
+import { GroupedOccurrence } from '@mapa-criminalidade/shared-types';
 import { DateService } from './date.service';
 import { OccurrencesService } from './occurrences.service';
 import { BoundedTtlLruCache } from './bounded-cache';
@@ -110,10 +108,7 @@ export class QueriesService {
 
     return this.cachedRequest(cacheKey, () =>
       this.http
-        .get<NominatimAddressResult[]>(
-          ADDRESS_SEARCH_URL,
-          { params }
-        )
+        .get<NominatimAddressResult[]>(ADDRESS_SEARCH_URL, { params })
         .pipe(
           map((results) => {
             if (!Array.isArray(results)) {

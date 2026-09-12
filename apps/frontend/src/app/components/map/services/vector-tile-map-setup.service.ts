@@ -173,10 +173,7 @@ export class VectorTileMapSetupService {
           layer.get(MAP_INTERACTIVE_LAYER_PROPERTY) === true,
       });
     } catch (error) {
-      if (
-        error instanceof TypeError &&
-        error.message.includes('hasRenderer')
-      ) {
+      if (error instanceof TypeError && error.message.includes('hasRenderer')) {
         olMap.render();
         return false;
       }
@@ -208,7 +205,8 @@ export class VectorTileMapSetupService {
       return;
     }
 
-    const clickableFeatures = this.getUniqueClickableFeatures(clusteredFeatures);
+    const clickableFeatures =
+      this.getUniqueClickableFeatures(clusteredFeatures);
 
     if (clickableFeatures.length === 0) {
       this.clearSpreadLayer(olMap);
@@ -271,7 +269,10 @@ export class VectorTileMapSetupService {
       });
       spreadFeature.setStyle(this.createFeatureStyle(feature));
       source.addFeature(spreadFeature);
-      spreadFeatures.push({ feature: spreadFeature, targetCoordinate: coordinate });
+      spreadFeatures.push({
+        feature: spreadFeature,
+        targetCoordinate: coordinate,
+      });
     });
 
     this.spreadLayer = new VectorLayer({
@@ -280,7 +281,12 @@ export class VectorTileMapSetupService {
     });
     this.spreadLayer.set(MAP_INTERACTIVE_LAYER_PROPERTY, true);
     olMap.addLayer(this.spreadLayer);
-    this.animateSpreadFeatures(olMap, this.spreadLayer, originCoordinate, spreadFeatures);
+    this.animateSpreadFeatures(
+      olMap,
+      this.spreadLayer,
+      originCoordinate,
+      spreadFeatures
+    );
   }
 
   private animateSpreadFeatures(
@@ -303,10 +309,12 @@ export class VectorTileMapSetupService {
 
       spreadFeatures.forEach(({ feature, targetCoordinate }) => {
         const [targetX, targetY] = targetCoordinate;
-        feature.getGeometry()?.setCoordinates([
-          originX + (targetX - originX) * easedProgress,
-          originY + (targetY - originY) * easedProgress,
-        ]);
+        feature
+          .getGeometry()
+          ?.setCoordinates([
+            originX + (targetX - originX) * easedProgress,
+            originY + (targetY - originY) * easedProgress,
+          ]);
       });
 
       olMap.render();
@@ -388,8 +396,8 @@ export class VectorTileMapSetupService {
       anoBo === undefined || anoBo === null || anoBo === ''
         ? undefined
         : typeof anoBo === 'number'
-          ? anoBo
-          : Number.parseInt(anoBo, 10);
+        ? anoBo
+        : Number.parseInt(anoBo, 10);
 
     if (parsedAnoBo !== undefined && Number.isNaN(parsedAnoBo)) return null;
 
@@ -493,7 +501,9 @@ export class VectorTileMapSetupService {
     olMap.render();
   }
 
-  private async openFeatureDialog(data: FeatureDetailDialogData): Promise<void> {
+  private async openFeatureDialog(
+    data: FeatureDetailDialogData
+  ): Promise<void> {
     try {
       const { FeatureDetailDialogComponent } = await import(
         '../components/feature-detail-dialog/feature-detail-dialog.component'

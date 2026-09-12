@@ -1,4 +1,11 @@
-import { Controller, Get, Param, Query, HttpStatus, HttpException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  HttpStatus,
+  HttpException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { MapFeaturesQueryService } from '../services/map-features-query.service';
 import { MapFeaturesMapperService } from '../services/map-features-mapper.service';
@@ -193,7 +200,10 @@ export class OccurrencesController {
 
     const enrichment = await this.queryService.getImlEnrichment(feature);
 
-    return { ...this.mapper.toDetail(feature, enrichment.records), imlUnavailable: enrichment.unavailable };
+    return {
+      ...this.mapper.toDetail(feature, enrichment.records),
+      imlUnavailable: enrichment.unavailable,
+    };
   }
 
   @Get('categories')

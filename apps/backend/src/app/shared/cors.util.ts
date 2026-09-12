@@ -9,7 +9,8 @@ export function parseAllowedOrigins(
   rawOrigins: string | undefined,
   fallbackOrigins: readonly string[]
 ): string[] {
-  const values = rawOrigins === undefined ? fallbackOrigins : rawOrigins.split(',');
+  const values =
+    rawOrigins === undefined ? fallbackOrigins : rawOrigins.split(',');
   const origins = values
     .map((value) => value.trim())
     .filter((value) => value.length > 0);

@@ -2,9 +2,11 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { isRequestTimeoutError } from '../../../shared/error.utils';
 import { MapFeaturesTileParams } from '../../types/map-features.types';
+import { buildDisplayTileQuery } from './map-features-display-tile-query';
 import {
   normalizeOptionalString,
   normalizeStringList,
+  normalizeWeekdays,
 } from './map-features-query-cache';
 import {
   configureTileTransaction,
@@ -67,6 +69,11 @@ export class MapFeaturesVectorTileQuery {
         after: normalizeOptionalString(params.afterDate),
         categories: normalizeStringList(params.categories),
         periods: normalizeStringList(params.periods),
+        vehicleBrands: normalizeStringList(params.vehicleBrands),
+        objectTypes: normalizeStringList(params.objectTypes),
+        phoneBrandModels: normalizeStringList(params.phoneBrandModels),
+        locationTypes: normalizeStringList(params.locationTypes),
+        weekdays: normalizeWeekdays(params.weekdays),
         startHour: params.startHour,
         endHour: params.endHour,
       }),
@@ -77,7 +84,15 @@ export class MapFeaturesVectorTileQuery {
 
     try {
       this.logger.debug(`Generating tile z=${z} x=${x} y=${y}`);
-      const result = await this.runTileQuery(mvtQuery, queryParams, signal);
+      const displayQuery =
+        params.mode === 'density' || params.mode === 'markers'
+          ? buildDisplayTileQuery(params)
+          : null;
+      const result = await this.runTileQuery(
+        displayQuery?.sql ?? mvtQuery,
+        displayQuery?.values ?? queryParams,
+        signal
+      );
 
       if (!result || result.length === 0 || !result[0]?.mvt) {
         return { status: 'empty', tile: null };

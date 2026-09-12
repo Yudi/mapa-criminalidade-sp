@@ -4,16 +4,31 @@ import { RequestIdMiddleware } from './request-id.middleware';
 
 describe('RequestIdMiddleware', () => {
   it('logs an aborted response exactly once even if finish follows close', () => {
-    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const log = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
     const response = Object.assign(new EventEmitter(), {
-      setHeader: jest.fn(), writableFinished: false, statusCode: 200,
+      setHeader: jest.fn(),
+      writableFinished: false,
+      statusCode: 200,
     });
-    const request = { header: () => undefined, method: 'GET', path: '/api/test' };
-    new RequestIdMiddleware().use(request as never, response as never, jest.fn());
+    const request = {
+      header: () => undefined,
+      method: 'GET',
+      path: '/api/test',
+    };
+    new RequestIdMiddleware().use(
+      request as never,
+      response as never,
+      jest.fn()
+    );
     response.emit('close');
     response.emit('finish');
     expect(log).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({ outcome: 'aborted', event: 'http_request' });
+    expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({
+      outcome: 'aborted',
+      event: 'http_request',
+    });
     log.mockRestore();
   });
 

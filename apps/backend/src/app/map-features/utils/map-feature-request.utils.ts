@@ -1,6 +1,12 @@
+import { validateAnalysisArea } from './analysis-area.validation';
+import {
+  AnalysisArea,
+  MapFeatureDetailFilters,
+} from '@mapa-criminalidade/shared-types';
 import { BadRequestException } from '@nestjs/common';
 import { ValidatorsService } from '../../shared/validators/validators.service';
 import { MapFeaturesFilterParams } from '../types/map-features.types';
+import { normalizeWeekdays } from '../services/query/map-features-query-cache';
 
 type BoundsQuery = {
   minLon?: number;
@@ -9,7 +15,8 @@ type BoundsQuery = {
   maxLat?: number;
 };
 
-type FilterInputLike = {
+type FilterInputLike = MapFeatureDetailFilters & {
+  area?: AnalysisArea;
   beforeDate?: string;
   afterDate?: string;
   categories?: string[];
@@ -74,7 +81,8 @@ export function parseOptionalIntegerQuery(
   value: unknown,
   name: string
 ): number | undefined {
-  if (value !== undefined && typeof value !== 'string') badRequest(`Invalid ${name}`);
+  if (value !== undefined && typeof value !== 'string')
+    badRequest(`Invalid ${name}`);
   return value === undefined || value.trim() === ''
     ? undefined
     : parseIntegerParam(value, name);
@@ -116,7 +124,8 @@ export function parseOptionalNumberQuery(
   value: unknown,
   name: string
 ): number | undefined {
-  if (value !== undefined && typeof value !== 'string') badRequest(`Invalid ${name}`);
+  if (value !== undefined && typeof value !== 'string')
+    badRequest(`Invalid ${name}`);
   return value === undefined || value.trim() === ''
     ? undefined
     : parseNumberQuery(value, name);
@@ -156,10 +165,47 @@ export function parseStringListQuery(
   return validateStringList(parsedValues, name);
 }
 
+export function parseWeekdayListQuery(
+  value: string | string[] | undefined,
+  name = 'weekdays'
+): number[] | undefined {
+  if (value === undefined) return undefined;
+
+  const values = (Array.isArray(value) ? value : [value]).flatMap((item) => {
+    if (typeof item !== 'string') badRequest(`Invalid ${name}`);
+    const trimmed = item.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith('[')) {
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(trimmed);
+      } catch {
+        badRequest(`Invalid ${name}`);
+      }
+
+      if (!Array.isArray(decoded)) badRequest(`Invalid ${name}`);
+      return decoded;
+    }
+
+    return trimmed.split(',');
+  });
+
+  if (
+    values.some(
+      (entry) =>
+        (typeof entry !== 'number' && typeof entry !== 'string') ||
+        !/^[1-7]$/.test(String(entry).trim())
+    )
+  ) {
+    badRequest(`${name} values must be integers from 1 to 7`);
+  }
+
+  return normalizeWeekdays(values.map((entry) => Number(entry)));
+}
+
 export function normalizeStringList(values?: string[]): string[] | undefined {
-  const normalized = values
-    ?.map((value) => value.trim())
-    .filter(Boolean);
+  const normalized = values?.map((value) => value.trim()).filter(Boolean);
 
   return normalized?.length ? normalized : undefined;
 }
@@ -207,17 +253,11 @@ export function validateDateFilters(
         Date.parse(`${after}T00:00:00.000Z`)) /
       86_400_000;
     if (spanDays > MAX_FILTER_DATE_SPAN_DAYS) {
-      badRequest(
-        `Date range cannot exceed ${MAX_FILTER_DATE_SPAN_DAYS} days`
-      );
+      badRequest(`Date range cannot exceed ${MAX_FILTER_DATE_SPAN_DAYS} days`);
     }
   }
 
-  if (
-    before &&
-    after &&
-    !validatorsService.isBeforeAfterValid(before, after)
-  ) {
+  if (before && after && !validatorsService.isBeforeAfterValid(before, after)) {
     badRequest('before date must be on or after after date');
   }
 }
@@ -288,11 +328,26 @@ export function validateFilterInput(
   filter?: FilterInputLike
 ): void {
   if (!filter) return;
+  if (filter.area != null) {
+    if (filter.bounds != null) badRequest('Use either area or bounds');
+    validateAnalysisArea(filter.area);
+  }
 
   validateDateFilters(validatorsService, filter.beforeDate, filter.afterDate);
   validateHourFilters(filter.startHour, filter.endHour);
   validateStringList(filter.categories, 'categories');
   validateStringList(filter.periods, 'periods');
+  validateStringList(filter.vehicleBrands, 'vehicleBrands');
+  validateStringList(filter.objectTypes, 'objectTypes');
+  validateStringList(filter.phoneBrandModels, 'phoneBrandModels');
+  validateStringList(filter.locationTypes, 'locationTypes');
+  if (
+    filter.weekdays?.some(
+      (weekday) => !Number.isInteger(weekday) || weekday < 1 || weekday > 7
+    )
+  ) {
+    badRequest('weekdays values must be integers from 1 to 7');
+  }
 
   if (filter.bounds) {
     validateBounds(validatorsService, filter.bounds);
@@ -313,10 +368,17 @@ export function toQueryParams(
   filter?: FilterInputLike
 ): MapFeaturesFilterParams {
   return {
+    area: filter?.area ?? undefined,
     beforeDate: filter?.beforeDate,
     afterDate: filter?.afterDate,
     categories: normalizeStringList(filter?.categories),
     periods: normalizeStringList(filter?.periods),
+    vehicleBrands: normalizeStringList(filter?.vehicleBrands),
+    objectTypes: normalizeStringList(filter?.objectTypes),
+    phoneBrandModels: normalizeStringList(filter?.phoneBrandModels),
+    locationTypes: normalizeStringList(filter?.locationTypes),
+    weekdays: normalizeWeekdays(filter?.weekdays),
+
     startHour: filter?.startHour,
     endHour: filter?.endHour,
     minLon: filter?.bounds?.minLon,
@@ -356,7 +418,9 @@ export function normalizeLookup(
       lookup.anoBo < MIN_LOOKUP_YEAR ||
       lookup.anoBo > MAX_LOOKUP_YEAR)
   ) {
-    badRequest(`anoBo must be between ${MIN_LOOKUP_YEAR} and ${MAX_LOOKUP_YEAR}`);
+    badRequest(
+      `anoBo must be between ${MIN_LOOKUP_YEAR} and ${MAX_LOOKUP_YEAR}`
+    );
   }
 
   const normalizedDelegacia = lookup.delegacia?.trim() || null;
@@ -365,9 +429,7 @@ export function normalizeLookup(
     (normalizedDelegacia.length > MAX_DELEGACIA_LENGTH ||
       containsControlCharacters(normalizedDelegacia))
   ) {
-    badRequest(
-      `delegacia must be at most ${MAX_DELEGACIA_LENGTH} characters`
-    );
+    badRequest(`delegacia must be at most ${MAX_DELEGACIA_LENGTH} characters`);
   }
 
   return {

@@ -1,0 +1,136 @@
+@use '@angular/material' as mat;
+
+:host {
+  display: block;
+  min-width: 0;
+}
+section {
+  padding: 1rem;
+  color: var(--mat-sys-on-surface);
+}
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+h2 {
+  font: var(--mat-sys-title-large);
+  margin: 0;
+}
+p {
+  font: var(--mat-sys-body-medium);
+  line-height: 1.5;
+}
+.scope,
+.data-notes {
+  color: var(--mat-sys-on-surface-variant);
+}
+.date-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+mat-form-field {
+  width: 100%;
+  min-width: 0;
+}
+.date-fields mat-form-field {
+  flex: 1 1 9rem;
+}
+.ranges {
+  margin-top: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.ranges p {
+  margin: 0.25rem 0;
+}
+.table-scroll {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+.months {
+  max-height: 24rem;
+  overflow-y: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--mat-sys-body-small);
+  font-variant-numeric: tabular-nums;
+}
+caption {
+  text-align: start;
+  color: var(--mat-sys-on-surface-variant);
+  padding-bottom: 0.75rem;
+}
+th,
+td {
+  padding: 0.6rem 0.4rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  text-align: end;
+  vertical-align: top;
+}
+th:first-child {
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+tbody th {
+  font-weight: 400;
+}
+.percent {
+  display: block;
+  font-size: 0.75rem;
+}
+.active {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+.playback-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+app-chart-card {
+  display: block;
+  margin-block: 1.5rem;
+}
+:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 3px;
+}
+[role='alert'] {
+  color: var(--mat-sys-error);
+}
+
+.scope {
+  margin: 0 0 1rem;
+}
+.tab-content {
+  padding-block: 1.25rem 0.5rem;
+}
+details {
+  margin-top: 1.5rem;
+  font: var(--mat-sys-body-small);
+}
+summary {
+  cursor: pointer;
+  padding-block: 0.5rem;
+}
+.data-notes {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  padding-top: 0.5rem;
+}
+
+mat-tab-group {
+  @include mat.tabs-overrides(
+    (
+      active-label-text-color: var(--mat-sys-on-surface),
+      active-focus-label-text-color: var(--mat-sys-on-surface),
+      active-hover-label-text-color: var(--mat-sys-on-surface),
+      inactive-label-text-color: var(--mat-sys-on-surface-variant),
+      inactive-focus-label-text-color: var(--mat-sys-on-surface),
+      inactive-hover-label-text-color: var(--mat-sys-on-surface),
+    )
+  );
+}

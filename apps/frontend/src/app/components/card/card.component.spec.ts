@@ -219,9 +219,9 @@ describe('CardComponent', () => {
     component.rubricasForm.get('Furto')?.setValue(false);
 
     expect(component.rubricasForm.contains('Furto')).toBe(false);
-    expect(component.displayedRubricas().map((rubrica) => rubrica.name)).toEqual([
-      'Roubo',
-    ]);
+    expect(
+      component.displayedRubricas().map((rubrica) => rubrica.name)
+    ).toEqual(['Roubo']);
   });
 
   it('preserves a selected period that has no results in the new viewport', () => {
@@ -311,7 +311,11 @@ describe('CardComponent', () => {
   });
 
   it('emits a disabled hour filter even when the draft time is invalid', () => {
-    const emissions: { enabled: boolean; startHour: number; endHour: number }[] = [];
+    const emissions: {
+      enabled: boolean;
+      startHour: number;
+      endHour: number;
+    }[] = [];
     component.hourFilterEvent.subscribe((value) => emissions.push(value));
 
     component.hourForm.controls.enabled.setValue(true);
@@ -323,5 +327,20 @@ describe('CardComponent', () => {
       startHour: 0,
       endHour: 23,
     });
+  });
+  it('flags invalid hours in the collapsed summary without applying the draft', () => {
+    const emit = vi.spyOn(component.hourFilterEvent, 'emit');
+    component.hourForm.controls.enabled.setValue(true);
+    expect(component.timeFilterSummary()).toBe('08:00–19:00');
+    emit.mockClear();
+
+    const invalidTime = new Date();
+    invalidTime.setHours(9, 30, 0, 0);
+    component.hourForm.controls.startTime.setValue(invalidTime);
+
+    expect(component.timeFilterSummary()).toBe('Revise o horário');
+    expect(emit).not.toHaveBeenCalled();
+    component.hourForm.controls.enabled.setValue(false);
+    expect(component.timeFilterSummary()).toBe('Todos os períodos e horários');
   });
 });

@@ -41,7 +41,11 @@ function createCacheMock(): jest.Mocked<CacheMock> {
 }
 
 describe('MapFeaturesQueryService', () => {
-  beforeEach(() => { jest.spyOn(MapFeaturesQueryService.prototype, 'getDatasetRevision').mockResolvedValue('test-revision'); });
+  beforeEach(() => {
+    jest
+      .spyOn(MapFeaturesQueryService.prototype, 'getDatasetRevision')
+      .mockResolvedValue('test-revision');
+  });
   afterEach(() => jest.restoreAllMocks());
   it('loads the cached date range maintained by database triggers', async () => {
     const findUnique = jest.fn().mockResolvedValue({
@@ -72,9 +76,16 @@ describe('MapFeaturesQueryService', () => {
 
   it('marks optional IML enrichment unavailable without discarding base feature lookup', async () => {
     const service = new MapFeaturesQueryService({} as PrismaService);
-    jest.spyOn(service, 'getImlRecordsByBo').mockRejectedValue(new Error('optional source unavailable'));
-    await expect(service.getImlEnrichment({ num_bo: 'TEST', ano_bo: 2026, delegacia: 'DP' } as never))
-      .resolves.toEqual({ records: [], unavailable: true });
+    jest
+      .spyOn(service, 'getImlRecordsByBo')
+      .mockRejectedValue(new Error('optional source unavailable'));
+    await expect(
+      service.getImlEnrichment({
+        num_bo: 'TEST',
+        ano_bo: 2026,
+        delegacia: 'DP',
+      } as never)
+    ).resolves.toEqual({ records: [], unavailable: true });
   });
 
   it('returns an empty date range when the cache row is unavailable', async () => {
@@ -117,7 +128,9 @@ describe('MapFeaturesQueryService', () => {
     expect(queryRawUnsafe.mock.calls[0][0]).toContain(
       "WHEN 'a tarde' THEN 'À tarde'"
     );
-    expect(queryRawUnsafe.mock.calls[0][0]).toContain('ORDER BY sort_order ASC');
+    expect(queryRawUnsafe.mock.calls[0][0]).toContain(
+      'ORDER BY sort_order ASC'
+    );
   });
 
   it('normalizes selected period filters before querying', async () => {
@@ -132,10 +145,7 @@ describe('MapFeaturesQueryService', () => {
       periods: ['  À   TARDE  '],
     });
 
-    expect(queryRawUnsafe).toHaveBeenCalledWith(
-      expect.any(String),
-      'a tarde'
-    );
+    expect(queryRawUnsafe).toHaveBeenCalledWith(expect.any(String), 'a tarde');
   });
 
   it('builds valid envelope filters for bounded stats queries', async () => {
@@ -156,9 +166,7 @@ describe('MapFeaturesQueryService', () => {
     await service.getPeriods(bounds);
 
     for (const [query] of queryRawUnsafe.mock.calls) {
-      expect(query).toContain(
-        'geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)'
-      );
+      expect(query).toContain('geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)');
       expect(query).not.toContain('ST_MakeEnvelope($1, $2, $3, $4, 4326))');
     }
   });
@@ -236,10 +244,12 @@ describe('MapFeaturesQueryService', () => {
   });
 
   it('looks up IML records across indexed yearly raw tables', async () => {
-    const queryRaw = jest.fn().mockResolvedValue([
-      { table_name: 'registro_obitos_iml_2025' },
-      { table_name: 'registro_obitos_iml_2026' },
-    ]);
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValue([
+        { table_name: 'registro_obitos_iml_2025' },
+        { table_name: 'registro_obitos_iml_2026' },
+      ]);
     const queryRawUnsafe = jest.fn().mockResolvedValue([
       {
         source_id: 10,
@@ -287,15 +297,13 @@ describe('MapFeaturesQueryService', () => {
     const tile = Buffer.from([1, 2, 3]);
     const executeRawUnsafe = jest.fn().mockResolvedValue(undefined);
     const queryRawUnsafe = jest.fn().mockResolvedValue([{ mvt: tile }]);
-    const transaction = jest
-      .fn()
-      .mockImplementation(async (operation) =>
-        operation({
-          $executeRawUnsafe: executeRawUnsafe,
-          $queryRawUnsafe: queryRawUnsafe,
-      executeReadOnlyStatsQuery: queryRawUnsafe,
-        })
-      );
+    const transaction = jest.fn().mockImplementation(async (operation) =>
+      operation({
+        $executeRawUnsafe: executeRawUnsafe,
+        $queryRawUnsafe: queryRawUnsafe,
+        executeReadOnlyStatsQuery: queryRawUnsafe,
+      })
+    );
     const prisma = {
       $transaction: transaction,
     } as unknown as PrismaService;
@@ -339,15 +347,13 @@ describe('MapFeaturesQueryService', () => {
     const tile = new Uint8Array([26, 197, 95]);
     const executeRawUnsafe = jest.fn().mockResolvedValue(undefined);
     const queryRawUnsafe = jest.fn().mockResolvedValue([{ mvt: tile }]);
-    const transaction = jest
-      .fn()
-      .mockImplementation(async (operation) =>
-        operation({
-          $executeRawUnsafe: executeRawUnsafe,
-          $queryRawUnsafe: queryRawUnsafe,
-      executeReadOnlyStatsQuery: queryRawUnsafe,
-        })
-      );
+    const transaction = jest.fn().mockImplementation(async (operation) =>
+      operation({
+        $executeRawUnsafe: executeRawUnsafe,
+        $queryRawUnsafe: queryRawUnsafe,
+        executeReadOnlyStatsQuery: queryRawUnsafe,
+      })
+    );
     const prisma = {
       $transaction: transaction,
     } as unknown as PrismaService;
@@ -367,15 +373,13 @@ describe('MapFeaturesQueryService', () => {
     const tile = Buffer.from([1, 2, 3]);
     const executeRawUnsafe = jest.fn().mockResolvedValue(undefined);
     const queryRawUnsafe = jest.fn().mockResolvedValue([{ mvt: tile }]);
-    const transaction = jest
-      .fn()
-      .mockImplementation(async (operation) =>
-        operation({
-          $executeRawUnsafe: executeRawUnsafe,
-          $queryRawUnsafe: queryRawUnsafe,
-      executeReadOnlyStatsQuery: queryRawUnsafe,
-        })
-      );
+    const transaction = jest.fn().mockImplementation(async (operation) =>
+      operation({
+        $executeRawUnsafe: executeRawUnsafe,
+        $queryRawUnsafe: queryRawUnsafe,
+        executeReadOnlyStatsQuery: queryRawUnsafe,
+      })
+    );
     const prisma = {
       $transaction: transaction,
     } as unknown as PrismaService;
@@ -558,12 +562,12 @@ describe('MapFeaturesQueryService', () => {
   });
 
   it('does not write stale cache loads after invalidation', async () => {
-    let resolveStaleQuery!: (
-      value: Array<Record<string, unknown>>
-    ) => void;
-    const staleQuery = new Promise<Array<Record<string, unknown>>>((resolve) => {
-      resolveStaleQuery = resolve;
-    });
+    let resolveStaleQuery!: (value: Array<Record<string, unknown>>) => void;
+    const staleQuery = new Promise<Array<Record<string, unknown>>>(
+      (resolve) => {
+        resolveStaleQuery = resolve;
+      }
+    );
     const queryRawUnsafe = jest
       .fn()
       .mockReturnValueOnce(staleQuery)

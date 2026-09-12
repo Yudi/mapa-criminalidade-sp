@@ -1,6 +1,58 @@
-<div id="ol-map-tab" class="map-container"></div>
+<div
+  id="ol-map-tab"
+  tabindex="0"
+  aria-label="Mapa: clique para adicionar vértices da área"
+  (keydown.escape)="cancelDrawing()"
+  class="map-container"
+></div>
 
 <div class="map-status-stack" aria-live="polite">
+  <section class="display-controls" aria-label="Visualização do mapa">
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Visualização</mat-label>
+      <mat-select
+        [value]="displayMode()"
+        (selectionChange)="setDisplayMode($event.value)"
+      >
+        <mat-option value="auto">Marcadores e agrupamentos</mat-option>
+        <mat-option value="markers">Marcadores individuais</mat-option>
+        <mat-option value="density">Densidade por hexágonos</mat-option>
+        <mat-option value="heatmap">Mapa de calor</mat-option>
+      </mat-select>
+    </mat-form-field>
+    @if (displayMode() === 'density') {
+    <p>Ocorrências por célula.</p>
+    <ul class="density-legend" aria-label="Ocorrências por hexágono">
+      @for (band of densityBands; track band.label; let index = $index) {
+      <li>
+        <span
+          class="density-swatch"
+          [class]="'density-swatch density-swatch--' + index"
+          aria-hidden="true"
+        ></span
+        >{{ band.label }}
+      </li>
+      }
+    </ul>
+    <p>Grade e escala de cores fixas em todos os níveis de zoom.</p>
+    } @if (displayMode() === 'heatmap') {
+    <p>
+      Concentração de ocorrências. Pontos próximos se combinam em manchas de
+      calor.
+    </p>
+    <div
+      class="heatmap-legend"
+      aria-label="Escala de concentração: azul indica menor concentração e vermelho indica maior concentração"
+    >
+      <span>Menor</span><span class="heatmap-gradient" aria-hidden="true"></span
+      ><span>Maior</span>
+    </div>
+    <p>
+      A aparência varia com o zoom. Para comparar células fixas, use os
+      hexágonos.
+    </p>
+    }
+  </section>
   @if (tileError(); as errorMessage) {
   <div class="map-status map-status--error" role="alert">
     <span>{{ errorMessage }}</span>
@@ -8,9 +60,7 @@
       Tentar novamente
     </button>
   </div>
-  }
-
-  @if (tileCompleteness()) {
+  } @if (tileCompleteness()) {
   <div class="map-status map-status--warning" role="status">
     <span>
       O mapa está parcialmente representado. Aproxime o mapa ou refine os
@@ -19,3 +69,111 @@
   </div>
   }
 </div>
+
+<section
+  class="area-controls"
+  [class.area-controls--compact]="!areaControlsOpen() && !drawing()"
+  aria-label="Área de análise"
+>
+  @if (!areaControlsOpen() && !drawing()) {
+  <div class="area-summary">
+    @if (selectedArea(); as area) {
+    <span role="status">{{
+      area.polygon
+        ? 'Polígono selecionado'
+        : 'Raio de ' + area.radius + ' m selecionado'
+    }}</span>
+    }
+    <button
+      mat-button
+      type="button"
+      (click)="areaControlsOpen.set(true)"
+      aria-expanded="false"
+    >
+      <mat-icon>crop_free</mat-icon>
+      {{ selectedArea() ? 'Editar área' : 'Analisar área' }}
+    </button>
+    @if (selectedArea()) {
+    <button
+      mat-icon-button
+      type="button"
+      (click)="clearArea()"
+      aria-label="Voltar à área visível"
+      title="Voltar à área visível"
+    >
+      <mat-icon>close</mat-icon>
+    </button>
+    }
+  </div>
+  } @else {
+  <div class="area-heading">
+    <strong>Área de análise</strong>
+    @if (!drawing()) {
+    <button
+      mat-icon-button
+      type="button"
+      (click)="areaControlsOpen.set(false)"
+      aria-label="Ocultar controles da área"
+      aria-expanded="true"
+    >
+      <mat-icon>expand_more</mat-icon>
+    </button>
+    }
+  </div>
+  @if (drawing()) {
+  <p role="status">
+    Clique para adicionar pelo menos 3 pontos. Conclua no primeiro ponto ou pelo
+    botão abaixo. Esc cancela.
+  </p>
+  <div class="area-actions">
+    <button mat-flat-button type="button" (click)="finishDrawing()">
+      Concluir área
+    </button>
+    <button mat-button type="button" (click)="undoVertex()">
+      Desfazer ponto
+    </button>
+    <button mat-button type="button" (click)="cancelDrawing()">Cancelar</button>
+  </div>
+  } @else {
+  <div class="area-actions">
+    <button mat-stroked-button type="button" (click)="startDrawing()">
+      Desenhar polígono
+    </button>
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Raio (metros)</mat-label>
+      <input
+        matInput
+        type="number"
+        min="1"
+        max="10000"
+        [formControl]="radiusControl"
+      />
+      @if (radiusControl.invalid) {
+      <mat-error>Informe de 1 a 10.000 metros.</mat-error> }
+    </mat-form-field>
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="selectRadius()"
+      [disabled]="
+        addressCenter().lon === null ||
+        addressCenter().lat === null ||
+        radiusControl.invalid
+      "
+    >
+      Usar raio do endereço
+    </button>
+  </div>
+  <p>
+    Desenhe até 100 pontos ou busque um endereço nos filtros para usar um raio.
+    Limite do recorte: 10.000 km² e 200 km de extensão.
+  </p>
+  @if (selectedArea()) {
+  <p>As estatísticas usam a área selecionada, mesmo ao mover o mapa.</p>
+  <button mat-button type="button" (click)="clearArea()">
+    Voltar à área visível
+  </button>
+  } } @if (areaError(); as error) {
+  <p role="alert">{{ error }}</p>
+  } }
+</section>

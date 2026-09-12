@@ -79,8 +79,7 @@
       ▸
     </button>
   </div>
-  } }
-  @if (totalGroups() > 1) {
+  } } @if (totalGroups() > 1) {
   <div class="nav-buttons group-nav">
     <span class="nav-label">Boletim</span>
     <button (click)="prevGroup()" [disabled]="groupIndex() === 0">◂</button>

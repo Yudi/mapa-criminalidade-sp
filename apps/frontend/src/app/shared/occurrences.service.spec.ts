@@ -64,7 +64,12 @@ describe('OccurrencesService', () => {
     );
 
     const filter = {
-      bounds: { minLon: -46.6301, minLat: -23.5501, maxLon: -46.62, maxLat: -23.54 },
+      bounds: {
+        minLon: -46.6301,
+        minLat: -23.5501,
+        maxLon: -46.62,
+        maxLat: -23.54,
+      },
     };
     await firstValueFrom(service.getChartsForBounds(filter));
     await firstValueFrom(
@@ -93,7 +98,9 @@ describe('OccurrencesService', () => {
       );
     }
 
-    expect((service as unknown as { cache: { size: number } }).cache.size).toBeLessThanOrEqual(96);
+    expect(
+      (service as unknown as { cache: { size: number } }).cache.size
+    ).toBeLessThanOrEqual(96);
   });
 
   it('does not cache an operational error as not found', async () => {
@@ -121,5 +128,30 @@ describe('OccurrencesService', () => {
         variables: { id: '018f-feature-id' },
       })
     );
+  });
+  it('sends the exact area without viewport bounds and caches different radii separately', async () => {
+    graphql.request.mockReturnValue(
+      of({ mapFeaturesCategoryPeriodStats: { categories: [], periods: [] } })
+    );
+    for (const radius of [500, 1000, 500]) {
+      await firstValueFrom(
+        service.getCategoryPeriodStatsForBounds(
+          -47,
+          -24,
+          -46,
+          -23,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { longitude: -46.6, latitude: -23.5, radius }
+        )
+      );
+    }
+    expect(graphql.request).toHaveBeenCalledTimes(2);
+    const filter = graphql.request.mock.calls[0][0].variables.filter;
+    expect(filter.bounds).toBeUndefined();
+    expect(filter.area.radius).toBe(500);
   });
 });

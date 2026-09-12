@@ -17,15 +17,19 @@ describe('map feature request limits', () => {
   const validators = new ValidatorsService();
 
   it('parses JSON list values without splitting commas inside labels', () => {
-    expect(
-      parseStringListQuery(JSON.stringify(['A, B', 'À tarde']))
-    ).toEqual(['A, B', 'À tarde']);
+    expect(parseStringListQuery(JSON.stringify(['A, B', 'À tarde']))).toEqual([
+      'A, B',
+      'À tarde',
+    ]);
   });
 
   it('rejects oversized lists and values before query execution', () => {
     expect(() =>
       validateFilterInput(validators, {
-        categories: Array.from({ length: MAX_FILTER_LIST_ITEMS + 1 }, () => 'x'),
+        categories: Array.from(
+          { length: MAX_FILTER_LIST_ITEMS + 1 },
+          () => 'x'
+        ),
       })
     ).toThrow(BadRequestException);
 
@@ -39,9 +43,7 @@ describe('map feature request limits', () => {
   it('rejects date ranges beyond the read-path budget', () => {
     expect(() =>
       validateDateFilters(validators, '2026-01-01', '1800-01-01')
-    ).toThrow(
-      `Date range cannot exceed ${MAX_FILTER_DATE_SPAN_DAYS} days`
-    );
+    ).toThrow(`Date range cannot exceed ${MAX_FILTER_DATE_SPAN_DAYS} days`);
   });
 
   it('rejects world-sized bounds while allowing a Brazil-sized envelope', () => {
@@ -80,10 +82,17 @@ describe('map feature request limits', () => {
 });
 
 describe('scalar query transport values', () => {
-  it.each([['8', '9'], {}, null, 8])('rejects non-string input %j as a bad request', (value) => {
-    expect(() => parseOptionalIntegerQuery(value, 'hour')).toThrow(BadRequestException);
-    expect(() => parseOptionalNumberQuery(value, 'longitude')).toThrow(BadRequestException);
-  });
+  it.each([['8', '9'], {}, null, 8])(
+    'rejects non-string input %j as a bad request',
+    (value) => {
+      expect(() => parseOptionalIntegerQuery(value, 'hour')).toThrow(
+        BadRequestException
+      );
+      expect(() => parseOptionalNumberQuery(value, 'longitude')).toThrow(
+        BadRequestException
+      );
+    }
+  );
   it('preserves optional and valid scalar parsing', () => {
     expect(parseOptionalIntegerQuery(undefined, 'hour')).toBeUndefined();
     expect(parseOptionalNumberQuery(' ', 'longitude')).toBeUndefined();

@@ -105,9 +105,9 @@ export class ImportDecisionService {
       };
     } catch (error) {
       this.logger.warn(
-        `Could not verify current source for ${category.name} ${year}: ${getErrorMessage(
-          error
-        )}`
+        `Could not verify current source for ${
+          category.name
+        } ${year}: ${getErrorMessage(error)}`
       );
       return {
         shouldImport: false,
@@ -196,8 +196,10 @@ export class ImportDecisionService {
     const url = DataCategoryConfig.getUrl(category, year);
 
     try {
-      const { hash: newHash, size: newSize } =
-        await this.getFileCheck(url, fileCheckCache);
+      const { hash: newHash, size: newSize } = await this.getFileCheck(
+        url,
+        fileCheckCache
+      );
 
       if (existingMetadata.fileHash !== newHash) {
         return {
@@ -218,9 +220,9 @@ export class ImportDecisionService {
       };
     } catch (error) {
       this.logger.warn(
-        `Could not verify historical source for ${category.name} ${year}: ${getErrorMessage(
-          error
-        )}`
+        `Could not verify historical source for ${
+          category.name
+        } ${year}: ${getErrorMessage(error)}`
       );
       return {
         shouldImport: false,

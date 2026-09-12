@@ -16,11 +16,9 @@ describe('GraphQL query limits', () => {
       (_, index) => `a${index}: mapFeaturesMetadata { categories }`
     ).join('\n');
 
-    const errors = validate(
-      schema,
-      parse(`query { ${aliases} }`),
-      [createGraphqlQueryLimitsRule()]
-    );
+    const errors = validate(schema, parse(`query { ${aliases} }`), [
+      createGraphqlQueryLimitsRule(),
+    ]);
 
     expect(errors.map((error) => error.message)).toContain(
       `GraphQL query aliases exceed the limit of ${GRAPHQL_QUERY_LIMITS.maxAliases}`
@@ -46,11 +44,9 @@ describe('GraphQL query limits', () => {
       { length: GRAPHQL_QUERY_LIMITS.maxAliases + 1 },
       () => 'mapFeaturesMetadata { categories }'
     ).join('\n');
-    const errors = validate(
-      schema,
-      parse(`query { ${fields} }`),
-      [createGraphqlQueryLimitsRule()]
-    );
+    const errors = validate(schema, parse(`query { ${fields} }`), [
+      createGraphqlQueryLimitsRule(),
+    ]);
 
     expect(errors.map((error) => error.message)).toContain(
       `GraphQL query cost exceeds the limit of ${GRAPHQL_QUERY_LIMITS.maxCost}`

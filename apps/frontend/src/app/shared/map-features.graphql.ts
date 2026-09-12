@@ -232,21 +232,31 @@ export const MAP_FEATURES_CHARTS_QUERY = `
         ${CHART_BUCKET_FIELDS}
       }
       weekdayDistribution {
+        filterValue
         ${CHART_BUCKET_FIELDS}
+      }
+      weekdayHourDistribution {
+        weekday
+        hour
+        count
       }
       recordTypeDistribution {
         ${CHART_BUCKET_FIELDS}
       }
       objectTypeDistribution {
+        filterValue
         ${CHART_BUCKET_FIELDS}
       }
       vehicleBrandDistribution {
+        filterValue
         ${CHART_BUCKET_FIELDS}
       }
       phoneBrandDistribution {
+        filterValue
         ${CHART_BUCKET_FIELDS}
       }
       locationTypeDistribution {
+        filterValue
         ${CHART_BUCKET_FIELDS}
       }
       policeCircumscriptionDistribution {

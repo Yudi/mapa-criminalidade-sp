@@ -129,10 +129,9 @@ describe('VectorTileMapSetupService', () => {
       getUniqueClickableFeatures(features: Feature<Point>[]): Feature<Point>[];
     };
 
-    expect(testableService.getUniqueClickableFeatures([first, second])).toEqual([
-      first,
-      second,
-    ]);
+    expect(testableService.getUniqueClickableFeatures([first, second])).toEqual(
+      [first, second]
+    );
   });
 
   it('keeps distinct source features with the same BO identity clickable', () => {
@@ -150,9 +149,8 @@ describe('VectorTileMapSetupService', () => {
       getUniqueClickableFeatures(features: Feature<Point>[]): Feature<Point>[];
     };
 
-    expect(testableService.getUniqueClickableFeatures([first, second])).toEqual([
-      first,
-      second,
-    ]);
+    expect(testableService.getUniqueClickableFeatures([first, second])).toEqual(
+      [first, second]
+    );
   });
 });

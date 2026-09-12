@@ -1,6 +1,11 @@
 import {
+  DetailFilterEntry,
+  detailFilterEntries,
+} from '../../shared/map-detail-filters';
+import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   inject,
   input,
@@ -20,7 +25,6 @@ import {
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatCardModule } from '@angular/material/card';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -29,7 +33,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTimepickerModule } from '@angular/material/timepicker';
 import DataFormValues from '../../shared/dataForm.interface';
 import { Observable, Subscription } from 'rxjs';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NgOptimizedImage } from '@angular/common';
 import {
   CategoryInfo,
@@ -49,7 +53,6 @@ const ALL_PERIOD_VALUE = '__all_periods__';
 @Component({
   selector: 'app-card',
   imports: [
-    MatCardModule,
     MatButtonModule,
     MatFormFieldModule,
     MatDatepickerModule,
@@ -70,8 +73,17 @@ export class CardComponent implements OnChanges, OnInit {
   rubricas = input.required<Observable<CategoryInfo[]>>();
   periods = input.required<Observable<PeriodInfo[]>>();
   dateRange = input<DateRange | null>(null);
+  readonly statsUnavailable = input(false);
+  readonly analysisAreaSelected = input(false);
   canOpenVisibleCharts = input(false);
+  readonly selectedRubricas = input<Record<string, boolean> | undefined>();
+  readonly detailEntries = input<ReturnType<typeof detailFilterEntries>>([]);
+  readonly removeDetailEvent = output<DetailFilterEntry>();
   viewportStatsLoading = input(false);
+  readonly showTemporalAnalysis = input(false);
+  readonly canOpenTemporalAnalysis = input(false);
+  readonly temporalAnalysisEvent = output<void>();
+  readonly categorySearch = signal('');
 
   submitEvent = output<DataFormValues>();
   visibleChartsEvent = output<void>();
@@ -114,12 +126,9 @@ export class CardComponent implements OnChanges, OnInit {
   periodControl = new FormControl(ALL_PERIOD_VALUE, { nonNullable: true });
   hourForm = this.formBuilder.group({
     enabled: this.formBuilder.control(false, { nonNullable: true }),
-    startTime: this.formBuilder.control<TimeControlValue>(
-      this.createTime(8),
-      {
-        validators: [this.hourOnlyTimeValidator],
-      }
-    ),
+    startTime: this.formBuilder.control<TimeControlValue>(this.createTime(8), {
+      validators: [this.hourOnlyTimeValidator],
+    }),
     endTime: this.formBuilder.control<TimeControlValue>(this.createTime(19), {
       validators: [this.hourOnlyTimeValidator],
     }),
@@ -135,10 +144,87 @@ export class CardComponent implements OnChanges, OnInit {
   readonly displayedRubricas = signal<CategoryInfo[]>([]);
   readonly displayedPeriods = signal<PeriodInfo[]>([]);
 
+  readonly filteredRubricas = computed(() => {
+    const query = this.normalizeSearch(this.categorySearch().trim());
+    return this.displayedRubricas().filter((rubrica) =>
+      this.normalizeSearch(rubrica.name).includes(query)
+    );
+  });
+  readonly selectedRubricasCount = computed(() => {
+    // Displayed categories refresh after both user and external selections.
+    this.displayedRubricas();
+    return Object.values(this.rubricasForm.getRawValue()).filter(Boolean)
+      .length;
+  });
+  private readonly selectedPeriod = toSignal(this.periodControl.valueChanges, {
+    initialValue: ALL_PERIOD_VALUE,
+  });
+  private readonly selectedHours = toSignal(this.hourForm.valueChanges, {
+    initialValue: this.hourForm.getRawValue(),
+  });
+  readonly timeFilterSummary = computed(() => {
+    const period = this.selectedPeriod();
+    const hours = this.selectedHours();
+    const parts = period === ALL_PERIOD_VALUE ? [] : [period];
+    if (hours.enabled) {
+      const start = this.getHour(hours.startTime ?? null);
+      const end = this.getHour(hours.endTime ?? null);
+      parts.push(
+        this.hourForm.invalid || start === null || end === null
+          ? 'Revise o horário'
+          : `${String(start).padStart(2, '0')}:00–${String(end).padStart(
+              2,
+              '0'
+            )}:00`
+      );
+    }
+    return parts.join(' · ') || 'Todos os períodos e horários';
+  });
+
+  private normalizeSearch(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR');
+  }
+
   minDate: Date | null = null;
   maxDate: Date | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
+    if (
+      changes['selectedRubricas'] &&
+      this.selectedRubricas() &&
+      JSON.stringify(
+        Object.keys(this.selectedRubricas()!)
+          .filter((key) => this.selectedRubricas()![key])
+          .sort()
+      ) !==
+        JSON.stringify(
+          Object.keys(this.rubricasForm.controls)
+            .filter((key) => this.rubricasForm.controls[key].value)
+            .sort()
+        )
+    ) {
+      const selected = this.selectedRubricas()!;
+      this.autoSelectNewRubricas = false;
+      for (const [name, value] of Object.entries(selected)) {
+        if (!this.rubricasForm.contains(name)) {
+          this.rubricasForm.addControl(
+            name,
+            new FormControl(value, { nonNullable: true }),
+            { emitEvent: false }
+          );
+        }
+      }
+      for (const [name, control] of Object.entries(
+        this.rubricasForm.controls
+      )) {
+        control.setValue(selected[name] ?? false, { emitEvent: false });
+      }
+      this.refreshDisplayedRubricas();
+    }
+
     if (changes['dateRange']) {
       this.applyDateRange();
     }

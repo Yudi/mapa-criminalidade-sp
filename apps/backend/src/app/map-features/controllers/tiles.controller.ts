@@ -10,7 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { MapFeaturesQueryService } from '../services/map-features-query.service';
 import { ValidatorsService } from '../../shared/validators/validators.service';
@@ -22,6 +22,7 @@ import {
   parseIntegerParam,
   parseOptionalHourQuery,
   parseStringListQuery,
+  parseWeekdayListQuery,
   validateDateFilters,
   validateHourFilters,
 } from '../utils/map-feature-request.utils';
@@ -72,6 +73,13 @@ export class TilesController {
   @SkipThrottle()
   @Get(':z/:x/:y.mvt')
   @ApiOperation({ summary: 'Get MVT tile' })
+  @ApiQuery({
+    name: 'mode',
+    required: false,
+    enum: ['auto', 'markers', 'density'],
+    description:
+      'auto preserves zoom-dependent clusters; markers returns individual occurrences; density counts full fixed hexagons before clipping. Example: mode=density.',
+  })
   async getTile(
     @Param('z') z: string,
     @Param('x') x: string,
@@ -84,10 +92,25 @@ export class TilesController {
     @Query('startHour') startHour: string,
     @Query('endHour') endHour: string,
     @Req() req: Request,
-    @Res() res: Response
+    @Res() res: Response,
+    @Query('vehicleBrands') vehicleBrands?: string | string[],
+    @Query('objectTypes') objectTypes?: string | string[],
+    @Query('phoneBrandModels') phoneBrandModels?: string | string[],
+    @Query('locationTypes') locationTypes?: string | string[],
+    @Query('weekdays') weekdays?: string | string[],
+    @Query('mode') mode?: string
   ) {
     if (req.socket?.destroyed) {
       return;
+    }
+
+    if (
+      mode !== undefined &&
+      mode !== 'auto' &&
+      mode !== 'markers' &&
+      mode !== 'density'
+    ) {
+      throw new HttpException('Invalid display mode', HttpStatus.BAD_REQUEST);
     }
 
     const parsedZ = parseIntegerParam(z, 'z');
@@ -128,6 +151,17 @@ export class TilesController {
     const categoryList = parseStringListQuery(categoryFilter);
     const periodList = parseStringListQuery(periods);
 
+    const detailFilters = {
+      vehicleBrands: parseStringListQuery(vehicleBrands, 'vehicleBrands'),
+      objectTypes: parseStringListQuery(objectTypes, 'objectTypes'),
+      phoneBrandModels: parseStringListQuery(
+        phoneBrandModels,
+        'phoneBrandModels'
+      ),
+      locationTypes: parseStringListQuery(locationTypes, 'locationTypes'),
+    };
+    const weekdayList = parseWeekdayListQuery(weekdays);
+
     let clientDisconnected = false;
     const abortController = new AbortController();
     const onClose = () => {
@@ -141,17 +175,23 @@ export class TilesController {
         return;
       }
 
-      const tile = await this.queryService.getTile({
-        z: parsedZ,
-        x: parsedX,
-        y: parsedY,
-        beforeDate: before,
-        afterDate: after,
-        categories: categoryList,
-        periods: periodList,
-        startHour: parsedStartHour,
-        endHour: parsedEndHour,
-      }, abortController.signal);
+      const tile = await this.queryService.getTile(
+        {
+          mode,
+          ...detailFilters,
+          z: parsedZ,
+          x: parsedX,
+          y: parsedY,
+          beforeDate: before,
+          afterDate: after,
+          categories: categoryList,
+          periods: periodList,
+          weekdays: weekdayList,
+          startHour: parsedStartHour,
+          endHour: parsedEndHour,
+        },
+        abortController.signal
+      );
 
       if (clientDisconnected || req.socket?.destroyed) {
         return;

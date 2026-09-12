@@ -18,8 +18,7 @@
     <mat-icon>error</mat-icon>
     <p>{{ error() }}</p>
   </div>
-  } @else if (feature(); as f) {
-  @if (f.imlUnavailable) {
+  } @else if (feature(); as f) { @if (f.imlUnavailable) {
   <div class="iml-warning" role="status">
     <mat-icon aria-hidden="true">info</mat-icon>
     <span>Os registros do IML estão temporariamente indisponíveis.</span>
@@ -51,8 +50,11 @@
           <span class="label">Data da Ocorrência</span>
           <span class="value">
             {{ formatDate(f.dataOcorrencia) }}
-            @if (formatOccurrenceTime(f.featureData.occurrence.hora_ocorrencia); as hora) {
-            {{ getOccurrenceTimeLabel(f.featureData.occurrence.hora_ocorrencia) }}
+            @if (formatOccurrenceTime(f.featureData.occurrence.hora_ocorrencia);
+            as hora) {
+            {{
+              getOccurrenceTimeLabel(f.featureData.occurrence.hora_ocorrencia)
+            }}
             {{ hora }}
             }
           </span>
@@ -110,7 +112,8 @@
         Registro de Óbitos - IML ({{ imlRecords().length }})
       </h3>
       <div class="record-list">
-        @for (registro of imlRecords(); track registro.sourceTable + ':' + registro.sourceId) {
+        @for (registro of imlRecords(); track registro.sourceTable + ':' +
+        registro.sourceId) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>clinical_notes</mat-icon>
@@ -176,7 +179,8 @@
         Veículos ({{ veiculos().length }})
       </h3>
       <div class="record-list">
-        @for (veiculo of veiculos(); track veiculo.source_table + ':' + veiculo.source_id) {
+        @for (veiculo of veiculos(); track veiculo.source_table + ':' +
+        veiculo.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>directions_car</mat-icon>
@@ -219,16 +223,15 @@
         }
       </div>
     </section>
-    }
-
-    @if (hasCelulares()) {
+    } @if (hasCelulares()) {
     <section class="record-group">
       <h3 class="record-group-title">
         <mat-icon>smartphone</mat-icon>
         Celulares ({{ celulares().length }})
       </h3>
       <div class="record-list">
-        @for (celular of celulares(); track celular.source_table + ':' + celular.source_id) {
+        @for (celular of celulares(); track celular.source_table + ':' +
+        celular.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>smartphone</mat-icon>
@@ -268,16 +271,15 @@
         }
       </div>
     </section>
-    }
-
-    @if (hasObjetos()) {
+    } @if (hasObjetos()) {
     <section class="record-group">
       <h3 class="record-group-title">
         <mat-icon>inventory_2</mat-icon>
         Objetos ({{ objetos().length }})
       </h3>
       <div class="record-list">
-        @for (objeto of objetos(); track objeto.source_table + ':' + objeto.source_id) {
+        @for (objeto of objetos(); track objeto.source_table + ':' +
+        objeto.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>inventory_2</mat-icon>
@@ -312,9 +314,7 @@
         }
       </div>
     </section>
-    }
-
-    @if (hasArmas()) {
+    } @if (hasArmas()) {
     <section class="record-group">
       <h3 class="record-group-title">
         <mat-icon>gavel</mat-icon>
@@ -357,16 +357,15 @@
         }
       </div>
     </section>
-    }
-
-    @if (hasEntorpecentes()) {
+    } @if (hasEntorpecentes()) {
     <section class="record-group">
       <h3 class="record-group-title">
         <mat-icon>medication</mat-icon>
         Entorpecentes ({{ entorpecentes().length }})
       </h3>
       <div class="record-list">
-        @for (droga of entorpecentes(); track droga.source_table + ':' + droga.source_id) {
+        @for (droga of entorpecentes(); track droga.source_table + ':' +
+        droga.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>medication</mat-icon>
@@ -398,16 +397,15 @@
         }
       </div>
     </section>
-    }
-
-    @if (hasVeiculosRecuperados()) {
+    } @if (hasVeiculosRecuperados()) {
     <section class="record-group">
       <h3 class="record-group-title">
         <mat-icon>directions_car</mat-icon>
         Veículos recuperados ({{ veiculosRecuperados().length }})
       </h3>
       <div class="record-list">
-        @for (veiculo of veiculosRecuperados(); track veiculo.source_table + ':' + veiculo.source_id) {
+        @for (veiculo of veiculosRecuperados(); track veiculo.source_table + ':'
+        + veiculo.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>directions_car</mat-icon>
@@ -455,16 +453,15 @@
         }
       </div>
     </section>
-    }
-
-    @if (hasPessoas()) {
+    } @if (hasPessoas()) {
     <section class="record-group">
       <h3 class="record-group-title">
         <mat-icon>person</mat-icon>
         Pessoas ({{ pessoas().length }})
       </h3>
       <div class="record-list">
-        @for (pessoa of pessoas(); track pessoa.source_table + ':' + pessoa.source_id) {
+        @for (pessoa of pessoas(); track pessoa.source_table + ':' +
+        pessoa.source_id) {
         <mat-card class="record-card">
           <mat-card-header>
             <mat-icon mat-card-avatar>person</mat-icon>

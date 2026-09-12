@@ -1,0 +1,100 @@
+:host {
+  display: block;
+  min-width: 0;
+  margin-block-end: 1.5rem;
+}
+section {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  color: var(--mat-sys-on-surface);
+}
+h3 {
+  font: var(--mat-sys-title-medium);
+  margin: 0 0 0.375rem;
+}
+p,
+caption {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+p {
+  margin: 0.375rem 0;
+}
+.heatmap-scroll {
+  overflow-x: auto;
+  margin-block: 1rem;
+}
+.heatmap-scroll:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+table {
+  border-collapse: separate;
+  border-spacing: 2px;
+  width: 100%;
+  font: var(--mat-sys-label-small);
+  font-variant-numeric: tabular-nums;
+}
+caption {
+  text-align: start;
+  padding-block-end: 0.75rem;
+}
+th,
+td {
+  text-align: center;
+  padding: 0.375rem;
+  min-width: 1.5rem;
+  white-space: nowrap;
+}
+th[scope='row'] {
+  text-align: start;
+  position: sticky;
+  inset-inline-start: 0;
+  background: var(--mat-sys-surface);
+}
+.unknown {
+  background: var(--mat-sys-surface-container);
+  white-space: normal;
+}
+.heat--0 {
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface-variant);
+}
+.heat--1 {
+  background: #deebf7;
+  color: #102a43;
+}
+.heat--2 {
+  background: #9ecae1;
+  color: #102a43;
+}
+.heat--3 {
+  background: #4292c6;
+  color: #082033;
+}
+.heat--4 {
+  background: #08519c;
+  color: #ffffff;
+}
+.heat--5 {
+  background: #08306b;
+  color: #ffffff;
+}
+.heatmap-key {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  font: var(--mat-sys-label-small);
+  margin-block: 0.75rem;
+}
+.heatmap-key .heat {
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+}
+.coverage {
+  margin-block-start: 1rem;
+  color: var(--mat-sys-on-surface);
+}

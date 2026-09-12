@@ -29,4 +29,3 @@ describe('data import queue schemas', () => {
     expect(() => dataImportScheduleDefinitionsSchema.parse([])).toThrow();
   });
 });
-

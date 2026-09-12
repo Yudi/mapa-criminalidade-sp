@@ -57,7 +57,7 @@ export interface FeatureDetailDialogData {
     MatChipsModule,
     MatProgressSpinnerModule,
     MatDividerModule,
-    MatCardModule
+    MatCardModule,
   ],
 })
 export class FeatureDetailDialogComponent implements OnInit {
@@ -209,9 +209,7 @@ export class FeatureDetailDialogComponent implements OnInit {
     if (!value) return 'N/A';
 
     const match =
-      /^(\d{2}\/\d{2}\/\d{4})(?:\s+(\d{2}:\d{2})(?::\d{2})?)?$/.exec(
-        value
-      );
+      /^(\d{2}\/\d{2}\/\d{4})(?:\s+(\d{2}:\d{2})(?::\d{2})?)?$/.exec(value);
     if (!match) return value;
 
     return match[2] ? `${match[1]} às ${match[2]}` : match[1];

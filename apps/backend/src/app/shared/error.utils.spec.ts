@@ -15,8 +15,8 @@ describe('isRequestTimeoutError', () => {
   });
 
   it('does not classify unrelated errors as timeouts', () => {
-    expect(isRequestTimeoutError(new Error('Database connection refused'))).toBe(
-      false
-    );
+    expect(
+      isRequestTimeoutError(new Error('Database connection refused'))
+    ).toBe(false);
   });
 });

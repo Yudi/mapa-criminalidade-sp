@@ -2,337 +2,557 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
-"""Bounding box for spatial filtering"""
+"""
+Bounding box for spatial filtering
+"""
 input BoundingBoxInput {
-  """Maximum latitude"""
+  """
+  Maximum latitude
+  """
   maxLat: Float!
 
-  """Maximum longitude"""
+  """
+  Maximum longitude
+  """
   maxLon: Float!
 
-  """Minimum latitude"""
+  """
+  Minimum latitude
+  """
   minLat: Float!
 
-  """Minimum longitude"""
+  """
+  Minimum longitude
+  """
   minLon: Float!
 }
 
-"""Category information with occurrence count"""
+"""
+Category information with occurrence count
+"""
 type CategoryInfoType {
-  """Number of occurrences"""
+  """
+  Number of occurrences
+  """
   count: Int!
 
-  """Category name"""
+  """
+  Category name
+  """
   name: String!
 
-  """Rubrica for map marker styling"""
+  """
+  Rubrica for map marker styling
+  """
   rubricaForStyling: String!
 
-  """Source type"""
+  """
+  Source type
+  """
   sourceType: CategorySourceType!
 }
 
-"""Source of the category (rubrica column or derived from table name)"""
+"""
+Source of the category (rubrica column or derived from table name)
+"""
 enum CategorySourceType {
   DERIVED
   RUBRICA
 }
 
-"""Coordinate data quality report for a table"""
+"""
+Coordinate data quality report for a table
+"""
 type CoordinateQualityType {
-  """Rows with non-null coordinate values"""
+  """
+  Rows with non-null coordinate values
+  """
   hasCoordinates: Int!
 
-  """Rows with invalid/unparseable coordinates"""
+  """
+  Rows with invalid/unparseable coordinates
+  """
   invalidCoordinates: Int!
 
-  """Rows with NULL coordinates"""
+  """
+  Rows with NULL coordinates
+  """
   nullCoordinates: Int!
 
-  """Rows with NULL geometry"""
+  """
+  Rows with NULL geometry
+  """
   nullGeometry: Int!
 
-  """Data quality percentage"""
+  """
+  Data quality percentage
+  """
   qualityPercent: Float!
 
-  """Table name"""
+  """
+  Table name
+  """
   tableName: String!
 
-  """Total rows in the table"""
+  """
+  Total rows in the table
+  """
   totalRows: Int!
 
-  """Rows with valid PostGIS geometry"""
+  """
+  Rows with valid PostGIS geometry
+  """
   validGeometry: Int!
 }
 
-"""Date range of available data"""
+"""
+Date range of available data
+"""
 type DateRangeType {
-  """Default start date for the initial three-month range"""
+  """
+  Default start date for the initial three-month range
+  """
   defaultAfter: String
 
-  """Earliest date in dataset"""
+  """
+  Earliest date in dataset
+  """
   earliest: String
 
-  """Latest date in dataset"""
+  """
+  Latest date in dataset
+  """
   latest: String
 }
 
-"""Information about a geo-enabled table"""
+"""
+Information about a geo-enabled table
+"""
 type GeoTableType {
-  """Column names in this table"""
+  """
+  Column names in this table
+  """
   columns: [String!]!
 
-  """Date column name"""
+  """
+  Date column name
+  """
   dateColumn: String
 
-  """Category derived from table name (if no RUBRICA)"""
+  """
+  Category derived from table name (if no RUBRICA)
+  """
   derivedCategory: String
 
-  """Has geometry column (PostGIS)"""
+  """
+  Has geometry column (PostGIS)
+  """
   hasGeometry: Boolean!
 
-  """Has NUM_BO column"""
+  """
+  Has NUM_BO column
+  """
   hasNumBo: Boolean!
 
-  """Has RUBRICA column"""
+  """
+  Has RUBRICA column
+  """
   hasRubrica: Boolean!
 
-  """Hour column name"""
+  """
+  Hour column name
+  """
   hourColumn: String
 
-  """Latitude column name"""
+  """
+  Latitude column name
+  """
   latitudeColumn: String
 
-  """Longitude column name"""
+  """
+  Longitude column name
+  """
   longitudeColumn: String
 
-  """Number of records with valid coordinates"""
+  """
+  Number of records with valid coordinates
+  """
   recordCount: Int!
 
-  """Table name"""
+  """
+  Table name
+  """
   tableName: String!
 }
 
-"""Occurrences grouped by NUM_BO (Boletim de Ocorrência)"""
+"""
+Occurrences grouped by NUM_BO (Boletim de Ocorrência)
+"""
 type GroupedOccurrenceType {
-  """All categories from related records"""
+  """
+  All categories from related records
+  """
   allCategories: [String!]!
 
-  """Primary latitude for the group"""
+  """
+  Primary latitude for the group
+  """
   latitude: Float!
 
-  """Primary longitude for the group"""
+  """
+  Primary longitude for the group
+  """
   longitude: Float!
 
-  """Boletim de Ocorrência number"""
+  """
+  Boletim de Ocorrência number
+  """
   numBo: String!
 
-  """All occurrences in this group"""
+  """
+  All occurrences in this group
+  """
   occurrences: [OccurrenceType!]!
 
-  """Primary category of the group"""
+  """
+  Primary category of the group
+  """
   primaryCategory: String!
 
-  """Number of records in this group"""
+  """
+  Number of records in this group
+  """
   recordCount: Int!
 
-  """Source tables involved"""
+  """
+  Source tables involved
+  """
   sourceTables: [String!]!
 }
 
-"""Parameters for location-based category query"""
+"""
+Parameters for location-based category query
+"""
 input LocationCategoryInput {
-  """Filter by date after (YYYY-MM-DD)"""
+  """
+  Filter by date after (YYYY-MM-DD)
+  """
   afterDate: String
 
-  """Filter by date before (YYYY-MM-DD)"""
+  """
+  Filter by date before (YYYY-MM-DD)
+  """
   beforeDate: String
 
-  """Latitude"""
+  """
+  Latitude
+  """
   latitude: Float!
 
-  """Longitude"""
+  """
+  Longitude
+  """
   longitude: Float!
 
-  """Radius in meters"""
+  """
+  Radius in meters
+  """
   radius: Int!
 }
 
-"""Query parameters for occurrences"""
+"""
+Query parameters for occurrences
+"""
 input OccurrenceQueryInput {
-  """Filter by date after (YYYY-MM-DD)"""
+  """
+  Filter by date after (YYYY-MM-DD)
+  """
   afterDate: String
 
-  """Bounding box filter"""
+  """
+  Bounding box filter
+  """
   bbox: BoundingBoxInput
 
-  """Filter by date before (YYYY-MM-DD)"""
+  """
+  Filter by date before (YYYY-MM-DD)
+  """
   beforeDate: String
 
-  """Filter by categories"""
+  """
+  Filter by categories
+  """
   categories: [String!]
 
-  """Maximum number of results"""
+  """
+  Maximum number of results
+  """
   limit: Int
 
-  """Offset for pagination"""
+  """
+  Offset for pagination
+  """
   offset: Int
 
-  """Point + radius filter"""
+  """
+  Point + radius filter
+  """
   point: PointRadiusInput
 
-  """Filter by table names"""
+  """
+  Filter by table names
+  """
   tables: [String!]
 }
 
-"""Overall occurrence statistics"""
+"""
+Overall occurrence statistics
+"""
 type OccurrenceStatsType {
-  """Date range of data"""
+  """
+  Date range of data
+  """
   dateRange: DateRangeType!
 
-  """Total number of records"""
+  """
+  Total number of records
+  """
   totalRecords: Int!
 
-  """Number of unique NUM_BO values"""
+  """
+  Number of unique NUM_BO values
+  """
   uniqueBoletins: Int!
 }
 
-"""A single occurrence record from a dynamic table"""
+"""
+A single occurrence record from a dynamic table
+"""
 type OccurrenceType {
-  """Year of the BO"""
+  """
+  Year of the BO
+  """
   anoBo: Int
 
-  """Neighborhood"""
+  """
+  Neighborhood
+  """
   bairro: String
 
-  """Category/rubrica of the occurrence"""
+  """
+  Category/rubrica of the occurrence
+  """
   category: String!
 
-  """City"""
+  """
+  City
+  """
   cidade: String
 
-  """Conduct description"""
+  """
+  Conduct description
+  """
   conduta: String
 
-  """Date of occurrence (YYYY-MM-DD)"""
+  """
+  Date of occurrence (YYYY-MM-DD)
+  """
   dataOcorrencia: String
 
-  """Registration date"""
+  """
+  Registration date
+  """
   dataRegistro: String
 
-  """Police station name"""
+  """
+  Police station name
+  """
   delegacia: String
 
-  """Time of occurrence"""
+  """
+  Time of occurrence
+  """
   horaOcorrencia: String
 
-  """Unique identifier (table:id format)"""
+  """
+  Unique identifier (table:id format)
+  """
   id: ID!
 
-  """Latitude"""
+  """
+  Latitude
+  """
   latitude: Float!
 
-  """Type of location"""
+  """
+  Type of location
+  """
   localTipo: String
 
-  """Street/address"""
+  """
+  Street/address
+  """
   logradouro: String
 
-  """Longitude"""
+  """
+  Longitude
+  """
   longitude: Float!
 
-  """Nature of the occurrence"""
+  """
+  Nature of the occurrence
+  """
   naturezaApurada: String
 
-  """Boletim de Ocorrência number"""
+  """
+  Boletim de Ocorrência number
+  """
   numBo: String!
 
-  """Address number"""
+  """
+  Address number
+  """
   numeroLogradouro: String
 
-  """Period description"""
+  """
+  Period description
+  """
   periodo: String
 
-  """Rubrica used for map marker styling"""
+  """
+  Rubrica used for map marker styling
+  """
   rubricaForStyling: String!
 
-  """Source table name"""
+  """
+  Source table name
+  """
   sourceTable: String!
 }
 
-"""Point with radius for spatial filtering"""
+"""
+Point with radius for spatial filtering
+"""
 input PointRadiusInput {
-  """Latitude"""
+  """
+  Latitude
+  """
   latitude: Float!
 
-  """Longitude"""
+  """
+  Longitude
+  """
   longitude: Float!
 
-  """Radius in meters"""
+  """
+  Radius in meters
+  """
   radius: Int!
 }
 
 type Query {
-  """Get all available categories with counts"""
+  """
+  Get all available categories with counts
+  """
   categories(afterDate: String, beforeDate: String): [CategoryInfoType!]!
 
-  """Get categories within a geographic area"""
+  """
+  Get categories within a geographic area
+  """
   categoriesForLocation(location: LocationCategoryInput!): [CategoryInfoType!]!
 
-  """Get coordinate quality report for a table"""
+  """
+  Get coordinate quality report for a table
+  """
   coordinateQualityReport(tableName: String!): CoordinateQualityType
 
-  """Get coordinate quality reports for all tables"""
+  """
+  Get coordinate quality reports for all tables
+  """
   coordinateQualityReports: [CoordinateQualityType!]!
 
-  """Get earliest date in dataset"""
+  """
+  Get earliest date in dataset
+  """
   firstDate: String
 
-  """Get info for a specific table"""
+  """
+  Get info for a specific table
+  """
   geoTable(tableName: String!): GeoTableType
 
-  """Get all geo-enabled tables"""
+  """
+  Get all geo-enabled tables
+  """
   geoTables: [GeoTableType!]!
 
-  """Get latest date in dataset"""
+  """
+  Get latest date in dataset
+  """
   lastDate: String
 
-  """Get a single occurrence by table and ID"""
+  """
+  Get a single occurrence by table and ID
+  """
   occurrence(id: ID!, table: String!): OccurrenceType
 
-  """Get overall occurrence statistics"""
+  """
+  Get overall occurrence statistics
+  """
   occurrenceStats: OccurrenceStatsType!
 
-  """Query occurrences with filters"""
+  """
+  Query occurrences with filters
+  """
   occurrences(query: OccurrenceQueryInput): [OccurrenceType!]!
 
-  """Get all occurrences for a NUM_BO"""
+  """
+  Get all occurrences for a NUM_BO
+  """
   occurrencesByNumBo(numBo: String!): GroupedOccurrenceType
 
-  """Query occurrences grouped by NUM_BO"""
+  """
+  Query occurrences grouped by NUM_BO
+  """
   occurrencesGrouped(query: OccurrenceQueryInput): [GroupedOccurrenceType!]!
 
-  """Get tile service metadata"""
+  """
+  Get tile service metadata
+  """
   tileMetadata: TileMetadataType!
 }
 
-"""Tile service metadata"""
+"""
+Tile service metadata
+"""
 type TileMetadataType {
-  """Available categories for filtering"""
+  """
+  Available categories for filtering
+  """
   availableCategories: [String!]!
 
-  """Tile format"""
+  """
+  Tile format
+  """
   format: String!
 
-  """Layer names"""
+  """
+  Layer names
+  """
   layers: [String!]!
 
-  """Maximum zoom level"""
+  """
+  Maximum zoom level
+  """
   maxZoom: Int!
 
-  """Minimum zoom level"""
+  """
+  Minimum zoom level
+  """
   minZoom: Int!
 
-  """URL template for tiles"""
+  """
+  URL template for tiles
+  """
   tileUrlTemplate: String!
 }

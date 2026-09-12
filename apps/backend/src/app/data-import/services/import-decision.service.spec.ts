@@ -63,7 +63,8 @@ describe('ImportDecisionService', () => {
 
     expect(decision).toEqual({
       shouldImport: false,
-      reason: '2025 data already exists in database; historical refresh skipped',
+      reason:
+        '2025 data already exists in database; historical refresh skipped',
     });
     expect(fileOperationsService.downloadFileAndHash).not.toHaveBeenCalled();
   });

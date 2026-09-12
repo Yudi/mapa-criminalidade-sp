@@ -4,10 +4,7 @@ import { promises as fs } from 'fs';
 import { z } from 'zod';
 import { getErrorMessage } from '../../shared/error.utils';
 import { DataCategoryConfig } from '../config/data-category.config';
-import {
-  DataCategory,
-  ImlFileMetadata,
-} from '../types/data-import.types';
+import { DataCategory, ImlFileMetadata } from '../types/data-import.types';
 import { CsvProcessingService } from './csv-processing.service';
 import { DatabaseService } from './database.service';
 import { FileOperationsService } from './file-operations.service';
@@ -115,22 +112,26 @@ export class ImlImportService {
         );
         if (result.failedMonths.length > 0) {
           this.logger.warn(
-            `IML scraper skipped ${result.failedMonths.length} external month(s) for ${year}: ${result.failedMonths.join(
-              '; '
-            )}`
+            `IML scraper skipped ${
+              result.failedMonths.length
+            } external month(s) for ${year}: ${result.failedMonths.join('; ')}`
           );
         }
 
         for (const target of yearTargets) {
           const file = filesByMonth.get(target.month);
           if (!file) {
-            const message = `Scraper did not return ${this.formatMonth(target)}`;
+            const message = `Scraper did not return ${this.formatMonth(
+              target
+            )}`;
             skippedMonths.push(message);
             this.logger.warn(`${message}; keeping existing data`);
             continue;
           }
           if (file.recordCount === 0) {
-            const message = `IML export for ${this.formatMonth(target)} is empty`;
+            const message = `IML export for ${this.formatMonth(
+              target
+            )} is empty`;
             skippedMonths.push(message);
             this.logger.warn(`${message}; keeping existing data`);
             continue;
@@ -168,14 +169,16 @@ export class ImlImportService {
 
     if (fatalFailures.length > 0) {
       throw new Error(
-        `Failed to import ${fatalFailures.length}/${targets.length} IML month(s): ${fatalFailures.join(
-          '; '
-        )}`
+        `Failed to import ${fatalFailures.length}/${
+          targets.length
+        } IML month(s): ${fatalFailures.join('; ')}`
       );
     }
     if (skippedMonths.length > 0) {
       this.logger.warn(
-        `Skipped ${skippedMonths.length}/${targets.length} unavailable or invalid external IML month(s): ${skippedMonths.join(
+        `Skipped ${skippedMonths.length}/${
+          targets.length
+        } unavailable or invalid external IML month(s): ${skippedMonths.join(
           '; '
         )}`
       );
@@ -201,7 +204,9 @@ export class ImlImportService {
 
     for (const [year, months] of monthsByYear) {
       const tableName = DataCategoryConfig.getTableName(category, year);
-      const tableExists = await this.databaseService.checkTableExists(tableName);
+      const tableExists = await this.databaseService.checkTableExists(
+        tableName
+      );
       const importedMonths = tableExists
         ? await this.databaseService.getImlImportedMonths(tableName)
         : new Set<number>();
@@ -399,7 +404,9 @@ export class ImlImportService {
       try {
         const stats = await fs.lstat(resolvedFilePath);
         if (stats.isSymbolicLink() || !stats.isFile()) {
-          throw new Error(`IML scraper output is not a regular file: ${file.outputPath}`);
+          throw new Error(
+            `IML scraper output is not a regular file: ${file.outputPath}`
+          );
         }
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -408,9 +415,9 @@ export class ImlImportService {
           continue;
         }
         throw new Error(
-          `IML scraper output is unavailable: ${file.outputPath} (${getErrorMessage(
-            error
-          )})`
+          `IML scraper output is unavailable: ${
+            file.outputPath
+          } (${getErrorMessage(error)})`
         );
       }
     }

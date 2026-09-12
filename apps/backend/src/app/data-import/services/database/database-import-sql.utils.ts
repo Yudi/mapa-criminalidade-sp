@@ -28,8 +28,8 @@ export function buildCopyCsvSql(
 ): string {
   return `
       COPY ${rawTableName} (${dbColumnsToUse
-      .map((col) => quoteIdentifier(col))
-      .join(', ')})
+    .map((col) => quoteIdentifier(col))
+    .join(', ')})
       FROM ${quoteLiteral(postgresFilePath)}
       WITH (
         FORMAT csv,

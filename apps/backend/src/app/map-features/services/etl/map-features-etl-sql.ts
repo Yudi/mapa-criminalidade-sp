@@ -138,11 +138,7 @@ export function getTypeSpecificColumns(recordType: string): string[] {
         'CALIBRE',
       ];
     case 'produtividade_entorpecentes':
-      return [
-        'DESCRICAO_APRESENTACAO',
-        'DESCR_TOXICO',
-        'QTDE_GRAMAS_ARRED',
-      ];
+      return ['DESCRICAO_APRESENTACAO', 'DESCR_TOXICO', 'QTDE_GRAMAS_ARRED'];
     case 'produtividade_veiculos':
       return [
         'DESCRICAO_APRESENTACAO',

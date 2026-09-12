@@ -85,17 +85,13 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
       DataImportJobData,
       DataImportJobResult,
       DataImportQueueName
-    >(
-      DATA_IMPORT_QUEUE_NAME,
-      (job) => this.processJob(job),
-      {
-        connection: getDataImportQueueConnectionOptions(null),
-        concurrency: getDataImportWorkerConcurrency(),
-        lockDuration: 30 * 60 * 1000,
-        maxStalledCount: 1,
-        stalledInterval: 5 * 60 * 1000,
-      }
-    );
+    >(DATA_IMPORT_QUEUE_NAME, (job) => this.processJob(job), {
+      connection: getDataImportQueueConnectionOptions(null),
+      concurrency: getDataImportWorkerConcurrency(),
+      lockDuration: 30 * 60 * 1000,
+      maxStalledCount: 1,
+      stalledInterval: 5 * 60 * 1000,
+    });
 
     this.worker.on('completed', (job) => {
       this.logger.log(`Data import job completed: ${job.name} (${job.id})`);
@@ -147,7 +143,9 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
     await this.queue.close();
   }
 
-  async enqueueManualImport(categoryName?: string): Promise<DataImportQueueJob> {
+  async enqueueManualImport(
+    categoryName?: string
+  ): Promise<DataImportQueueJob> {
     if (this.isShuttingDown) {
       throw new Error('Data import queue is shutting down');
     }
@@ -166,9 +164,13 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
     if (existing) {
       const state = await existing.getState();
       if (
-        ['waiting', 'active', 'delayed', 'prioritized', 'waiting-children'].includes(
-          state
-        )
+        [
+          'waiting',
+          'active',
+          'delayed',
+          'prioritized',
+          'waiting-children',
+        ].includes(state)
       ) {
         return { id: existing.id, name };
       }
@@ -258,7 +260,8 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
           rawImportCompletedAt,
         });
       } catch (error) {
-        rawImportError = error instanceof Error ? error : new Error(String(error));
+        rawImportError =
+          error instanceof Error ? error : new Error(String(error));
       }
     } else {
       this.logger.log(
@@ -276,13 +279,12 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(
         `Post-import ETL completed with ${etlResult.errors.length} errors`
       );
-      throw new Error(
-        `Post-import ETL failed: ${etlResult.errors.join('; ')}`
-      );
+      throw new Error(`Post-import ETL failed: ${etlResult.errors.join('; ')}`);
     }
 
     if (rawImportError) throw rawImportError;
-    if (!rawImportCompletedAt) throw new Error('Raw import checkpoint is missing');
+    if (!rawImportCompletedAt)
+      throw new Error('Raw import checkpoint is missing');
 
     return {
       status: 'completed',
@@ -311,7 +313,9 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async importCategory(categoryName: string | undefined): Promise<void> {
+  private async importCategory(
+    categoryName: string | undefined
+  ): Promise<void> {
     if (!categoryName) {
       throw new Error('Category name is required');
     }

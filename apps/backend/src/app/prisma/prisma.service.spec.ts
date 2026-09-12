@@ -12,10 +12,7 @@ jest.mock('pg', () => {
   class FakeQuery<T = Record<string, unknown>> {
     readonly text: string;
     readonly values: readonly unknown[];
-    readonly callback: (
-      error: Error | null,
-      result: { rows: T[] }
-    ) => void;
+    readonly callback: (error: Error | null, result: { rows: T[] }) => void;
 
     constructor(
       config: { text: string; values: readonly unknown[] },
@@ -29,11 +26,8 @@ jest.mock('pg', () => {
 
   class FakeClient extends EventEmitter {
     static readonly instances: FakeClient[] = [];
-    readonly cancel = jest.fn(
-      (
-        _client: unknown,
-        query: FakeQuery
-      ): void => query.callback(new Error('cancelled'), { rows: [] })
+    readonly cancel = jest.fn((_client: unknown, query: FakeQuery): void =>
+      query.callback(new Error('cancelled'), { rows: [] })
     );
     readonly end = jest.fn().mockResolvedValue(undefined);
 
@@ -70,9 +64,10 @@ type MockPool = {
   connect: jest.Mock;
 };
 
-function createService(
-  poolClient: MockPoolClient
-): { service: PrismaService; pool: MockPool } {
+function createService(poolClient: MockPoolClient): {
+  service: PrismaService;
+  pool: MockPool;
+} {
   const service = Object.create(PrismaService.prototype) as PrismaService;
   const pool: MockPool = {
     connect: jest.fn().mockResolvedValue(poolClient),
@@ -123,8 +118,9 @@ describe('PrismaService bounded read-only queries', () => {
     const service = Object.create(PrismaService.prototype) as PrismaService;
     const transactionRunner = jest
       .fn()
-      .mockImplementation(async (callback: (tx: typeof transaction) => unknown) =>
-        callback(transaction)
+      .mockImplementation(
+        async (callback: (tx: typeof transaction) => unknown) =>
+          callback(transaction)
       );
     Object.defineProperty(service, '$transaction', {
       configurable: true,
@@ -144,24 +140,23 @@ describe('PrismaService bounded read-only queries', () => {
       'SET TRANSACTION READ ONLY',
       'SELECT count(*) FROM map_features WHERE category = $1',
     ]);
-    expect(transactionRunner).toHaveBeenCalledWith(
-      expect.any(Function),
-      { maxWait: 5_000, timeout: 20_000 }
-    );
+    expect(transactionRunner).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 5_000,
+      timeout: 20_000,
+    });
   });
 
   it('uses an independent cancellation client for an active pooled query', async () => {
     const poolClient = createPoolClient();
-    let activeQuery: {
-      callback: (error: Error | null, result: { rows: unknown[] }) => void;
-    } | undefined;
+    let activeQuery:
+      | {
+          callback: (error: Error | null, result: { rows: unknown[] }) => void;
+        }
+      | undefined;
     poolClient.query.mockImplementation((command: unknown) => {
       if (command instanceof Query) {
         activeQuery = command as unknown as {
-          callback: (
-            error: Error | null,
-            result: { rows: unknown[] }
-          ) => void;
+          callback: (error: Error | null, result: { rows: unknown[] }) => void;
         };
         return undefined;
       }

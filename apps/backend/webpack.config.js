@@ -4,7 +4,7 @@ const { join } = require('path');
 class BackendTypeScriptLoaderPlugin {
   apply(compiler) {
     const tsLoaderRule = compiler.options.module?.rules?.find((rule) =>
-      String(rule?.loader ?? '').includes('ts-loader'),
+      String(rule?.loader ?? '').includes('ts-loader')
     );
 
     if (!tsLoaderRule?.options) {

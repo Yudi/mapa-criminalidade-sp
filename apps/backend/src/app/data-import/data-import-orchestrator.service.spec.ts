@@ -20,15 +20,14 @@ describe('DataImportService orchestration', () => {
 
   function createService(): {
     service: DataImportService;
-    imlImportService: jest.Mocked<Pick<ImlImportService, 'importWithIntelligentLogic'>>;
+    imlImportService: jest.Mocked<
+      Pick<ImlImportService, 'importWithIntelligentLogic'>
+    >;
     fileOperationsService: Pick<
       FileOperationsService,
       'ensureDirectory' | 'cleanup'
     >;
-    importDecisionService: Pick<
-      ImportDecisionService,
-      'checkMultipleYears'
-    >;
+    importDecisionService: Pick<ImportDecisionService, 'checkMultipleYears'>;
   } {
     const fileOperationsService = {
       ensureDirectory: jest.fn().mockResolvedValue(undefined),
@@ -39,9 +38,11 @@ describe('DataImportService orchestration', () => {
       ensureRustTool: jest.fn().mockResolvedValue(undefined),
     } as unknown as RustToolService;
     const importDecisionService = {
-      checkMultipleYears: jest.fn().mockResolvedValue([
-        { year: 2026, shouldImport: true, reason: 'changed' },
-      ]),
+      checkMultipleYears: jest
+        .fn()
+        .mockResolvedValue([
+          { year: 2026, shouldImport: true, reason: 'changed' },
+        ]),
     } as unknown as ImportDecisionService;
     const imlImportService = {
       importWithIntelligentLogic: jest.fn().mockResolvedValue(undefined),
@@ -68,9 +69,9 @@ describe('DataImportService orchestration', () => {
   });
 
   it('keeps a failed external source group retryable', async () => {
-    jest.spyOn(DataCategoryConfig, 'getDirectCategories').mockReturnValue([
-      category,
-    ]);
+    jest
+      .spyOn(DataCategoryConfig, 'getDirectCategories')
+      .mockReturnValue([category]);
     const { service, imlImportService } = createService();
     jest
       .spyOn(
@@ -84,38 +85,70 @@ describe('DataImportService orchestration', () => {
     await expect(service.importAllCategories()).rejects.toThrow(
       'Data import completed partially'
     );
-    expect(imlImportService.importWithIntelligentLogic).toHaveBeenCalledTimes(1);
+    expect(imlImportService.importWithIntelligentLogic).toHaveBeenCalledTimes(
+      1
+    );
   });
 
   it('imports healthy categories and years before reporting unavailable sources', async () => {
-    const unavailable = { ...category, name: 'Unavailable', years: [2025, 2026] };
+    const unavailable = {
+      ...category,
+      name: 'Unavailable',
+      years: [2025, 2026],
+    };
     const broken = { ...category, name: 'Broken' };
-    jest.spyOn(DataCategoryConfig, 'getDirectCategories').mockReturnValue([
-      unavailable, broken, category,
-    ]);
-    const { service, importDecisionService, imlImportService } = createService();
-    jest.mocked(importDecisionService.checkMultipleYears).mockImplementation(async (source) => {
-      if (source === broken) throw new Error('verification failed');
-      if (source === unavailable) return [
-        { year: 2025, shouldImport: true, reason: 'changed' },
-        { year: 2026, shouldImport: false, reason: 'timeout', retryable: true },
-      ];
-      return [{ year: 2026, shouldImport: true, reason: 'changed' }];
-    });
-    const importFile = jest.spyOn(service as unknown as {
-      importFromSingleFile(): Promise<void>;
-    }, 'importFromSingleFile').mockResolvedValue(undefined);
+    jest
+      .spyOn(DataCategoryConfig, 'getDirectCategories')
+      .mockReturnValue([unavailable, broken, category]);
+    const { service, importDecisionService, imlImportService } =
+      createService();
+    jest
+      .mocked(importDecisionService.checkMultipleYears)
+      .mockImplementation(async (source) => {
+        if (source === broken) throw new Error('verification failed');
+        if (source === unavailable)
+          return [
+            { year: 2025, shouldImport: true, reason: 'changed' },
+            {
+              year: 2026,
+              shouldImport: false,
+              reason: 'timeout',
+              retryable: true,
+            },
+          ];
+        return [{ year: 2026, shouldImport: true, reason: 'changed' }];
+      });
+    const importFile = jest
+      .spyOn(
+        service as unknown as {
+          importFromSingleFile(): Promise<void>;
+        },
+        'importFromSingleFile'
+      )
+      .mockResolvedValue(undefined);
 
-    await expect(service.importAllCategories()).rejects.toThrow('Data import completed partially');
+    await expect(service.importAllCategories()).rejects.toThrow(
+      'Data import completed partially'
+    );
 
     expect(importFile).toHaveBeenCalledTimes(2);
     expect(importFile).toHaveBeenCalledWith(
-      DataCategoryConfig.getUrl(unavailable, 2025), 2025, [unavailable], expect.any(Function), undefined
+      DataCategoryConfig.getUrl(unavailable, 2025),
+      2025,
+      [unavailable],
+      expect.any(Function),
+      undefined
     );
     expect(importFile).toHaveBeenCalledWith(
-      DataCategoryConfig.getUrl(category, 2026), 2026, [category], expect.any(Function), undefined
+      DataCategoryConfig.getUrl(category, 2026),
+      2026,
+      [category],
+      expect.any(Function),
+      undefined
     );
-    expect(imlImportService.importWithIntelligentLogic).toHaveBeenCalledTimes(1);
+    expect(imlImportService.importWithIntelligentLogic).toHaveBeenCalledTimes(
+      1
+    );
   });
 
   it('treats a low-priority IML source failure as non-fatal', async () => {
@@ -129,14 +162,11 @@ describe('DataImportService orchestration', () => {
   });
 
   it('reuses the payload downloaded during the import decision', async () => {
-    jest.spyOn(DataCategoryConfig, 'getDirectCategories').mockReturnValue([
-      category,
-    ]);
-    const {
-      service,
-      importDecisionService,
-      fileOperationsService,
-    } = createService();
+    jest
+      .spyOn(DataCategoryConfig, 'getDirectCategories')
+      .mockReturnValue([category]);
+    const { service, importDecisionService, fileOperationsService } =
+      createService();
     const sourceUrl = DataCategoryConfig.getUrl(category, 2026);
     jest
       .mocked(importDecisionService.checkMultipleYears)

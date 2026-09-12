@@ -18,8 +18,12 @@ describe('occurrence tile contract migration', () => {
 
   it('uses safe date parsing and JSON arrays for filters', () => {
     expect(migration).toContain('map_features_try_iso_date');
-    expect(migration).toContain("json_typeof(query_params->'categories') = 'array'");
-    expect(migration).toContain("json_typeof(query_params->'periods') = 'array'");
+    expect(migration).toContain(
+      "json_typeof(query_params->'categories') = 'array'"
+    );
+    expect(migration).toContain(
+      "json_typeof(query_params->'periods') = 'array'"
+    );
   });
 
   it('orders dense tiles deterministically and labels mixed clusters', () => {

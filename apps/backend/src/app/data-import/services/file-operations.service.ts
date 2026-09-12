@@ -125,8 +125,10 @@ export class FileOperationsService {
         (result) => ({ hash: result.hash ?? '', size: result.size })
       );
     }
-    const result = await this.withDownloadRetries(url, this.defaultDownloadRetries, () =>
-      this.downloadAttempt(url, '', 'hash')
+    const result = await this.withDownloadRetries(
+      url,
+      this.defaultDownloadRetries,
+      () => this.downloadAttempt(url, '', 'hash')
     );
     if (!result.hash) {
       throw new Error('Download completed without a SHA-256 hash');
@@ -162,7 +164,9 @@ export class FileOperationsService {
       }
     }
     throw new Error(
-      `Failed to download ${this.redactUrl(url)} after ${boundedRetries} attempts: ${
+      `Failed to download ${this.redactUrl(
+        url
+      )} after ${boundedRetries} attempts: ${
         lastError?.message ?? 'unknown error'
       }`
     );
@@ -243,11 +247,7 @@ export class FileOperationsService {
     setTemporaryPath: (temporaryPath: string) => void
   ): Promise<void> {
     const statusCode = response.statusCode ?? 0;
-    if (
-      statusCode >= 300 &&
-      statusCode < 400 &&
-      response.headers.location
-    ) {
+    if (statusCode >= 300 && statusCode < 400 && response.headers.location) {
       response.resume();
       if (redirectCount >= this.maxRedirects) {
         fail(new Error(`Exceeded ${this.maxRedirects} download redirects`));
@@ -296,13 +296,21 @@ export class FileOperationsService {
         await this.syncAndRename(partPath, filePath);
         setTemporaryPath('');
         complete({
-          hash: mode === 'file-and-hash' ? await this.calculateFileHash(filePath) : undefined,
+          hash:
+            mode === 'file-and-hash'
+              ? await this.calculateFileHash(filePath)
+              : undefined,
           size: await this.getFileSize(filePath),
         });
         return;
       }
 
-      const result = await this.streamResponse(response, '', contentLength, false);
+      const result = await this.streamResponse(
+        response,
+        '',
+        contentLength,
+        false
+      );
       complete(result);
     } catch (error) {
       fail(error);
@@ -347,7 +355,10 @@ export class FileOperationsService {
     return { hash: hash.digest('hex'), size: totalSize };
   }
 
-  private async syncAndRename(partPath: string, filePath: string): Promise<void> {
+  private async syncAndRename(
+    partPath: string,
+    filePath: string
+  ): Promise<void> {
     const handle = await fs.open(partPath, 'r+');
     try {
       await handle.sync();
@@ -431,7 +442,9 @@ export class FileOperationsService {
             .map((value) => value.trim())
             .filter((value) => value.length > 0);
     return new Set(
-      (values.length > 0 ? values : fallback).map((value) => value.toLowerCase())
+      (values.length > 0 ? values : fallback).map((value) =>
+        value.toLowerCase()
+      )
     );
   }
 
@@ -492,7 +505,9 @@ export class FileOperationsService {
     const boundedConcurrency = Math.max(1, Math.min(20, concurrencyLimit));
     for (let i = 0; i < items.length; i += boundedConcurrency) {
       const batch = items.slice(i, i + boundedConcurrency);
-      results.push(...(await Promise.all(batch.map((item) => processor(item)))));
+      results.push(
+        ...(await Promise.all(batch.map((item) => processor(item))))
+      );
     }
     return results;
   }
@@ -517,7 +532,9 @@ export class FileOperationsService {
     }
     if (failures.length > 0) {
       throw new Error(
-        `Temporary cleanup failed: ${failures.map((failure) => failure.message).join('; ')}`
+        `Temporary cleanup failed: ${failures
+          .map((failure) => failure.message)
+          .join('; ')}`
       );
     }
   }

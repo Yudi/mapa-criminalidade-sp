@@ -1,3 +1,4 @@
+import type { MapFeatureDetailFilters } from './graphql';
 export interface LocationData {
   logradouro?: string;
   numero?: string;
@@ -219,7 +220,8 @@ export interface SourceTableConfig {
   stylingRubrica?: string;
 }
 
-export interface MapFeaturesTileParams {
+export interface MapFeaturesTileParams extends MapFeatureDetailFilters {
+  mode?: import('./map-tiles').MapDisplayMode;
   z: number;
   x: number;
   y: number;
@@ -248,7 +250,16 @@ export interface MapFeaturesCategoryPeriodStats {
   periods: MapFeaturesPeriodStats[];
 }
 
-export interface MapFeaturesFilterParams {
+/** A closed WGS84 GeoJSON Polygon, or a geodesic radius in meters. */
+export interface AnalysisArea {
+  polygon?: string;
+  longitude?: number;
+  latitude?: number;
+  radius?: number;
+}
+
+export interface MapFeaturesFilterParams extends MapFeatureDetailFilters {
+  area?: AnalysisArea;
   beforeDate?: string;
   afterDate?: string;
   categories?: string[];

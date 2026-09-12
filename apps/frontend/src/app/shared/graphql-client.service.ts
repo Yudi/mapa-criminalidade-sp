@@ -21,10 +21,7 @@ export class GraphqlClientService {
     request: GraphQLRequest<TVariables>
   ): Observable<TData> {
     return this.http
-      .post<GraphQLResponse<TData>>(
-        `${environment.apiUrl}/graphql`,
-        request
-      )
+      .post<GraphQLResponse<TData>>(`${environment.apiUrl}/graphql`, request)
       .pipe(
         map((response) => {
           if (response.errors?.length) {

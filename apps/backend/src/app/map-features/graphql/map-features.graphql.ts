@@ -35,6 +35,9 @@ export class MapFeatureCategoryPeriodStatsObject {
 
 @ObjectType()
 export class ChartBucketObject {
+  @Field(() => String, { nullable: true })
+  filterValue?: string | null;
+
   @Field()
   label!: string;
 
@@ -43,6 +46,24 @@ export class ChartBucketObject {
 
   @Field(() => Float, { nullable: true })
   amount?: number | null;
+}
+
+@ObjectType()
+export class WeekdayHourBucketObject {
+  @Field(() => Int, {
+    nullable: true,
+    description: 'ISO weekday, Monday = 1. Null means unknown date.',
+  })
+  weekday!: number | null;
+
+  @Field(() => Int, {
+    nullable: true,
+    description: 'Recorded hour, 0–23. Null means unknown hour.',
+  })
+  hour!: number | null;
+
+  @Field(() => Int)
+  count!: number;
 }
 
 @ObjectType()
@@ -61,6 +82,9 @@ export class MapFeatureChartsObject {
 
   @Field(() => [ChartBucketObject])
   weekdayDistribution!: ChartBucketObject[];
+
+  @Field(() => [WeekdayHourBucketObject])
+  weekdayHourDistribution!: WeekdayHourBucketObject[];
 
   @Field(() => [ChartBucketObject])
   recordTypeDistribution!: ChartBucketObject[];
@@ -160,7 +184,64 @@ export class MapFeatureBoundsInput {
 }
 
 @InputType()
+export class AnalysisAreaInput {
+  @Field(() => String, {
+    nullable: true,
+    description:
+      'Closed WGS84 GeoJSON Polygon with one ring, up to 100 vertices.',
+  })
+  polygon?: string;
+
+  @Field(() => Float, { nullable: true })
+  longitude?: number;
+
+  @Field(() => Float, { nullable: true })
+  latitude?: number;
+
+  @Field(() => Float, {
+    nullable: true,
+    description: 'Geodesic radius in meters, from 1 to 10000.',
+  })
+  radius?: number;
+}
+
+@InputType()
 export class MapFeatureFilterInput {
+  @Field(() => [String], {
+    nullable: true,
+    description:
+      'Exact vehicle brands. OR within a dimension, AND across dimensions and categories.',
+  })
+  vehicleBrands?: string[];
+
+  @Field(() => [String], {
+    nullable: true,
+    description: 'Object types, falling back to subtype when type is absent.',
+  })
+  objectTypes?: string[];
+
+  @Field(() => [String], {
+    nullable: true,
+    description:
+      'Exact cellular phone brand and model labels exposed by the charts.',
+  })
+  phoneBrandModels?: string[];
+
+  @Field(() => [String], {
+    nullable: true,
+    description: 'Exact location types.',
+  })
+  locationTypes?: string[];
+
+  @Field(() => [Int], {
+    nullable: true,
+    description: 'ISO weekdays, Monday = 1 and Sunday = 7.',
+  })
+  weekdays?: number[];
+
+  @Field(() => AnalysisAreaInput, { nullable: true })
+  area?: AnalysisAreaInput;
+
   @Field({ nullable: true })
   beforeDate?: string;
 
@@ -613,4 +694,19 @@ export class EtlStatusObject {
 
   @Field(() => String, { nullable: true })
   error_message!: string | null;
+}
+
+@ObjectType()
+export class MapFeatureTemporalStatsObject {
+  @Field(() => String, { nullable: true })
+  datasetRevision!: string | null;
+
+  @Field(() => Int)
+  total!: number;
+
+  @Field(() => [ChartBucketObject])
+  monthly!: ChartBucketObject[];
+
+  @Field(() => [ChartBucketObject])
+  categories!: ChartBucketObject[];
 }

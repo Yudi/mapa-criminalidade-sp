@@ -1,4 +1,9 @@
-import { HttpClient, provideHttpClient, withInterceptors, withXhr } from '@angular/common/http';
+import {
+  HttpClient,
+  provideHttpClient,
+  withInterceptors,
+  withXhr,
+} from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -23,7 +28,10 @@ describe('requestTimeoutInterceptor', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(withXhr(), withInterceptors([requestTimeoutInterceptor])),
+        provideHttpClient(
+          withXhr(),
+          withInterceptors([requestTimeoutInterceptor])
+        ),
         provideHttpClientTesting(),
         {
           provide: RequestTimeoutService,

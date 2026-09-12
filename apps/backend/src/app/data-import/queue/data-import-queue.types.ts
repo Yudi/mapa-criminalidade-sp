@@ -13,9 +13,7 @@ export const dataImportJobNameSchema = z.enum([
 export const dataImportSchedulerIdSchema = z.enum(['daily-data-import']);
 
 export type DataImportJobName = z.infer<typeof dataImportJobNameSchema>;
-export type DataImportSchedulerId = z.infer<
-  typeof dataImportSchedulerIdSchema
->;
+export type DataImportSchedulerId = z.infer<typeof dataImportSchedulerIdSchema>;
 export type DataImportQueueName = DataImportJobName | DataImportSchedulerId;
 
 export const dataImportJobDataSchema = z

@@ -9,12 +9,14 @@ describe('ToolbarComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [ToolbarComponent]
-    })
-    .compileComponents();
+      imports: [ToolbarComponent],
+    }).compileComponents();
 
     fixture = TestBed.createComponent(ToolbarComponent);
-    fixture.componentRef.setInput('showIndeterminateProgressBar', signal(false));
+    fixture.componentRef.setInput(
+      'showIndeterminateProgressBar',
+      signal(false)
+    );
     fixture.componentRef.setInput('progressBarPercentage', signal(-1));
     component = fixture.componentInstance;
     fixture.detectChanges();

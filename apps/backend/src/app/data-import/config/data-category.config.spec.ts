@@ -119,9 +119,7 @@ describe('DataCategoryConfig', () => {
         ],
         category
       )
-    ).toEqual([
-      'DadosProdutividade_2026_APREENSAO DE ENTORPECENTES_2026.csv',
-    ]);
+    ).toEqual(['DadosProdutividade_2026_APREENSAO DE ENTORPECENTES_2026.csv']);
   });
 
   it('keeps configured categories valid against the runtime schema', () => {

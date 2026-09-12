@@ -19,10 +19,7 @@ import {
   dataImportTriggerBodySchema,
   DataImportTriggerBody,
 } from './schemas/data-import-trigger.schema';
-import {
-  getErrorMessage,
-  getErrorNumberProperty,
-} from '../shared/error.utils';
+import { getErrorMessage, getErrorNumberProperty } from '../shared/error.utils';
 
 @ApiTags('Data Import')
 @Controller('data-import')
@@ -87,9 +84,7 @@ export class DataImportController {
     status: 202,
     description: 'Import job queued successfully',
   })
-  async triggerImport(
-    @Body() body: unknown
-  ): Promise<{
+  async triggerImport(@Body() body: unknown): Promise<{
     message: string;
     jobId?: string;
     jobName: DataImportJobName;

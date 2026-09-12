@@ -1,8 +1,9 @@
 import { Prisma } from '../../../../generated/prisma/client';
+import { MapFeaturesFilterParams } from '../../types/map-features.types';
 import {
-  MapFeaturesFilterParams,
-} from '../../types/map-features.types';
-import { normalizeStringList } from './map-features-query-cache';
+  normalizeStringList,
+  normalizeWeekdays,
+} from './map-features-query-cache';
 
 export const PERIOD_SQL = `NULLIF(periodo_normalized, '')`;
 export const PERIOD_KEY_SQL = PERIOD_SQL;
@@ -28,6 +29,13 @@ export const PERIOD_SORT_SQL = `
 `;
 
 const OCCURRENCE_HOUR_SQL = `hora_ocorrencia`;
+const PHONE_BRAND_MODEL_SQL = `
+  concat_ws(
+    ' · ',
+    COALESCE(NULLIF(btrim(record.value->>'marca'), ''), 'Marca não informada'),
+    NULLIF(btrim(record.value->>'descr_subtipo_objeto'), '')
+  )
+`;
 const TOP_CHART_BUCKET_LIMIT = 12;
 const RECORD_QUANTITY_SQL = `
   CASE
@@ -60,13 +68,18 @@ type MapFeaturesBoundsFilter = MapFeaturesFilterParams &
   >;
 
 export function buildChartsQuery(whereClause: string): string {
-  const chartJson = (selectSql: string, orderSql = 'count DESC, label ASC') => `
+  const chartJson = (
+    selectSql: string,
+    orderSql = 'count DESC, label ASC',
+    filterable = false
+  ) => `
     SELECT COALESCE(
       jsonb_agg(
         jsonb_build_object(
           'label', label,
           'count', count,
-          'amount', amount
+          'amount', amount,
+          'filterValue', ${filterable ? 'filter_value' : 'NULL::text'}
         )
         ORDER BY ${orderSql}
       ),
@@ -77,8 +90,9 @@ export function buildChartsQuery(whereClause: string): string {
     ) chart_rows
   `;
 
-  const topChartJson = (selectSql: string) =>
-    chartJson(`
+  const topChartJson = (selectSql: string, filterable = false) =>
+    chartJson(
+      `
       SELECT *
       FROM (
         ${selectSql}
@@ -86,7 +100,10 @@ export function buildChartsQuery(whereClause: string): string {
       WHERE label IS NOT NULL
       ORDER BY count DESC, label ASC
       LIMIT ${TOP_CHART_BUCKET_LIMIT}
-    `);
+    `,
+      'count DESC, label ASC',
+      filterable
+    );
 
   return `
     WITH visible_features AS MATERIALIZED (
@@ -95,6 +112,7 @@ export function buildChartsQuery(whereClause: string): string {
         all_rubricas,
         periodo_normalized,
         data_ocorrencia,
+        hora_ocorrencia,
         total_records,
         delegacia,
         feature_data->'records' AS records,
@@ -113,6 +131,14 @@ export function buildChartsQuery(whereClause: string): string {
     SELECT
       (SELECT COUNT(*) FROM visible_features) as total_features,
       (SELECT COALESCE(SUM(total_records), 0) FROM visible_features) as total_records,
+      (SELECT COALESCE(jsonb_agg(buckets ORDER BY weekday, hour), '[]'::jsonb)
+        FROM (
+          SELECT EXTRACT(ISODOW FROM data_ocorrencia)::int AS weekday,
+            CASE WHEN hora_ocorrencia BETWEEN 0 AND 23 THEN hora_ocorrencia END AS hour,
+            COUNT(*) AS count
+          FROM visible_features
+          GROUP BY 1, 2
+        ) buckets) AS weekday_hour_distribution,
       (${chartJson(`
         SELECT category_bucket.category_name as label, COUNT(*) as count, NULL::numeric as amount
         FROM visible_features
@@ -148,14 +174,16 @@ export function buildChartsQuery(whereClause: string): string {
               WHEN 7 THEN 'Domingo'
               ELSE 'Não informado'
             END as label,
+            EXTRACT(ISODOW FROM data_ocorrencia)::int::text as filter_value,
             COUNT(*) as count,
             NULL::numeric as amount,
             COALESCE(EXTRACT(ISODOW FROM data_ocorrencia)::int, 8) as sort_order
           FROM visible_features
-          GROUP BY label, sort_order
+          GROUP BY label, filter_value, sort_order
           ORDER BY sort_order ASC
         `,
-        'sort_order ASC, label ASC'
+        'sort_order ASC, label ASC',
+        true
       )}) as weekday_distribution,
       (${topChartJson(`
         SELECT
@@ -175,57 +203,62 @@ export function buildChartsQuery(whereClause: string): string {
         FROM visible_records record
         GROUP BY label
       `)}) as record_type_distribution,
-      (${topChartJson(`
+      (${topChartJson(
+        `
         SELECT
-          COALESCE(
-            NULLIF(record.value->>'descr_tipo_objeto', ''),
-            NULLIF(record.value->>'descr_subtipo_objeto', ''),
-            'Não informado'
-          ) as label,
+          COALESCE(COALESCE(NULLIF(btrim(record.value->>'descr_tipo_objeto'), ''), NULLIF(btrim(record.value->>'descr_subtipo_objeto'), '')), 'Não informado') as label,
+          COALESCE(NULLIF(btrim(record.value->>'descr_tipo_objeto'), ''), NULLIF(btrim(record.value->>'descr_subtipo_objeto'), '')) as filter_value,
           COUNT(*) as count,
           SUM(${RECORD_QUANTITY_SQL}) as amount
         FROM visible_records record
         WHERE record.value->>'type' IN ('objeto', 'celular')
-        GROUP BY label
-      `)}) as object_type_distribution,
-      (${topChartJson(`
+        GROUP BY label, filter_value
+      `,
+        true
+      )}) as object_type_distribution,
+      (${topChartJson(
+        `
         SELECT
-          concat_ws(
-            ' · ',
-            COALESCE(NULLIF(record.value->>'marca', ''), 'Marca não informada'),
-            NULLIF(record.value->>'tipo_veiculo', ''),
-            NULLIF(record.value->>'ano_modelo', '')
-          ) as label,
+          COALESCE(NULLIF(btrim(record.value->>'marca'), ''), 'Marca não informada') as label,
+          NULLIF(btrim(record.value->>'marca'), '') as filter_value,
           COUNT(*) as count,
           NULL::numeric as amount
         FROM visible_records record
         WHERE record.value->>'type' IN ('veiculo', 'produtividade_veiculos')
-        GROUP BY label
-      `)}) as vehicle_brand_distribution,
-      (${topChartJson(`
+        GROUP BY label, filter_value
+      `,
+        true
+      )}) as vehicle_brand_distribution,
+      (${topChartJson(
+        `
         SELECT
-          concat_ws(
-            ' · ',
-            COALESCE(NULLIF(record.value->>'marca', ''), 'Marca não informada'),
-            NULLIF(record.value->>'descr_subtipo_objeto', '')
-          ) as label,
+          ${PHONE_BRAND_MODEL_SQL} as label,
+          CASE
+            WHEN NULLIF(btrim(record.value->>'marca'), '') IS NULL
+              AND NULLIF(btrim(record.value->>'descr_subtipo_objeto'), '') IS NULL
+            THEN NULL
+            ELSE ${PHONE_BRAND_MODEL_SQL}
+          END as filter_value,
           COUNT(*) as count,
           SUM(${RECORD_QUANTITY_SQL}) as amount
         FROM visible_records record
         WHERE record.value->>'type' = 'celular'
-        GROUP BY label
-      `)}) as phone_brand_distribution,
-      (${topChartJson(`
+        GROUP BY label, filter_value
+      `,
+        true
+      )}) as phone_brand_distribution,
+      (${topChartJson(
+        `
         SELECT
-          COALESCE(
-            NULLIF(location_type, ''),
-            'Não informado'
-          ) as label,
+          COALESCE(NULLIF(btrim(location_type), ''), 'Não informado') as label,
+          NULLIF(btrim(location_type), '') as filter_value,
           COUNT(*) as count,
           NULL::numeric as amount
         FROM visible_features
-        GROUP BY label
-      `)}) as location_type_distribution,
+        GROUP BY label, filter_value
+      `,
+        true
+      )}) as location_type_distribution,
       (${topChartJson(`
         SELECT
           COALESCE(
@@ -350,16 +383,50 @@ export function appendSqlFilters(
     );
   }
 
-  if (includeHours) {
-    paramIndex = appendHourFilter(
-      conditions,
-      queryParams,
-      paramIndex,
-      params
+  const weekdays = normalizeWeekdays(params?.weekdays);
+  if (weekdays?.length) {
+    const placeholders = weekdays.map(() => `$${paramIndex++}`).join(', ');
+    conditions.push(
+      `EXTRACT(ISODOW FROM data_ocorrencia)::int IN (${placeholders})`
     );
+    queryParams.push(...weekdays);
   }
 
-  if (includeBounds && hasBounds(params)) {
+  const detailFilters = {
+    vehicleBrands: normalizeStringList(params?.vehicleBrands),
+    objectTypes: normalizeStringList(params?.objectTypes),
+    phoneBrandModels: normalizeStringList(params?.phoneBrandModels),
+    locationTypes: normalizeStringList(params?.locationTypes),
+  };
+  if (Object.values(detailFilters).some((values) => values?.length)) {
+    conditions.push(
+      `public.map_feature_matches_details(feature_data, $${paramIndex++}::jsonb)`
+    );
+    queryParams.push(JSON.stringify(detailFilters));
+  }
+
+  if (includeHours) {
+    paramIndex = appendHourFilter(conditions, queryParams, paramIndex, params);
+  }
+
+  if (includeBounds && params?.area) {
+    const area = params.area;
+    if (area.polygon != null) {
+      const geometry = `ST_SetSRID(ST_GeomFromGeoJSON($${paramIndex++}), 4326)`;
+      conditions.push(`geom && ${geometry} AND ST_Covers(${geometry}, geom)`);
+      queryParams.push(area.polygon);
+    } else {
+      conditions.push(
+        `ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint($${paramIndex}, $${
+          paramIndex + 1
+        }), 4326)::geography, $${paramIndex + 2})`
+      );
+      queryParams.push(area.longitude!, area.latitude!, area.radius!);
+      paramIndex += 3;
+    }
+  }
+
+  if (includeBounds && !params?.area && hasBounds(params)) {
     conditions.push(
       `geom && ST_MakeEnvelope($${paramIndex}, $${paramIndex + 1}, $${
         paramIndex + 2
@@ -431,9 +498,7 @@ function appendHourFilter(
   if (startHour !== undefined && endHour !== undefined) {
     if (startHour <= endHour) {
       conditions.push(
-        `${OCCURRENCE_HOUR_SQL} BETWEEN $${paramIndex} AND $${
-          paramIndex + 1
-        }`
+        `${OCCURRENCE_HOUR_SQL} BETWEEN $${paramIndex} AND $${paramIndex + 1}`
       );
     } else {
       conditions.push(

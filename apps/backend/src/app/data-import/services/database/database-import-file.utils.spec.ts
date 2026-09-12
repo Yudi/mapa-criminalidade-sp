@@ -26,11 +26,11 @@ describe('database import file utilities', () => {
 
   it('does not treat a sibling temp prefix as an in-container path', () => {
     const cwd = '/srv/app';
-    expect(convertToPostgresSharedPath('/srv/app/temp-evil/file.csv', cwd)).toBe(
-      '/srv/app/temp-evil/file.csv'
-    );
-    expect(convertToPostgresSharedPath('/srv/app/temp/nested/file.csv', cwd)).toBe(
-      '/tmp/shared_import/nested/file.csv'
-    );
+    expect(
+      convertToPostgresSharedPath('/srv/app/temp-evil/file.csv', cwd)
+    ).toBe('/srv/app/temp-evil/file.csv');
+    expect(
+      convertToPostgresSharedPath('/srv/app/temp/nested/file.csv', cwd)
+    ).toBe('/tmp/shared_import/nested/file.csv');
   });
 });

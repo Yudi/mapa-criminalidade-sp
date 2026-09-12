@@ -1,0 +1,76 @@
+<section aria-label="Dia da semana × hora" [attr.aria-busy]="busy()">
+  <h3>Dia da semana × hora</h3>
+  <p>
+    Quando as ocorrências se concentram, conforme a data e a hora informadas nos
+    registros.
+  </p>
+  @if (matrix().known === 0) {
+  <p role="status">
+    Não há ocorrências com data e hora conhecidas neste recorte.
+  </p>
+  }
+  <div
+    class="heatmap-scroll"
+    tabindex="0"
+    role="region"
+    aria-label="Tabela de horários; role horizontalmente para ver todas as horas"
+  >
+    <table>
+      <caption>
+        Ocorrências por dia e hora. Cores mais escuras indicam maior contagem;
+        os números mostram os valores exatos.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Dia</th>
+          @for (hour of hours; track hour) {
+          <th scope="col">{{ hour }}</th>
+          }
+          <th scope="col" class="unknown">Hora incerta</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of matrix().rows; track row.label) {
+        <tr>
+          <th scope="row">{{ row.label }}</th>
+          @for (cell of row.cells; track cell.hour) {
+          <td
+            [class]="'heat heat--' + cell.level"
+            [attr.title]="
+              row.label +
+              ', ' +
+              hours[cell.hour] +
+              ': ' +
+              cell.count +
+              ' ocorrências'
+            "
+          >
+            {{ cell.count | number }}
+          </td>
+          }
+          <td class="unknown">{{ row.unknown | number }}</td>
+        </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  <div class="heatmap-key" aria-label="Escala de concentração">
+    <span>0</span><span class="heat heat--0" aria-hidden="true"></span>
+    <span>Menor</span>
+    @for (level of [1, 2, 3, 4, 5]; track level) {
+    <span [class]="'heat heat--' + level" aria-hidden="true"></span> }
+    <span>Maior ({{ matrix().maximum | number }})</span>
+  </div>
+  <p class="coverage">
+    <strong>Com data e hora: {{ matrix().known | number }}.</strong> Hora
+    incerta: {{ matrix().unknownHour | number }}. Sem data:
+    {{ matrix().unknownDate | number }} ({{
+      matrix().unknownBoth | number
+    }}
+    também sem hora).
+  </p>
+  <p>
+    Horas incertas não entram na escala de cores. Filtros de hora excluem
+    registros sem hora informada.
+  </p>
+</section>

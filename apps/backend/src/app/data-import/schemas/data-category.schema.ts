@@ -10,7 +10,10 @@ export const dataCategorySchema = z
     name: z.string().trim().min(1),
     baseUrl: z.string().trim().url(),
     years: z.array(z.number().int().min(2000).max(2100)).nonempty(),
-    tablePrefix: z.string().trim().regex(/^[a-z0-9_]+$/),
+    tablePrefix: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9_]+$/),
     hasSchema: z.boolean(),
     importStrategy: z.enum(['direct-xlsx', 'ssp-iml']).optional(),
     useYearSuffix: z.boolean().optional(),

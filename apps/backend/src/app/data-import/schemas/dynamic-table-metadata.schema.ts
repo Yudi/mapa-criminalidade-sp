@@ -21,4 +21,3 @@ export const dynamicTableColumnsJsonSchema = z
 export type DynamicTableColumnsJson = z.infer<
   typeof dynamicTableColumnsJsonSchema
 >;
-

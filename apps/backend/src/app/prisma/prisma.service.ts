@@ -49,7 +49,9 @@ export class PrismaService
     const cancelQuery = () => {
       if (!activeQuery) return;
       cancelClient = new Client({ connectionString: getDatabaseUrl() });
-      cancelClient.on('error', () => { /* The statement deadline remains the fallback. */ });
+      cancelClient.on('error', () => {
+        /* The statement deadline remains the fallback. */
+      });
       const cancellableClient = cancelClient as Client & {
         cancel: (client: PoolClient, query: Query<T>) => void;
       };
@@ -95,7 +97,10 @@ export class PrismaService
       try {
         await client.query('ROLLBACK');
       } catch (rollbackError) {
-        releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+        releaseError =
+          rollbackError instanceof Error
+            ? rollbackError
+            : new Error(String(rollbackError));
       }
       throw error;
     } finally {
@@ -105,13 +110,19 @@ export class PrismaService
     }
   }
 
-  async executeReadOnlyStatsQuery<T>(queryText: string, ...params: unknown[]): Promise<T> {
-    return this.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '15000ms'");
-      await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '3000ms'");
-      await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
-      return tx.$queryRawUnsafe<T>(queryText, ...params);
-    }, { maxWait: 5_000, timeout: 20_000 });
+  async executeReadOnlyStatsQuery<T>(
+    queryText: string,
+    ...params: unknown[]
+  ): Promise<T> {
+    return this.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '15000ms'");
+        await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '3000ms'");
+        await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
+        return tx.$queryRawUnsafe<T>(queryText, ...params);
+      },
+      { maxWait: 5_000, timeout: 20_000 }
+    );
   }
 
   private static getPositiveIntegerEnv(name: string, fallback: number): number {

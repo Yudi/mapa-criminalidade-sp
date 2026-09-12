@@ -85,3 +85,24 @@ header {
     padding-block-end: 0;
   }
 }
+
+.map-section {
+  position: relative;
+}
+.temporal-map-caption {
+  position: absolute;
+  bottom: 2.5rem;
+  left: 1rem;
+  right: 1rem;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface);
+  padding: 0.5rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  font: var(--mat-sys-body-medium);
+}

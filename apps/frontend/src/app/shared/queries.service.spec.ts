@@ -1,7 +1,4 @@
-import {
-  provideHttpClient,
-  withXhr,
-} from '@angular/common/http';
+import { provideHttpClient, withXhr } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -10,10 +7,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { DateService } from './date.service';
 import { GraphqlClientService } from './graphql-client.service';
-import {
-  AddressSearchInputError,
-  QueriesService,
-} from './queries.service';
+import { AddressSearchInputError, QueriesService } from './queries.service';
 import { OccurrencesService } from './occurrences.service';
 
 describe('QueriesService', () => {
@@ -90,19 +84,18 @@ describe('QueriesService', () => {
     vi.advanceTimersByTime(1001);
     const olderValues: { lat: number; lon: number }[] = [];
     let olderCompleted = false;
-    service
-      .getAddressData('Rua A', 'São Paulo', 'São Paulo')
-      .subscribe({
-        next: (value) => {
-          if (value) olderValues.push(...value);
-        },
-        complete: () => {
-          olderCompleted = true;
-        },
-      });
-    const olderRequest = http.expectOne((request) =>
-      request.url.includes('/geocoding/search') &&
-      request.params.get('street') === 'Rua A'
+    service.getAddressData('Rua A', 'São Paulo', 'São Paulo').subscribe({
+      next: (value) => {
+        if (value) olderValues.push(...value);
+      },
+      complete: () => {
+        olderCompleted = true;
+      },
+    });
+    const olderRequest = http.expectOne(
+      (request) =>
+        request.url.includes('/geocoding/search') &&
+        request.params.get('street') === 'Rua A'
     );
 
     vi.advanceTimersByTime(1001);

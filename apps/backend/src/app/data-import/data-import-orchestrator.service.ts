@@ -97,7 +97,9 @@ export class DataImportService {
         validCategories,
         this.maxConcurrentImportOperations,
         async (category): Promise<ImportTarget[]> => {
-          let decisions: Awaited<ReturnType<ImportDecisionService['checkMultipleYears']>>;
+          let decisions: Awaited<
+            ReturnType<ImportDecisionService['checkMultipleYears']>
+          >;
           try {
             decisions = await this.importDecisionService.checkMultipleYears(
               category,
@@ -146,7 +148,9 @@ export class DataImportService {
         );
       }
       if (failures.length > 0) {
-        throw new Error(`Data import completed partially: ${failures.join('; ')}`);
+        throw new Error(
+          `Data import completed partially: ${failures.join('; ')}`
+        );
       }
     } finally {
       await this.cleanupFileCheckCache(fileCheckCache);
@@ -249,14 +253,14 @@ export class DataImportService {
             `${result.url}: ${result.error ?? 'unknown import failure'}`
         );
       this.logger.warn(
-        `Skipped ${failureCount}/${groupResults.length} failed external source file group(s): ${failedGroups.join(
-          '; '
-        )}`
+        `Skipped ${failureCount}/${
+          groupResults.length
+        } failed external source file group(s): ${failedGroups.join('; ')}`
       );
       throw new Error(
-        `Data import completed partially: ${failureCount}/${groupResults.length} source group(s) failed: ${failedGroups.join(
-          '; '
-        )}`
+        `Data import completed partially: ${failureCount}/${
+          groupResults.length
+        } source group(s) failed: ${failedGroups.join('; ')}`
       );
     }
 
@@ -271,9 +275,7 @@ export class DataImportService {
     const targets = validCategories.flatMap((category) =>
       category.years.map((year) => ({ category, year }))
     );
-    this.logger.log(
-      `Will import ${targets.length} category/year target(s)...`
-    );
+    this.logger.log(`Will import ${targets.length} category/year target(s)...`);
 
     await this.importTargetsOptimized(targets);
     await this.imlImportService.importAllData();
@@ -333,7 +335,9 @@ export class DataImportService {
 
     if (failures.length > 0) {
       throw new Error(
-        `Failed to import ${failures.length}/${yearsToImport.length} year(s) for ${category.name}: ${failures.join('; ')}`
+        `Failed to import ${failures.length}/${
+          yearsToImport.length
+        } year(s) for ${category.name}: ${failures.join('; ')}`
       );
     }
 
@@ -366,7 +370,9 @@ export class DataImportService {
 
     if (failures.length > 0) {
       throw new Error(
-        `Failed to import ${failures.length}/${category.years.length} year(s) for ${category.name}: ${failures.join('; ')}`
+        `Failed to import ${failures.length}/${
+          category.years.length
+        } year(s) for ${category.name}: ${failures.join('; ')}`
       );
     }
   }
@@ -463,9 +469,9 @@ export class DataImportService {
       prefetchedFile?.filePath ?? path.join(this.tempDir, fileName);
 
     this.logger.log(
-      `Downloading ${fileName} for ${
-        categories.length
-      } categories: ${categories.map((c) => c.name).join(', ')}`
+      `Downloading ${fileName} for ${categories.length} categories: ${categories
+        .map((c) => c.name)
+        .join(', ')}`
     );
 
     let fileHash = '';
@@ -534,9 +540,7 @@ export class DataImportService {
         categoriesToProcess.map((category) =>
           ioLimiter(async () => {
             try {
-              this.logger.log(
-                `Processing ${category.name} from ${fileName}`
-              );
+              this.logger.log(`Processing ${category.name} from ${fileName}`);
 
               const processingStart = Date.now();
 
@@ -564,9 +568,9 @@ export class DataImportService {
               this.logger.log(
                 `Successfully imported ${
                   category.name
-                } (${recordCount} records) in ${(
-                  processingTime / 1000
-                ).toFixed(1)}s`
+                } (${recordCount} records) in ${(processingTime / 1000).toFixed(
+                  1
+                )}s`
               );
 
               return {
@@ -605,7 +609,9 @@ export class DataImportService {
       const failedResults = categoryResults.filter((result) => !result.success);
       if (failedResults.length > 0) {
         throw new Error(
-          `Failed to process ${failedResults.length}/${categoriesToProcess.length} category/categories from ${fileName}: ${failedResults
+          `Failed to process ${failedResults.length}/${
+            categoriesToProcess.length
+          } category/categories from ${fileName}: ${failedResults
             .map(
               (result) =>
                 `${result.category}: ${result.error ?? 'unknown error'}`

@@ -56,4 +56,3 @@ describe('map feature response schemas', () => {
     ).toThrow();
   });
 });
-

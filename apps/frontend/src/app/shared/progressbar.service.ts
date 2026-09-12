@@ -10,14 +10,12 @@ export class ProgressBarService {
   }
 
   requestFinished(): void {
-    this.activeRequests.update((currentValue) =>
-      Math.max(currentValue - 1, 0)
-    );
+    this.activeRequests.update((currentValue) => Math.max(currentValue - 1, 0));
   }
 
   addToProgressBar(
     value: number,
-    currentProgress: WritableSignal<number>,
+    currentProgress: WritableSignal<number>
   ): void {
     currentProgress.update((currentValue) => currentValue + value);
   }

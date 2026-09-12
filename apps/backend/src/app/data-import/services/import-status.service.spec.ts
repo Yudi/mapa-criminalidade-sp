@@ -17,9 +17,9 @@ describe('ImportStatusService', () => {
   });
 
   it('counts only existing tables and reports missing tables without scanning them', async () => {
-    jest.spyOn(DataCategoryConfig, 'getDataCategories').mockReturnValue([
-      category,
-    ]);
+    jest
+      .spyOn(DataCategoryConfig, 'getDataCategories')
+      .mockReturnValue([category]);
     const databaseService = {
       checkTableExists: jest
         .fn()

@@ -48,25 +48,44 @@ describe('MapFeaturesEtlAggregator', () => {
     const mdip = getSourceTableConfig('mdip');
     if (!mdip) throw new Error('Expected MDIP adapter');
     const value = {
-      id: 1, NUM_BO: 'MDIP-TEST', ANO_BO: '2026', DP_ELABORACAO: '01 DP',
-      DP_CIRCUNSCRICAO: '02 DP', LATITUDE: '-23.55', LONGITUDE: '-46.63',
-      DATA_FATO: '2026-01-02', HORA_FATO: '09:30',
+      id: 1,
+      NUM_BO: 'MDIP-TEST',
+      ANO_BO: '2026',
+      DP_ELABORACAO: '01 DP',
+      DP_CIRCUNSCRICAO: '02 DP',
+      LATITUDE: '-23.55',
+      LONGITUDE: '-46.63',
+      DATA_FATO: '2026-01-02',
+      HORA_FATO: '09:30',
       NATUREZA_APURADA: 'MORTE DECORRENTE DE INTERVENÇÃO POLICIAL',
-      __etl_sort_num_bo: 'MDIP-TEST', __etl_sort_ano_bo: '2026',
-      __etl_sort_delegacia: '01 DP', __etl_sort_latitude_bucket: '-23.550000',
+      __etl_sort_num_bo: 'MDIP-TEST',
+      __etl_sort_ano_bo: '2026',
+      __etl_sort_delegacia: '01 DP',
+      __etl_sort_latitude_bucket: '-23.550000',
       __etl_sort_longitude_bucket: '-46.630000',
     };
     const quality = createEtlAggregationQuality();
     const result = new MapFeaturesEtlAggregator().aggregateRows(
       [value, { ...value, id: 2, LATITUDE: '0', LONGITUDE: '0' }],
-      'mdip', mdip, new Set(Object.keys(value)), undefined, quality
+      'mdip',
+      mdip,
+      new Set(Object.keys(value)),
+      undefined,
+      quality
     );
     expect(result.size).toBe(1);
     const feature = Array.from(result.values())[0];
     expect(feature.delegacia).toBe('01 DP');
-    expect(feature.data_ocorrencia?.toISOString()).toBe('2026-01-02T00:00:00.000Z');
-    expect(feature.feature_data.occurrence.delegacia_circunscricao).toBe('02 DP');
-    expect(feature.feature_data.records[0]).toMatchObject({ source_table: 'mdip', type: 'dados_criminais' });
+    expect(feature.data_ocorrencia?.toISOString()).toBe(
+      '2026-01-02T00:00:00.000Z'
+    );
+    expect(feature.feature_data.occurrence.delegacia_circunscricao).toBe(
+      '02 DP'
+    );
+    expect(feature.feature_data.records[0]).toMatchObject({
+      source_table: 'mdip',
+      type: 'dados_criminais',
+    });
     expect(quality.outsideSupportedAreaRows).toBe(1);
   });
 
@@ -76,9 +95,10 @@ describe('MapFeaturesEtlAggregator', () => {
     const second = row(2, 'BO-1', '-23.5000006');
     first.__etl_sort_latitude_bucket = '-23.500001';
     second.__etl_sort_latitude_bucket = '-23.500001';
-    const hash = (value: Record<string, unknown>) => Array.from(
-      aggregator.aggregateRows([value], tableName, config, columns).values()
-    )[0].location_hash;
+    const hash = (value: Record<string, unknown>) =>
+      Array.from(
+        aggregator.aggregateRows([value], tableName, config, columns).values()
+      )[0].location_hash;
     expect(hash(first)).toBe(hash(second));
   });
 
@@ -131,9 +151,8 @@ describe('MapFeaturesEtlAggregator', () => {
 
     expect(features.size).toBe(2);
     expect(
-      new Set(
-        Array.from(features.values()).map((item) => item.location_hash)
-      ).size
+      new Set(Array.from(features.values()).map((item) => item.location_hash))
+        .size
     ).toBe(2);
   });
 

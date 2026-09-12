@@ -35,9 +35,7 @@ describe('AppComponent', () => {
 
   beforeEach(async () => {
     occurrencesService = {
-      getDateRange: vi.fn(() =>
-        of(relativeDateRange)
-      ),
+      getDateRange: vi.fn(() => of(relativeDateRange)),
       getTileMetadata: vi.fn(() =>
         of({
           dateRange: relativeDateRange,
@@ -168,7 +166,9 @@ describe('AppComponent', () => {
       relativeDateRange.defaultAfter,
       undefined,
       undefined,
-      undefined
+      undefined,
+      undefined,
+      {}
     );
     subscription.unsubscribe();
   });
@@ -233,7 +233,9 @@ describe('AppComponent', () => {
       relativeDateRange.defaultAfter,
       undefined,
       undefined,
-      undefined
+      undefined,
+      undefined,
+      {}
     );
 
     subscription.unsubscribe();
@@ -350,5 +352,73 @@ describe('AppComponent', () => {
 
     app.onBoundsChange({ ...bounds, minLon: -50 });
     expect(occurrencesService.getTileMetadata).toHaveBeenCalledTimes(3);
+  });
+  it('keeps exact-area statistics fixed while panning and restores viewport queries when cleared', () => {
+    vi.useFakeTimers();
+    const app = TestBed.createComponent(AppComponent).componentInstance;
+    const subscription = app.categories.subscribe();
+    const bounds = {
+      minLon: -47,
+      minLat: -24,
+      maxLon: -46,
+      maxLat: -23,
+      zoom: 12,
+    };
+    const area = { longitude: -46.6, latitude: -23.5, radius: 500 };
+    app.onBoundsChange(bounds);
+    app.onAreaChange(area);
+    vi.advanceTimersByTime(300);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds.mock.calls[0][9]
+    ).toEqual(area);
+    app.onBoundsChange({ ...bounds, minLon: -48, zoom: 8 });
+    vi.advanceTimersByTime(300);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds
+    ).toHaveBeenCalledTimes(1);
+    app.onRubricasFormChange({ Furto: true });
+    expect(app.canOpenVisibleCharts).toBe(true);
+    app.onAreaChange(null);
+    vi.advanceTimersByTime(300);
+    expect(app.canLoadStats).toBe(false);
+    expect(app.canOpenVisibleCharts).toBe(false);
+    expect(app.viewportStatsLoading()).toBe(false);
+    app.onBoundsChange(bounds);
+    vi.advanceTimersByTime(300);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds
+    ).toHaveBeenCalledTimes(2);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds.mock.calls[1][9]
+    ).toBeUndefined();
+    subscription.unsubscribe();
+  });
+
+  it('does not expose a previous scope response during the area debounce', () => {
+    vi.useFakeTimers();
+    const pending = new Subject<{ categories: CategoryInfo[]; periods: [] }>();
+    occurrencesService.getCategoryPeriodStatsForBounds.mockReturnValueOnce(
+      pending
+    );
+    const app = TestBed.createComponent(AppComponent).componentInstance;
+    const emissions: CategoryInfo[][] = [];
+    const subscription = app.categories.subscribe((value) =>
+      emissions.push(value)
+    );
+    app.onBoundsChange({
+      minLon: -47,
+      minLat: -24,
+      maxLon: -46,
+      maxLat: -23,
+      zoom: 12,
+    });
+    vi.advanceTimersByTime(300);
+    app.onAreaChange({ longitude: -46.6, latitude: -23.5, radius: 500 });
+    pending.next({ categories, periods: [] });
+    expect(emissions).toEqual([]);
+    expect(app.viewportStatsLoading()).toBe(true);
+    vi.advanceTimersByTime(300);
+    expect(emissions).toEqual([categories]);
+    subscription.unsubscribe();
   });
 });

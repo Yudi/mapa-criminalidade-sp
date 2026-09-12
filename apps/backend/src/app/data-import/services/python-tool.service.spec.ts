@@ -15,10 +15,7 @@ describe('PythonToolService process boundary', () => {
     process.env.DATA_IMPORT_SUBPROCESS_OUTPUT_LIMIT_BYTES = '1024';
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'python-tool-'));
     const scriptPath = path.join(directory, 'child.js');
-    await fs.writeFile(
-      scriptPath,
-      "process.stdout.write('x'.repeat(4096));\n"
-    );
+    await fs.writeFile(scriptPath, "process.stdout.write('x'.repeat(4096));\n");
     const service = new PythonToolService();
     jest
       .spyOn(

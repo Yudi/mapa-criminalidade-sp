@@ -1,17 +1,58 @@
-<section class="chart-card">
+<section class="chart-card" [class.chart-card--plain]="config().compact">
   <header class="chart-card__header">
+    @if (!config().compact) {
     <span class="chart-card__icon" aria-hidden="true">
       <mat-icon>{{ config().icon }}</mat-icon>
     </span>
+    }
     <span class="chart-card__title-group">
       <span class="chart-card__title">{{ config().title }}</span>
-      <span class="chart-card__subtitle">{{ config().subtitle }}</span>
+      @if (config().subtitle) {
+      <span class="chart-card__subtitle">{{ config().subtitle }}</span> }
     </span>
   </header>
 
   @if (hasData()) {
-  <div #chartHost class="chart-card__chart"></div>
-  } @else {
+  <div
+    #chartHost
+    class="chart-card__chart"
+    [class.chart-card__chart--filterable]="config().filterKey"
+    role="img"
+    [attr.aria-label]="
+      config().filterKey
+        ? config().title +
+          '. Os valores podem ser usados como filtro na lista abaixo.'
+        : config().title
+    "
+  ></div>
+  @if (config().filterKey) {
+  <details class="chart-card__values">
+    <summary>
+      Selecionar valores @if (config().selectedValues?.length) {
+      <span>({{ config().selectedValues?.length }} selecionado(s))</span>
+      }
+    </summary>
+    <p>Selecione um ou mais valores no gráfico ou nesta lista.</p>
+    <div
+      class="chart-card__options"
+      role="group"
+      [attr.aria-label]="'Filtros de ' + config().title"
+    >
+      @for (bucket of config().buckets; track bucket.filterValue ??
+      bucket.label) { @if (filterValue(bucket); as value) {
+      <button
+        mat-button
+        type="button"
+        [disabled]="busy()"
+        [attr.aria-pressed]="config().selectedValues?.includes(value) ?? false"
+        (click)="selectBucket(bucket)"
+      >
+        {{ bucket.label }} ({{ bucket.count }})
+      </button>
+      } }
+    </div>
+  </details>
+  } } @else {
   <div class="chart-card__empty">
     <mat-icon>bar_chart_off</mat-icon>
     <span>{{ config().emptyText ?? 'Sem dados para este recorte' }}</span>

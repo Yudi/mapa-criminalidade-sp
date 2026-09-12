@@ -53,9 +53,7 @@ export class DatabaseService {
     const postgresPath = convertToPostgresSharedPath(localPath);
 
     if (postgresPath !== localPath) {
-      this.logger.log(
-        `Docker path conversion: ${localPath} → ${postgresPath}`
-      );
+      this.logger.log(`Docker path conversion: ${localPath} → ${postgresPath}`);
       return postgresPath;
     }
 
@@ -155,7 +153,9 @@ export class DatabaseService {
       SELECT DISTINCT ${quoteIdentifier('MES_REFERENCIA')} AS month
       FROM ${this.rawTable(tableName)}
       WHERE ${quoteIdentifier('MES_REFERENCIA')} ~ '^(?:[1-9]|1[0-2])$'
-        AND ${quoteIdentifier('ANO_REFERENCIA')} = ${quoteLiteral(referenceYear)}
+        AND ${quoteIdentifier('ANO_REFERENCIA')} = ${quoteLiteral(
+      referenceYear
+    )}
     `);
 
     return new Set(result.map((row) => Number(row.month)));
@@ -179,7 +179,9 @@ export class DatabaseService {
     await db.$executeRawUnsafe(`
       DELETE FROM ${this.rawTable(tableName)}
       WHERE ${quoteIdentifier('ANO_REFERENCIA')} = ${quoteLiteral(String(year))}
-        AND ${quoteIdentifier('MES_REFERENCIA')} = ${quoteLiteral(String(month))}
+        AND ${quoteIdentifier('MES_REFERENCIA')} = ${quoteLiteral(
+      String(month)
+    )}
     `);
   }
   async getTableColumns(
@@ -292,7 +294,9 @@ export class DatabaseService {
       return hasMixedCase || hasOnlyBasicColumns;
     } catch (error) {
       this.logger.debug(
-        `Could not analyze table ${tableName} for normalization: ${getErrorMessage(error)}`
+        `Could not analyze table ${tableName} for normalization: ${getErrorMessage(
+          error
+        )}`
       );
       return false;
     }
@@ -326,9 +330,9 @@ export class DatabaseService {
       `Source columns (${sourceColumns.length}): ${sourceColumns.join(', ')}`
     );
     this.logger.debug(
-      `Existing DB columns (${
-        existingColumns.length
-      }): ${existingColumns.join(', ')}`
+      `Existing DB columns (${existingColumns.length}): ${existingColumns.join(
+        ', '
+      )}`
     );
 
     const missingColumns = sourceColumns.filter(
@@ -345,9 +349,7 @@ export class DatabaseService {
     );
 
     this.logger.debug(
-      `Missing columns (${missingColumns.length}): ${missingColumns.join(
-        ', '
-      )}`
+      `Missing columns (${missingColumns.length}): ${missingColumns.join(', ')}`
     );
 
     if (missingColumns.length > 0) {
@@ -510,8 +512,7 @@ export class DatabaseService {
       mappedColumns,
       unmatchedColumns,
       duplicateTargetColumns,
-    } =
-      matchCsvColumnsToTableColumns(csvColumns, actualColumns, this.logger);
+    } = matchCsvColumnsToTableColumns(csvColumns, actualColumns, this.logger);
 
     this.logger.debug(
       `Column mapping: ${mappedColumns.length} mapped, ${unmatchedColumns.length} unmatched`
@@ -541,7 +542,9 @@ export class DatabaseService {
       );
     }
     const dbColumnsToUse = Array.from(columnMapping.values());
-    const manifestRowCount = await this.verifyCsvPreparationManifest(csvFilePath);
+    const manifestRowCount = await this.verifyCsvPreparationManifest(
+      csvFilePath
+    );
     const sourceRowCount =
       manifestRowCount ?? (await countCsvDataRows(csvFilePath));
 
@@ -647,7 +650,7 @@ export class DatabaseService {
   }
 
   private async verifyCsvPreparationManifest(
-    csvFilePath: string,
+    csvFilePath: string
   ): Promise<number | undefined> {
     const manifestPath = `${csvFilePath}.manifest.json`;
     let content: string;
@@ -710,5 +713,4 @@ export class DatabaseService {
       },
     });
   }
-
 }

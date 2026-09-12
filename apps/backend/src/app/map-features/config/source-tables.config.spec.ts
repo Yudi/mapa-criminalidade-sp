@@ -134,8 +134,8 @@ describe('source table config', () => {
       (sourceConfig) => sourceConfig.tablePattern === 'celulares'
     );
 
-    expect(() =>
-      config?.extractRecord({}, 'celulares_2026')
-    ).toThrow('Source row is missing a valid positive id');
+    expect(() => config?.extractRecord({}, 'celulares_2026')).toThrow(
+      'Source row is missing a valid positive id'
+    );
   });
 });

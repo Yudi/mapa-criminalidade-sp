@@ -8,9 +8,7 @@
   "targets": {
     "build": {
       "executor": "@angular/build:application",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "baseHref": "/app/",
         "outputPath": "dist/apps/frontend",
@@ -24,9 +22,7 @@
             "input": "apps/frontend/public"
           }
         ],
-        "styles": [
-          "apps/frontend/src/styles.scss"
-        ],
+        "styles": ["apps/frontend/src/styles.scss"],
         "server": "apps/frontend/src/main.server.ts",
         "ssr": {
           "entry": "apps/frontend/src/server.ts"
@@ -77,9 +73,7 @@
         }
       },
       "defaultConfiguration": "development",
-      "dependsOn": [
-        "backend:serve"
-      ],
+      "dependsOn": ["backend:serve"],
       "options": {
         "proxyConfig": "apps/frontend/proxy.conf.json"
       }
@@ -90,14 +84,63 @@
         "buildTarget": "frontend:build"
       }
     },
+    "storybook": {
+      "continuous": true,
+      "executor": "@storybook/angular:start-storybook",
+      "options": {
+        "port": 4400,
+        "configDir": "apps/frontend/.storybook",
+        "browserTarget": "frontend:build",
+        "compodoc": false
+      },
+      "configurations": {
+        "ci": {
+          "quiet": true
+        }
+      }
+    },
+    "build-storybook": {
+      "executor": "@storybook/angular:build-storybook",
+      "outputs": ["{options.outputDir}"],
+      "options": {
+        "outputDir": "dist/storybook/frontend",
+        "configDir": "apps/frontend/.storybook",
+        "browserTarget": "frontend:build",
+        "compodoc": false
+      },
+      "configurations": {
+        "ci": {
+          "quiet": true
+        }
+      }
+    },
+    "test-storybook": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "test-storybook -c apps/frontend/.storybook --url=http://localhost:4400 --maxWorkers=2"
+      }
+    },
+    "static-storybook": {
+      "continuous": true,
+      "executor": "@nx/web:file-server",
+      "options": {
+        "buildTarget": "frontend:build-storybook",
+        "port": 4400,
+        "staticFilePath": "dist/storybook/frontend",
+        "spa": true
+      },
+      "configurations": {
+        "ci": {
+          "buildTarget": "frontend:build-storybook:ci"
+        }
+      }
+    },
     "lint": {
       "executor": "@nx/eslint:lint"
     },
     "test": {
       "executor": "@angular/build:unit-test",
-      "outputs": [
-        "{workspaceRoot}/coverage/frontend"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/frontend"],
       "options": {
         "buildTarget": "frontend:build:development",
         "runner": "vitest",

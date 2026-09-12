@@ -28,7 +28,11 @@ describe('DevelopmentOnlyGuard', () => {
 
     expect(
       guard.canActivate(
-        httpContext({ method: 'GET', path: '/api/data-import/status', socket: { remoteAddress: '::1' } })
+        httpContext({
+          method: 'GET',
+          path: '/api/data-import/status',
+          socket: { remoteAddress: '::1' },
+        })
       )
     ).toBe(true);
   });

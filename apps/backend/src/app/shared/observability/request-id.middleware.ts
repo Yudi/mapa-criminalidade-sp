@@ -16,9 +16,8 @@ export class RequestIdMiddleware implements NestMiddleware {
 
   use(request: RequestWithId, response: Response, next: NextFunction): void {
     const incoming = request.header(REQUEST_ID_HEADER);
-    const requestId = incoming && SAFE_REQUEST_ID.test(incoming)
-      ? incoming
-      : randomUUID();
+    const requestId =
+      incoming && SAFE_REQUEST_ID.test(incoming) ? incoming : randomUUID();
 
     request.requestId = requestId;
     response.setHeader(REQUEST_ID_HEADER, requestId);
@@ -41,7 +40,9 @@ export class RequestIdMiddleware implements NestMiddleware {
       );
     };
     response.once('finish', () => logTerminal('finished'));
-    response.once('close', () => logTerminal(response.writableFinished ? 'finished' : 'aborted'));
+    response.once('close', () =>
+      logTerminal(response.writableFinished ? 'finished' : 'aborted')
+    );
 
     next();
   }

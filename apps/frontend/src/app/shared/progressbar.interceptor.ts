@@ -7,7 +7,8 @@ import { ProgressBarService } from './progressbar.service';
 export const progressBarInterceptor: HttpInterceptorFn = (request, next) => {
   const progressBarService = inject(ProgressBarService);
   const isBackendRequest =
-    request.url.startsWith(environment.apiUrl) || request.url.startsWith('/api');
+    request.url.startsWith(environment.apiUrl) ||
+    request.url.startsWith('/api');
 
   if (!isBackendRequest) {
     return next(request);

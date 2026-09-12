@@ -14,12 +14,7 @@ import { MatIconButton } from '@angular/material/button';
 
 @Component({
   selector: 'app-toolbar',
-  imports: [
-    MatToolbar,
-    MatProgressBar,
-    MatIcon,
-    MatIconButton,
-  ],
+  imports: [MatToolbar, MatProgressBar, MatIcon, MatIconButton],
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

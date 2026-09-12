@@ -1,3 +1,4 @@
+import { MapFeatureTemporalStats } from '@mapa-criminalidade/shared-types';
 import { Service, inject } from '@angular/core';
 import {
   Observable,
@@ -16,6 +17,7 @@ import {
   DateRange,
   GroupedOccurrenceByBoQuery,
   MapFeatureFilterInput,
+  MapFeatureDetailFilters,
   MapFeatureLocationInput,
   MapFeatureLookupInput,
   MapFeatureResponse,
@@ -87,7 +89,9 @@ export class OccurrencesService {
     after?: string,
     periods?: string[],
     startHour?: number,
-    endHour?: number
+    endHour?: number,
+    area?: MapFeatureFilterInput['area'],
+    details?: MapFeatureDetailFilters
   ): Observable<MapFeaturesCategoryPeriodStats> {
     if (
       ![minLon, minLat, maxLon, maxLat].every(Number.isFinite) ||
@@ -103,12 +107,13 @@ export class OccurrencesService {
     const formattedAfter = after ? this.dateService.formatYYYYMMDD(after) : '';
 
     const filter: MapFeatureFilterInput = {
+      ...details,
       beforeDate: formattedBefore || undefined,
       afterDate: formattedAfter || undefined,
       periods,
       startHour,
       endHour,
-      bounds: { minLon, minLat, maxLon, maxLat },
+      ...(area ? { area } : { bounds: { minLon, minLat, maxLon, maxLat } }),
     };
 
     const cacheKey = this.filterCacheKey('category-period-stats', filter);
@@ -125,7 +130,28 @@ export class OccurrencesService {
     );
   }
 
-  getChartsForBounds(filter: MapFeatureFilterInput): Observable<MapFeatureCharts> {
+  getTemporalStats(
+    filter: MapFeatureFilterInput
+  ): Observable<MapFeatureTemporalStats> {
+    // The backend cache is revision-aware; do not retain temporal snapshots across imports.
+    return this.graphql
+      .request<
+        { mapFeaturesTemporalStats: MapFeatureTemporalStats },
+        { filter: MapFeatureFilterInput }
+      >({
+        query: `query TemporalStats($filter: MapFeatureFilterInput!) {
+        mapFeaturesTemporalStats(filter: $filter) {
+          datasetRevision total monthly { label count } categories { label count }
+        }
+      }`,
+        variables: { filter },
+      })
+      .pipe(map((data) => data.mapFeaturesTemporalStats));
+  }
+
+  getChartsForBounds(
+    filter: MapFeatureFilterInput
+  ): Observable<MapFeatureCharts> {
     const cacheKey = this.filterCacheKey('charts-bounds', filter);
     return this.cachedRequest(cacheKey, () =>
       this.graphql
@@ -188,10 +214,7 @@ export class OccurrencesService {
 
     return this.cachedRequest(`by-num-bo-${normalizedNumBo}`, () =>
       this.graphql
-        .request<
-          GroupedOccurrenceByBoQuery,
-          { input: MapFeatureLookupInput }
-        >({
+        .request<GroupedOccurrenceByBoQuery, { input: MapFeatureLookupInput }>({
           query: GROUPED_OCCURRENCE_BY_BO_QUERY,
           variables: { input: { numBo: normalizedNumBo } },
         })
@@ -207,37 +230,39 @@ export class OccurrencesService {
       return throwError(() => new Error('Identificador do BO inválido'));
     }
 
-    return this.cachedRequest(`by-num-bo-year-${normalizedNumBo}-${anoBo}`, () =>
-      this.graphql
-        .request<
-          GroupedOccurrenceByBoQuery,
-          { input: MapFeatureLookupInput }
-        >({
-          query: GROUPED_OCCURRENCE_BY_BO_QUERY,
-          variables: { input: { numBo: normalizedNumBo, anoBo } },
-        })
-        .pipe(map((data) => parseGroupedOccurrence(data.groupedOccurrenceByBo)))
+    return this.cachedRequest(
+      `by-num-bo-year-${normalizedNumBo}-${anoBo}`,
+      () =>
+        this.graphql
+          .request<
+            GroupedOccurrenceByBoQuery,
+            { input: MapFeatureLookupInput }
+          >({
+            query: GROUPED_OCCURRENCE_BY_BO_QUERY,
+            variables: { input: { numBo: normalizedNumBo, anoBo } },
+          })
+          .pipe(
+            map((data) => parseGroupedOccurrence(data.groupedOccurrenceByBo))
+          )
     );
   }
-  getFullFeature(
-    featureId: string
-  ): Observable<MapFeatureResponse | null> {
+  getFullFeature(featureId: string): Observable<MapFeatureResponse | null> {
     const normalizedFeatureId = featureId.trim();
     if (!normalizedFeatureId) {
-      return throwError(() => new Error('Identificador da ocorrência inválido'));
+      return throwError(
+        () => new Error('Identificador da ocorrência inválido')
+      );
     }
 
     const input = { id: normalizedFeatureId };
 
-    return this.cachedRequest(
-      this.filterCacheKey('full-feature', input),
-      () =>
-        this.graphql
-          .request<MapFeatureByIdQuery, { id: string }>({
-            query: MAP_FEATURE_BY_ID_QUERY,
-            variables: { id: normalizedFeatureId },
-          })
-          .pipe(map((data) => parseMapFeatureResponse(data.mapFeatureById)))
+    return this.cachedRequest(this.filterCacheKey('full-feature', input), () =>
+      this.graphql
+        .request<MapFeatureByIdQuery, { id: string }>({
+          query: MAP_FEATURE_BY_ID_QUERY,
+          variables: { id: normalizedFeatureId },
+        })
+        .pipe(map((data) => parseMapFeatureResponse(data.mapFeatureById)))
     );
   }
   clearCache(): void {

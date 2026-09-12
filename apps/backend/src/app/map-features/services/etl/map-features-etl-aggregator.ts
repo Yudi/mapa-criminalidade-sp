@@ -95,7 +95,9 @@ export class MapFeaturesEtlAggregator {
       const canonicalLat = Number(row.__etl_sort_latitude_bucket);
       const canonicalLon = Number(row.__etl_sort_longitude_bucket);
       if (!Number.isFinite(canonicalLat) || !Number.isFinite(canonicalLon)) {
-        throw new Error('ETL source row is missing canonical coordinate buckets');
+        throw new Error(
+          'ETL source row is missing canonical coordinate buckets'
+        );
       }
       const locationHash = this.createLocationHash(canonicalLat, canonicalLon);
       const key = this.getCanonicalGroupKey(row);
