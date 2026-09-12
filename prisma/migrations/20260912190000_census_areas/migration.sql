@@ -49,7 +49,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.census_releases WHERE id=release_key) THEN
     RAISE EXCEPTION 'Unknown census release' USING ERRCODE = '22023';
   END IF;
-  IF z < CASE WHEN area_level='municipality' THEN 6 ELSE 11 END THEN
+  IF z < (CASE WHEN area_level = 'municipality' THEN 6 ELSE 11 END) THEN
     RETURN ''::bytea;
   END IF;
   WITH bounds AS (SELECT ST_TileEnvelope(z,x,y) AS envelope),

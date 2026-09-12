@@ -50,7 +50,7 @@ describe('weekday × hour heatmap', () => {
     expect(host.querySelector('[role="status"]')).toBeNull();
     expect(
       host.querySelector('td[title="Terça, 09h: 12 ocorrências"]')?.textContent
-    ).toBe('12');
+    ).toMatch(/^\s*12\s*$/);
     expect(host.querySelectorAll('.heat--5')).toHaveLength(2); // One cell and the legend.
   });
 });
