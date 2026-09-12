@@ -310,4 +310,45 @@ describe('AppComponent', () => {
     expect(app.datasetRevision).toBe('revision-b');
     expect(occurrencesService.getTileMetadata).toHaveBeenCalledTimes(2);
   });
+
+  it('retries failed metadata on pan and clears the error only after recovery', () => {
+    const recoveredMetadata = new Subject<{
+      dateRange: DateRange;
+      datasetRevision: string;
+    }>();
+    occurrencesService.getTileMetadata
+      .mockReturnValueOnce(throwError(() => new Error('offline')))
+      .mockReturnValueOnce(throwError(() => new Error('still offline')))
+      .mockReturnValueOnce(recoveredMetadata);
+    const app = TestBed.createComponent(AppComponent).componentInstance;
+    const bounds = {
+      minLon: -47,
+      minLat: -24,
+      maxLon: -46,
+      maxLat: -23,
+      zoom: MIN_CRIME_TILE_ZOOM,
+    };
+
+    app.onBoundsChange(bounds);
+    expect(app.metadataLoadError()).toBe(true);
+    expect(app.metadataLoading()).toBe(false);
+
+    app.onBoundsChange({ ...bounds, minLon: -48 });
+    expect(app.metadataLoadError()).toBe(true);
+    expect(app.metadataLoading()).toBe(true);
+
+    app.onBoundsChange({ ...bounds, minLon: -49 });
+    expect(occurrencesService.getTileMetadata).toHaveBeenCalledTimes(3);
+
+    recoveredMetadata.next({
+      dateRange: relativeDateRange,
+      datasetRevision: 'recovered-revision',
+    });
+    expect(app.metadataLoadError()).toBe(false);
+    expect(app.metadataLoading()).toBe(false);
+    expect(app.datasetRevision).toBe('recovered-revision');
+
+    app.onBoundsChange({ ...bounds, minLon: -50 });
+    expect(occurrencesService.getTileMetadata).toHaveBeenCalledTimes(3);
+  });
 });

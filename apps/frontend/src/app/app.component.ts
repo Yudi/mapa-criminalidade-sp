@@ -273,6 +273,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   onBoundsChange(bounds: MapBounds) {
     this.currentBounds = bounds;
     this.boundsSubject.next(bounds);
+    if (this.metadataLoadError() && !this.metadataLoading()) {
+      this.loadMetadata();
+    }
     this.changeDetectorRef.markForCheck();
   }
 
@@ -433,10 +436,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   private loadMetadata(): void {
-    if (this.isDestroyed || !this.isBrowserOnly) return;
+    if (this.isDestroyed || !this.isBrowserOnly || this.metadataLoading()) return;
 
     this.metadataLoading.set(true);
-    this.metadataLoadError.set(false);
     this.occurrencesService
       .getTileMetadata()
       .pipe(
@@ -448,6 +450,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       )
       .subscribe({
         next: (metadata) => {
+          this.metadataLoadError.set(false);
           const revisionChanged =
             this.metadataLoaded && this.datasetRevision !== metadata.datasetRevision;
 
