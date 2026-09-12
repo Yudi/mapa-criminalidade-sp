@@ -34,7 +34,7 @@ function filterForArgs(args: VisibleChartsStoryArgs): MapFeatureFilterInput {
       ? {
           vehicleBrands: ['VW'],
           objectTypes: ['TELEFONE CELULAR'],
-          phoneBrandModels: ['Samsung · Galaxy'],
+          phoneBrandModels: ['Samsung - Galaxy'],
           locationTypes: ['VIA PUBLICA'],
           weekdays: [1, 5],
         }

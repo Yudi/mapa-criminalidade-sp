@@ -58,7 +58,7 @@ export class WeekdayHourBucketObject {
 
   @Field(() => Int, {
     nullable: true,
-    description: 'Recorded hour, 0–23. Null means unknown hour.',
+    description: 'Recorded hour, 0-23. Null means unknown hour.',
   })
   hour!: number | null;
 
@@ -184,7 +184,20 @@ export class MapFeatureBoundsInput {
 }
 
 @InputType()
+export class CensusAreaReferenceInput {
+  @Field(() => String)
+  releaseId!: string;
+  @Field(() => String)
+  level!: 'municipality' | 'neighborhood';
+  @Field(() => String)
+  code!: string;
+}
+
+@InputType()
 export class AnalysisAreaInput {
+  @Field(() => CensusAreaReferenceInput, { nullable: true })
+  census?: CensusAreaReferenceInput;
+
   @Field(() => String, {
     nullable: true,
     description:

@@ -20,9 +20,9 @@ describe('PythonToolService process boundary', () => {
     jest
       .spyOn(
         service as unknown as {
-          resolveAssetScript: (name: string) => Promise<string>;
+          resolveAssetPath: (name: string) => Promise<string>;
         },
-        'resolveAssetScript'
+        'resolveAssetPath'
       )
       .mockResolvedValue(scriptPath);
 
@@ -41,9 +41,9 @@ describe('PythonToolService process boundary', () => {
     jest
       .spyOn(
         service as unknown as {
-          resolveAssetScript: (name: string) => Promise<string>;
+          resolveAssetPath: (name: string) => Promise<string>;
         },
-        'resolveAssetScript'
+        'resolveAssetPath'
       )
       .mockResolvedValue(scriptPath);
 

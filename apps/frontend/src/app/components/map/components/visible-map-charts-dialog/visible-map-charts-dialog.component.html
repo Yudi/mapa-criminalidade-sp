@@ -94,7 +94,9 @@
     <span>
       @if (data.filter.area) { Área selecionada:
       {{
-        data.filter.area.polygon
+        data.filter.area.census
+          ? 'Limite territorial oficial do IBGE'
+          : data.filter.area.polygon
           ? 'polígono desenhado'
           : 'raio de ' + data.filter.area.radius + ' metros'
       }}. } @else if (hasActiveFilters()) { Recorte com filtros ativos e limites

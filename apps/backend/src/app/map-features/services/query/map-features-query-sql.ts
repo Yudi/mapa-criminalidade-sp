@@ -31,7 +31,7 @@ export const PERIOD_SORT_SQL = `
 const OCCURRENCE_HOUR_SQL = `hora_ocorrencia`;
 const PHONE_BRAND_MODEL_SQL = `
   concat_ws(
-    ' · ',
+    ' - ',
     COALESCE(NULLIF(btrim(record.value->>'marca'), ''), 'Marca não informada'),
     NULLIF(btrim(record.value->>'descr_subtipo_objeto'), '')
   )
@@ -411,7 +411,13 @@ export function appendSqlFilters(
 
   if (includeBounds && params?.area) {
     const area = params.area;
-    if (area.polygon != null) {
+    if (area.census) {
+      const ref = area.census;
+      const geometry = `(SELECT geom FROM census_areas WHERE release_id = $${paramIndex++}
+        AND level = $${paramIndex++} AND code = $${paramIndex++})`;
+      conditions.push(`geom && ${geometry} AND ST_Covers(${geometry}, geom)`);
+      queryParams.push(ref.releaseId, ref.level, ref.code);
+    } else if (area.polygon != null) {
       const geometry = `ST_SetSRID(ST_GeomFromGeoJSON($${paramIndex++}), 4326)`;
       conditions.push(`geom && ${geometry} AND ST_Covers(${geometry}, geom)`);
       queryParams.push(area.polygon);

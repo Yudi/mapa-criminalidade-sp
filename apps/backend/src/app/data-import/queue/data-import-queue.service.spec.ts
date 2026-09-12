@@ -183,3 +183,96 @@ describe('DataImportQueueService', () => {
     expect(queue.add).not.toHaveBeenCalled();
   });
 });
+
+describe('automatic census queue initialization', () => {
+  function createService(existing?: {
+    getState: jest.Mock;
+    remove: jest.Mock;
+  }) {
+    const queue = {
+      getJob: jest.fn().mockResolvedValue(existing),
+      add: jest.fn().mockResolvedValue({ id: 'census-test' }),
+    };
+    const censusImportService = {
+      configuredRelease: jest.fn().mockResolvedValue({ id: 'ibge-test' }),
+      ensureImported: jest
+        .fn()
+        .mockResolvedValue({
+          releaseId: 'ibge-test',
+          outcome: 'already-installed',
+        }),
+    };
+    const mapFeaturesEtlService = { runIncrementalEtl: jest.fn() };
+    const service = Object.assign(
+      Object.create(DataImportQueueService.prototype),
+      {
+        queue,
+        censusImportService,
+        mapFeaturesEtlService,
+        logger: { log: jest.fn() },
+      }
+    ) as {
+      enqueueCensusCheck(): Promise<void>;
+      processJob(job: unknown): Promise<unknown>;
+    };
+    return { service, queue, censusImportService, mapFeaturesEtlService };
+  }
+  it('enqueues a deduplicated startup check with bounded retries, never a repeat schedule', async () => {
+    const { service, queue } = createService();
+    await service.enqueueCensusCheck();
+    expect(queue.add).toHaveBeenCalledWith(
+      'ensure-census',
+      expect.objectContaining({
+        requestedBy: 'bootstrap',
+        censusReleaseId: 'ibge-test',
+      }),
+      {
+        jobId: 'census-ibge-test',
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 60000 },
+      }
+    );
+  });
+  it('keeps an in-flight check and its existing retry state', async () => {
+    const existing = {
+      getState: jest.fn().mockResolvedValue('delayed'),
+      remove: jest.fn(),
+    };
+    const { service, queue } = createService(existing);
+    await service.enqueueCensusCheck();
+    expect(existing.remove).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+  it('does not mistake retained Redis completion for a complete database after a restore', async () => {
+    const existing = {
+      getState: jest.fn().mockResolvedValue('completed'),
+      remove: jest.fn().mockResolvedValue(undefined),
+    };
+    const { service, queue } = createService(existing);
+    await service.enqueueCensusCheck();
+    expect(existing.remove).toHaveBeenCalledTimes(1);
+    expect(queue.add).toHaveBeenCalledTimes(1);
+  });
+  it('routes census checks without running crime imports or crime ETL', async () => {
+    const { service, censusImportService, mapFeaturesEtlService } =
+      createService();
+    const updateProgress = jest.fn().mockResolvedValue(undefined);
+    await expect(
+      service.processJob({
+        name: 'ensure-census',
+        data: {
+          requestedAt: '2026-09-12T00:00:00.000Z',
+          requestedBy: 'bootstrap',
+          reason: 'ensure census',
+          censusReleaseId: 'ibge-test',
+        },
+        updateProgress,
+      })
+    ).resolves.toMatchObject({ censusOutcome: 'already-installed' });
+    expect(censusImportService.ensureImported).toHaveBeenCalledWith(
+      'ibge-test',
+      expect.any(Function)
+    );
+    expect(mapFeaturesEtlService.runIncrementalEtl).not.toHaveBeenCalled();
+  });
+});

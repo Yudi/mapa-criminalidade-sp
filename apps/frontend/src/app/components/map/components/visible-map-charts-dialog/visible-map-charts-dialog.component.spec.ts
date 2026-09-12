@@ -27,7 +27,7 @@ const charts: MapFeatureCharts = {
   ],
   vehicleBrandDistribution: [{ label: 'VW', filterValue: 'VW', count: 1 }],
   phoneBrandDistribution: [
-    { label: 'Samsung · Galaxy', filterValue: 'Samsung · Galaxy', count: 1 },
+    { label: 'Samsung - Galaxy', filterValue: 'Samsung - Galaxy', count: 1 },
   ],
   locationTypeDistribution: [],
   policeCircumscriptionDistribution: [],
@@ -108,17 +108,17 @@ describe('chart drilldown', () => {
     component.selectBucket({ key: 'weekdays', value: 2 });
     component.selectBucket({
       key: 'phoneBrandModels',
-      value: 'Samsung · Galaxy',
+      value: 'Samsung - Galaxy',
     });
 
     expect(component.filter()).toMatchObject({
       weekdays: [1, 2],
-      phoneBrandModels: ['Samsung · Galaxy'],
+      phoneBrandModels: ['Samsung - Galaxy'],
     });
     expect(getChartsForBounds).toHaveBeenCalledWith({
       ...filter,
       weekdays: undefined,
-      phoneBrandModels: ['Samsung · Galaxy'],
+      phoneBrandModels: ['Samsung - Galaxy'],
     });
 
     component.selectBucket({ key: 'weekdays', value: 1 });

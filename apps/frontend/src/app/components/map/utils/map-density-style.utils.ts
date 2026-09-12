@@ -4,28 +4,28 @@ import { Fill, Stroke, Style, Text } from 'ol/style';
 // Fixed count bands: zooming/panning cannot rescale the same count's color.
 export const DENSITY_BANDS = [
   {
-    label: '1–9',
+    label: '1-9',
     min: 1,
     max: 9,
     color: 'rgb(222 235 247 / 68%)',
     foreground: '#102a43',
   },
   {
-    label: '10–49',
+    label: '10-49',
     min: 10,
     max: 49,
     color: 'rgb(158 202 225 / 68%)',
     foreground: '#102a43',
   },
   {
-    label: '50–199',
+    label: '50-199',
     min: 50,
     max: 199,
     color: 'rgb(66 146 198 / 68%)',
     foreground: '#082033',
   },
   {
-    label: '200–999',
+    label: '200-999',
     min: 200,
     max: 999,
     color: 'rgb(8 81 156 / 68%)',

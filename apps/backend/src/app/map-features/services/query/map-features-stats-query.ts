@@ -224,14 +224,17 @@ export class MapFeaturesStatsQuery {
           CategoryPeriodStatsQueryRow[]
         >(
           `
+            -- Expand category arrays only after collapsing repeated metadata combinations.
             WITH visible_features AS MATERIALIZED (
               SELECT
                 category,
                 rubrica_for_styling,
                 all_rubricas,
-                periodo_normalized
+                periodo_normalized,
+                COUNT(*) AS feature_count
               FROM map_features
               WHERE ${baseConditions.join(' AND ')}
+              GROUP BY category, rubrica_for_styling, all_rubricas, periodo_normalized
             )
             SELECT
               (
@@ -242,7 +245,7 @@ export class MapFeaturesStatsQuery {
                 FROM (
                   SELECT
                     category_bucket.category_name AS category,
-                    COUNT(*) AS count,
+                    SUM(feature_count) AS count,
                     COALESCE(
                       MAX(
                         CASE
@@ -273,7 +276,7 @@ export class MapFeaturesStatsQuery {
                 FROM (
                   SELECT
                     ${PERIOD_LABEL_SQL} AS name,
-                    COUNT(*) AS count,
+                    SUM(feature_count) AS count,
                     ${PERIOD_SORT_SQL} AS sort_order
                   FROM visible_features
                   WHERE ${PERIOD_SQL} IS NOT NULL
@@ -432,6 +435,12 @@ export class MapFeaturesStatsQuery {
       getMapFeaturesStatsCacheTtl(params),
       async () => {
         if (
+          params?.area ||
+          params?.weekdays?.length ||
+          params?.vehicleBrands?.length ||
+          params?.objectTypes?.length ||
+          params?.phoneBrandModels?.length ||
+          params?.locationTypes?.length ||
           (params?.minLon !== undefined &&
             params?.minLat !== undefined &&
             params?.maxLon !== undefined &&
@@ -508,25 +517,30 @@ export class MapFeaturesStatsQuery {
 
 function buildCategoryStatsQuery(whereClause: string): string {
   return `
+    WITH category_groups AS (
+      SELECT category, rubrica_for_styling, all_rubricas, COUNT(*) AS feature_count
+      FROM map_features
+      WHERE ${whereClause}
+      GROUP BY category, rubrica_for_styling, all_rubricas
+    )
     SELECT
       category_bucket.category_name as category,
-      COUNT(*) as count,
+      SUM(feature_count) as count,
       COALESCE(
         MAX(
           CASE
-            WHEN category_bucket.category_name = map_features.category
-            THEN map_features.rubrica_for_styling
+            WHEN category_bucket.category_name = category_groups.category
+            THEN category_groups.rubrica_for_styling
             ELSE NULL
           END
         ),
         category_bucket.category_name
       ) as rubrica_for_styling,
       BOOL_OR(
-        category_bucket.category_name = ANY(map_features.all_rubricas)
+        category_bucket.category_name = ANY(category_groups.all_rubricas)
       ) as is_rubrica
-    FROM map_features
-    ${buildCategoryBucketLateralSql('map_features')}
-    WHERE ${whereClause}
+    FROM category_groups
+    ${buildCategoryBucketLateralSql('category_groups')}
     GROUP BY category_bucket.category_name
     ORDER BY count DESC
   `;

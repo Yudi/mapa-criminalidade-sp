@@ -252,6 +252,12 @@ export interface MapFeaturesCategoryPeriodStats {
 
 /** A closed WGS84 GeoJSON Polygon, or a geodesic radius in meters. */
 export interface AnalysisArea {
+  /** Official area reference; geometry stays on the server. */
+  census?: {
+    releaseId: string;
+    level: 'municipality' | 'neighborhood';
+    code: string;
+  };
   polygon?: string;
   longitude?: number;
   latitude?: number;

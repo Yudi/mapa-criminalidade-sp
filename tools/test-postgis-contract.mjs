@@ -138,6 +138,27 @@ try {
     (await load(16)).map((feature) => feature.get('feature_id')).sort(),
     ids
   );
+  for (const mode of ['markers', 'density']) {
+    const features = await load(10, { mode });
+    if (mode === 'markers') {
+      assert.deepEqual(
+        features.map((feature) => feature.get('feature_id')).sort(),
+        ids
+      );
+      assert(
+        features.every((feature) => feature.get('server_singleton') === 1)
+      );
+    } else {
+      assert.equal(
+        features.reduce(
+          (sum, feature) => sum + feature.get('occurrence_count'),
+          0
+        ),
+        2
+      );
+    }
+  }
+  await assert.rejects(load(16, { mode: 'invalid' }), { code: '22023' });
   const clusters = await load(10);
   assert.equal(clusters.length, 1);
   assert.equal(clusters[0].get('server_cluster'), 1);
@@ -196,7 +217,7 @@ try {
     [{ vehicleBrands: ['VW/Audi, especial'], categories: ['Roubo'] }, []],
     [{ vehicleBrands: ['VW/Audi, especial'], objectTypes: ['Notebook'] }, []],
     [{ locationTypes: ['Via pública', 'Residência'] }, ids],
-    [{ phoneBrandModels: ['VW/Audi, especial · Notebook'] }, [ids[1]]],
+    [{ phoneBrandModels: ['VW/Audi, especial - Notebook'] }, [ids[1]]],
     [{ weekdays: [1, 7] }, ids],
     [{ vehicleBrands: ['Desconhecida'] }, []],
     [{ vehicleBrands: [] }, ids],
@@ -217,6 +238,19 @@ try {
         .map((feature) => feature.get('feature_id'))
         .sort(),
       expected
+    );
+    const markers = await load(10, { ...filters, mode: 'markers' });
+    assert.deepEqual(
+      markers.map((feature) => feature.get('feature_id')).sort(),
+      expected
+    );
+    const density = await load(10, { ...filters, mode: 'density' });
+    assert.equal(
+      density.reduce(
+        (sum, feature) => sum + feature.get('occurrence_count'),
+        0
+      ),
+      expected.length
     );
     const lowZoom = await load(10, filters);
     assert.equal(
@@ -245,6 +279,32 @@ try {
   }
   for (const value of [[0], [8], [1.5], ['1'], null, {}, Array(8).fill(1)]) {
     await assert.rejects(load(16, { weekdays: value }), { code: '22023' });
+  }
+  await db.query('BEGIN');
+  try {
+    // A derived canonical category can share a report with multiple real rubrics.
+    await db.query(`UPDATE map_features SET category='Flagrantes Lavrados',
+      rubrica_for_styling='Furto',
+      feature_data=jsonb_set(feature_data, '{all_rubricas}', '["Furto","Roubo"]'::jsonb)
+      WHERE id=$1::uuid`, [ids[0]]);
+    for (const [categories, expectedCategory, expectedRubric] of [
+      [['Roubo'], 'Roubo', 'Roubo'],
+      [['Furto'], 'Furto', 'Furto'],
+      [['Flagrantes Lavrados'], 'Flagrantes Lavrados', 'Furto'],
+      [undefined, 'Flagrantes Lavrados', 'Furto'],
+    ]) {
+      for (const [zoom, mode] of [[10, 'auto'], [16, 'auto'], [10, 'markers']]) {
+        const features = await load(zoom, {
+          mode, categories, vehicleBrands: ['VW/Audi, especial'],
+        });
+        assert.equal(features.length, 1);
+        assert.equal(features[0].get('feature_id'), ids[0]);
+        assert.equal(features[0].get('category'), expectedCategory);
+        assert.equal(features[0].get('rubrica_for_styling'), expectedRubric);
+      }
+    }
+  } finally {
+    await db.query('ROLLBACK');
   }
   const {
     rows: [rounding],

@@ -29,7 +29,7 @@
           <form [formGroup]="comparisonForm" (ngSubmit)="loadComparison()">
             <div class="date-fields">
               <mat-form-field>
-                <mat-label>A · referência</mat-label>
+                <mat-label>A - referência</mat-label>
                 <input
                   matInput
                   [type]="mode() === 'month' ? 'month' : 'text'"
@@ -56,22 +56,22 @@
           } @if (comparable(); as ranges) {
           <div class="ranges" aria-live="polite">
             @if (ranges.partial) {
-            <p><strong>Períodos parciais · datas alinhadas</strong></p>
+            <p><strong>Períodos parciais - datas alinhadas</strong></p>
             }
             <p>
-              A: {{ displayDate(ranges.first.afterDate) }} –
-              {{ displayDate(ranges.first.beforeDate) }} ·
+              A: {{ displayDate(ranges.first.afterDate) }} -
+              {{ displayDate(ranges.first.beforeDate) }} -
               {{ ranges.days[0] }} dias
             </p>
             <p>
-              B: {{ displayDate(ranges.second.afterDate) }} –
-              {{ displayDate(ranges.second.beforeDate) }} ·
+              B: {{ displayDate(ranges.second.afterDate) }} -
+              {{ displayDate(ranges.second.beforeDate) }} -
               {{ ranges.days[1] }} dias
             </p>
           </div>
           } @if (results(); as stats) {
           <p>
-            Ocorrências: A <strong>{{ stats.first.total | number }}</strong> · B
+            Ocorrências: A <strong>{{ stats.first.total | number }}</strong> - B
             <strong>{{ stats.second.total | number }}</strong>
           </p>
           @if (!changes().length) {
@@ -160,7 +160,7 @@
               @for (frame of frames(); track frame.month; let i = $index) {
               <mat-option [value]="i" [disabled]="frame.count === null"
                 >{{ frame.label
-                }}{{ frame.partial ? ' · Parcial' : '' }}</mat-option
+                }}{{ frame.partial ? ' - Parcial' : '' }}</mat-option
               >
               }
             </mat-select>
@@ -189,7 +189,7 @@
           </div>
           @if (active(); as frame) {
           <p role="status">
-            {{ frame.label }}{{ frame.partial ? ' · Parcial' : '' }} ·
+            {{ frame.label }}{{ frame.partial ? ' - Parcial' : '' }} -
             {{ playing() ? 'Reproduzindo' : 'Pausado' }}
           </p>
           } @if (playbackError()) {

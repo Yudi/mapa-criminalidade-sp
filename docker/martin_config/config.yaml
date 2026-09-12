@@ -25,3 +25,6 @@ postgres:
     occurrences:
       schema: public
       function: occurrences
+    census:
+      schema: public
+      function: census_areas_tile

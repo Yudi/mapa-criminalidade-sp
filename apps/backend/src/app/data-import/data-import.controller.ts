@@ -59,6 +59,22 @@ export class DataImportController {
     }
   }
 
+  @Get('census/status')
+  @UseGuards(DevelopmentOnlyGuard)
+  @ApiOperation({
+    summary: 'Inspect automatic census initialization',
+    description:
+      'Configured release, queue state, current phase and retry/failure details. This read-only endpoint never triggers a download or refresh.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Example: { releaseId: "ibge-2022-sp-20260520-v1", state: "completed", progress: { phase: "completed" }, attemptsMade: 1 }',
+  })
+  getCensusImportStatus() {
+    return this.dataImportQueueService.getCensusImportStatus();
+  }
+
   @Post('trigger')
   @HttpCode(HttpStatus.ACCEPTED)
   @UseGuards(DevelopmentOnlyGuard)

@@ -1,3 +1,4 @@
+import { CensusImportService } from './services/census-import.service';
 import { Module } from '@nestjs/common';
 
 import { DataImportController } from './data-import.controller';
@@ -33,6 +34,7 @@ import { DataImportService } from './data-import-orchestrator.service';
     ImportDecisionService,
     ImportStatusService,
     PythonToolService,
+    CensusImportService,
     ImlImportService,
     DataImportService,
     DataImportQueueService,

@@ -17,7 +17,7 @@ describe('map detail filter boundaries', () => {
     categories: ['Furto'],
     vehicleBrands: ["VW/Audi, D'Ávila"],
     objectTypes: ['Celular'],
-    phoneBrandModels: ['Samsung · Galaxy'],
+    phoneBrandModels: ['Samsung - Galaxy'],
     locationTypes: ['Via pública'],
     weekdays: [1, 7],
   };

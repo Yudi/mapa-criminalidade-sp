@@ -64,3 +64,4 @@ export type {
   MapFeaturesByBoQuery,
 } from './lib/graphql';
 export * from './lib/analysis-area';
+export * from './lib/census';

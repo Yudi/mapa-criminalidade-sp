@@ -66,7 +66,7 @@ describe('VectorTileService', () => {
     const filters = {
       vehicleBrands: [' VW/Audi, importado ', 'VW/Audi, importado'],
       objectTypes: ['Celular'],
-      phoneBrandModels: ['Samsung · Galaxy'],
+      phoneBrandModels: ['Samsung - Galaxy'],
       locationTypes: ['Via pública'],
       weekdays: [7, 1, 7],
     };
@@ -79,7 +79,7 @@ describe('VectorTileService', () => {
     ]);
     expect(
       JSON.parse(url.searchParams.get('phoneBrandModels') ?? '[]')
-    ).toEqual(['Samsung · Galaxy']);
+    ).toEqual(['Samsung - Galaxy']);
     expect(JSON.parse(url.searchParams.get('locationTypes') ?? '[]')).toEqual([
       'Via pública',
     ]);
@@ -92,7 +92,7 @@ describe('VectorTileService', () => {
   });
 
   it('versions the vector tile payload contract to avoid stale tile shapes', () => {
-    expect(service.buildTileUrl()).toContain('tileSchema=v3');
+    expect(service.buildTileUrl()).toContain('tileSchema=v4');
   });
 
   it('includes the published dataset revision in tile cache identity', () => {
@@ -104,7 +104,7 @@ describe('VectorTileService', () => {
     expect(url.searchParams.get('datasetRevision')).toBe('revision/b');
   });
 
-  it('routes new display modes to the backend while preserving the original tile server', () => {
+  it('routes every display mode through the configured tile server', () => {
     const original = service.buildTileUrl();
     expect(service.buildTileUrl({ mode: 'auto' })).toBe(original);
     for (const mode of ['markers', 'density'] as const) {
@@ -118,7 +118,7 @@ describe('VectorTileService', () => {
         })
       );
       expect(url.pathname).toContain('/api/tiles/');
-      expect(url.pathname).toContain('.mvt');
+      expect(url.pathname).toBe(new URL(original).pathname);
       expect(url.searchParams.get('mode')).toBe(mode);
       expect(url.searchParams.get('startHour')).toBe('22');
       expect(url.searchParams.get('endHour')).toBe('4');

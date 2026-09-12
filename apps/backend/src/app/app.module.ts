@@ -1,3 +1,4 @@
+import { CensusModule } from './census/census.module';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { GeocodingController } from './shared/geocoding.controller';
 import { AppController } from './app.controller';
@@ -23,6 +24,7 @@ type GraphqlContextFactoryArgs = { req: unknown; res: unknown };
 @Module({
   imports: [
     PrismaModule,
+    CensusModule,
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       path: '/api/graphql',

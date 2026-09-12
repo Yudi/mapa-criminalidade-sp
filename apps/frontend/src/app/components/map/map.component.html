@@ -7,52 +7,6 @@
 ></div>
 
 <div class="map-status-stack" aria-live="polite">
-  <section class="display-controls" aria-label="Visualização do mapa">
-    <mat-form-field subscriptSizing="dynamic">
-      <mat-label>Visualização</mat-label>
-      <mat-select
-        [value]="displayMode()"
-        (selectionChange)="setDisplayMode($event.value)"
-      >
-        <mat-option value="auto">Marcadores e agrupamentos</mat-option>
-        <mat-option value="markers">Marcadores individuais</mat-option>
-        <mat-option value="density">Densidade por hexágonos</mat-option>
-        <mat-option value="heatmap">Mapa de calor</mat-option>
-      </mat-select>
-    </mat-form-field>
-    @if (displayMode() === 'density') {
-    <p>Ocorrências por célula.</p>
-    <ul class="density-legend" aria-label="Ocorrências por hexágono">
-      @for (band of densityBands; track band.label; let index = $index) {
-      <li>
-        <span
-          class="density-swatch"
-          [class]="'density-swatch density-swatch--' + index"
-          aria-hidden="true"
-        ></span
-        >{{ band.label }}
-      </li>
-      }
-    </ul>
-    <p>Grade e escala de cores fixas em todos os níveis de zoom.</p>
-    } @if (displayMode() === 'heatmap') {
-    <p>
-      Concentração de ocorrências. Pontos próximos se combinam em manchas de
-      calor.
-    </p>
-    <div
-      class="heatmap-legend"
-      aria-label="Escala de concentração: azul indica menor concentração e vermelho indica maior concentração"
-    >
-      <span>Menor</span><span class="heatmap-gradient" aria-hidden="true"></span
-      ><span>Maior</span>
-    </div>
-    <p>
-      A aparência varia com o zoom. Para comparar células fixas, use os
-      hexágonos.
-    </p>
-    }
-  </section>
   @if (tileError(); as errorMessage) {
   <div class="map-status map-status--error" role="alert">
     <span>{{ errorMessage }}</span>
@@ -70,42 +24,8 @@
   }
 </div>
 
-<section
-  class="area-controls"
-  [class.area-controls--compact]="!areaControlsOpen() && !drawing()"
-  aria-label="Área de análise"
->
-  @if (!areaControlsOpen() && !drawing()) {
-  <div class="area-summary">
-    @if (selectedArea(); as area) {
-    <span role="status">{{
-      area.polygon
-        ? 'Polígono selecionado'
-        : 'Raio de ' + area.radius + ' m selecionado'
-    }}</span>
-    }
-    <button
-      mat-button
-      type="button"
-      (click)="areaControlsOpen.set(true)"
-      aria-expanded="false"
-    >
-      <mat-icon>crop_free</mat-icon>
-      {{ selectedArea() ? 'Editar área' : 'Analisar área' }}
-    </button>
-    @if (selectedArea()) {
-    <button
-      mat-icon-button
-      type="button"
-      (click)="clearArea()"
-      aria-label="Voltar à área visível"
-      title="Voltar à área visível"
-    >
-      <mat-icon>close</mat-icon>
-    </button>
-    }
-  </div>
-  } @else {
+@if (areaControlsOpen() || drawing()) {
+<section class="area-controls" aria-label="Área de análise">
   <div class="area-heading">
     <strong>Área de análise</strong>
     @if (!drawing()) {
@@ -116,7 +36,7 @@
       aria-label="Ocultar controles da área"
       aria-expanded="true"
     >
-      <mat-icon>expand_more</mat-icon>
+      <mat-icon>close</mat-icon>
     </button>
     }
   </div>
@@ -169,11 +89,128 @@
     Limite do recorte: 10.000 km² e 200 km de extensão.
   </p>
   @if (selectedArea()) {
+  <p role="status">
+    {{
+      selectedArea()?.census
+        ? censusAreaName()
+        : selectedArea()?.polygon
+        ? 'Polígono selecionado'
+        : 'Raio de ' + selectedArea()?.radius + ' m selecionado'
+    }}
+  </p>
   <p>As estatísticas usam a área selecionada, mesmo ao mover o mapa.</p>
   <button mat-button type="button" (click)="clearArea()">
     Voltar à área visível
   </button>
   } } @if (areaError(); as error) {
   <p role="alert">{{ error }}</p>
-  } }
+  }
 </section>
+}
+
+<div class="map-tools" role="group" aria-label="Ferramentas do mapa">
+  <button
+    mat-mini-fab
+    type="button"
+    matTooltip="Visualização do mapa"
+    matTooltipPosition="left"
+    aria-label="Visualização do mapa"
+    [disabled]="drawing()"
+    [attr.aria-expanded]="displayControlsOpen()"
+    (click)="
+      displayControlsOpen.set(!displayControlsOpen());
+      areaControlsOpen.set(false);
+      censusExplorer.opened.set(false)
+    "
+  >
+    <mat-icon>layers</mat-icon>
+  </button>
+  <button
+    mat-mini-fab
+    type="button"
+    [matTooltip]="selectedArea() ? 'Editar área selecionada' : 'Analisar área'"
+    matTooltipPosition="left"
+    [attr.aria-label]="
+      selectedArea() ? 'Editar área selecionada' : 'Analisar área'
+    "
+    [attr.aria-expanded]="areaControlsOpen() || drawing()"
+    [class.tool-active]="!!selectedArea()"
+    (click)="
+      areaControlsOpen.set(!areaControlsOpen());
+      displayControlsOpen.set(false);
+      censusExplorer.opened.set(false)
+    "
+  >
+    <mat-icon>crop_free</mat-icon>
+  </button>
+  <app-census-explorer
+    #censusExplorer
+    (controlsOpened)="
+      displayControlsOpen.set(false); areaControlsOpen.set(false)
+    "
+    [map]="censusMap()"
+    [filter]="censusFilter()"
+    [datasetRevision]="datasetRevision()"
+    [drawing]="drawing()"
+    [appliedCode]="censusAppliedCode()"
+    (applyArea)="selectCensusArea($event)"
+  />
+</div>
+@if (displayControlsOpen()) {
+<section class="display-controls" aria-label="Visualização do mapa">
+  <div class="area-heading">
+    <strong>Visualização do mapa</strong>
+    <button
+      mat-icon-button
+      type="button"
+      aria-label="Fechar visualização"
+      (click)="displayControlsOpen.set(false)"
+    >
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+  <mat-form-field subscriptSizing="dynamic">
+    <mat-label>Visualização</mat-label>
+    <mat-select
+      [value]="displayMode()"
+      (selectionChange)="setDisplayMode($event.value)"
+    >
+      <mat-option value="auto">Marcadores e agrupamentos</mat-option>
+      <mat-option value="markers">Marcadores individuais</mat-option>
+      <mat-option value="density">Densidade por hexágonos</mat-option>
+      <mat-option value="heatmap">Mapa de calor</mat-option>
+    </mat-select>
+  </mat-form-field>
+  @if (displayMode() === 'density') {
+  <p>Ocorrências por célula.</p>
+  <ul class="density-legend" aria-label="Ocorrências por hexágono">
+    @for (band of densityBands; track band.label; let index = $index) {
+    <li>
+      <span
+        class="density-swatch"
+        [class]="'density-swatch density-swatch--' + index"
+        aria-hidden="true"
+      ></span
+      >{{ band.label }}
+    </li>
+    }
+  </ul>
+  <p>Grade e escala de cores fixas em todos os níveis de zoom.</p>
+  } @if (displayMode() === 'heatmap') {
+  <p>
+    Concentração de ocorrências. Pontos próximos se combinam em manchas de
+    calor.
+  </p>
+  <div
+    class="heatmap-legend"
+    aria-label="Escala de concentração: azul indica menor concentração e vermelho indica maior concentração"
+  >
+    <span>Menor</span><span class="heatmap-gradient" aria-hidden="true"></span
+    ><span>Maior</span>
+  </div>
+  <p>
+    A aparência varia com o zoom. Para comparar células fixas, use os hexágonos.
+  </p>
+  }
+</section>
+}

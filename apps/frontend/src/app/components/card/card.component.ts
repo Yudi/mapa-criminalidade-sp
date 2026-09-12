@@ -172,13 +172,13 @@ export class CardComponent implements OnChanges, OnInit {
       parts.push(
         this.hourForm.invalid || start === null || end === null
           ? 'Revise o horário'
-          : `${String(start).padStart(2, '0')}:00–${String(end).padStart(
+          : `${String(start).padStart(2, '0')}:00-${String(end).padStart(
               2,
               '0'
             )}:00`
       );
     }
-    return parts.join(' · ') || 'Todos os períodos e horários';
+    return parts.join(' - ') || 'Todos os períodos e horários';
   });
 
   private normalizeSearch(value: string): string {

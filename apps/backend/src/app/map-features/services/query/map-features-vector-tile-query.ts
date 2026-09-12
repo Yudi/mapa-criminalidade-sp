@@ -2,7 +2,6 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { isRequestTimeoutError } from '../../../shared/error.utils';
 import { MapFeaturesTileParams } from '../../types/map-features.types';
-import { buildDisplayTileQuery } from './map-features-display-tile-query';
 import {
   normalizeOptionalString,
   normalizeStringList,
@@ -65,6 +64,7 @@ export class MapFeaturesVectorTileQuery {
       x,
       y,
       JSON.stringify({
+        mode: params.mode,
         before: normalizeOptionalString(params.beforeDate),
         after: normalizeOptionalString(params.afterDate),
         categories: normalizeStringList(params.categories),
@@ -84,15 +84,7 @@ export class MapFeaturesVectorTileQuery {
 
     try {
       this.logger.debug(`Generating tile z=${z} x=${x} y=${y}`);
-      const displayQuery =
-        params.mode === 'density' || params.mode === 'markers'
-          ? buildDisplayTileQuery(params)
-          : null;
-      const result = await this.runTileQuery(
-        displayQuery?.sql ?? mvtQuery,
-        displayQuery?.values ?? queryParams,
-        signal
-      );
+      const result = await this.runTileQuery(mvtQuery, queryParams, signal);
 
       if (!result || result.length === 0 || !result[0]?.mvt) {
         return { status: 'empty', tile: null };

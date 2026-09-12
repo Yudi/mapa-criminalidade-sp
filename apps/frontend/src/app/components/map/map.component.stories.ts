@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/angular';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import {
   MapStoryArgs,
   MapStoryHarnessComponent,
@@ -85,6 +85,11 @@ export const MarcadoresIndividuais: Story = { args: { mode: 'markers' } };
 export const MapaDeCalor: Story = {
   args: { mode: 'heatmap' },
   play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole('button', {
+        name: 'Visualização do mapa',
+      })
+    );
     await expect(within(canvasElement).getByText('Menor')).toBeInTheDocument();
     await expect(within(canvasElement).getByText('Maior')).toBeInTheDocument();
   },
@@ -98,6 +103,9 @@ export const DensidadeEmTodasAsFaixas: Story = {
   args: { mode: 'density' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole('button', { name: 'Visualização do mapa' })
+    );
     await expect(await canvas.findByText('1.000+')).toBeInTheDocument();
   },
 };

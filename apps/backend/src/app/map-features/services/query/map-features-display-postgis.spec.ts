@@ -1,5 +1,6 @@
 import { Client } from 'pg';
-import { buildDisplayTileQuery } from './map-features-display-tile-query';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { buildChartsQuery } from './map-features-query-sql';
 
 // Run only in the existing disposable, migrated PostGIS contract lane.
@@ -35,19 +36,36 @@ describePostgis('fixed density and weekday/hour aggregation (PostGIS)', () => {
           (3, -1, -1, NULL, 12),
           (4, 500, 0, NULL, NULL)
         ) points(id, x, y, day, hour)`);
+      await client.query(`CREATE TEMP TABLE map_feature_tile_points ON COMMIT DROP AS
+        SELECT *, ST_Transform(geom, 3857) AS geom_3857 FROM map_features`);
+      const migration = readFileSync(
+        resolve(
+          process.cwd(),
+          'prisma/migrations/20260912210000_martin_display_modes/migration.sql'
+        ),
+        'utf8'
+      );
+      const densitySql = migration
+        .slice(
+          migration.indexOf('    WITH cells AS MATERIALIZED'),
+          migration.indexOf('  ELSIF z < 16')
+        )
+        .replace(' INTO mvt', '')
+        .replace(/;\s*$/, '')
+        .replace(/\btile_envelope\b/g, 'ST_TileEnvelope($1, $2, $3)')
+        .replace(/\bcategory_filter\b/g, "ARRAY['Furto']::text[]")
+        .replace(/\bperiod_filter\b/g, 'NULL::text[]')
+        .replace(/\bweekday_filter\b/g, 'NULL::integer[]')
+        .replace(/\b(before_date|after_date)\b/g, 'NULL::date')
+        .replace(/\b(start_hour|end_hour)\b/g, 'NULL::integer')
+        .replace(/\bdetail_filters\b/g, "'{}'::jsonb");
       let baselineCount: number | undefined;
       for (const [z, x, y] of [
         [16, 32768, 32767],
         [16, 32767, 32768],
         [15, 16384, 16383],
       ]) {
-        const query = buildDisplayTileQuery({
-          z,
-          x,
-          y,
-          mode: 'density',
-          categories: ['Furto'],
-        });
+        const query = { sql: densitySql, values: [z, x, y] };
         const result = await client.query(query.sql, query.values);
         expect(result.rows[0].mvt.length).toBeGreaterThan(0);
         // Inspect the same production CTE before MVT serialization to verify full cell counts.
@@ -70,16 +88,6 @@ describePostgis('fixed density and weekday/hour aggregation (PostGIS)', () => {
         );
         expect(totals.rows[0].total).toBe(4);
       }
-      const markers = buildDisplayTileQuery({
-        z: 15,
-        x: 16384,
-        y: 16383,
-        mode: 'markers',
-        categories: ['Furto'],
-      });
-      expect(
-        (await client.query(markers.sql, markers.values)).rows[0].mvt.length
-      ).toBeGreaterThan(0);
       const {
         rows: [charts],
       } = await client.query(buildChartsQuery('TRUE'));

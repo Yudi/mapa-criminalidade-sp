@@ -12,6 +12,9 @@ export const GRAPHQL_QUERY_LIMITS = {
 } as const;
 
 const FIELD_COSTS: Record<string, number> = {
+  censusCrimeStats: 12,
+  censusAreas: 5,
+  censusArea: 5,
   mapFeaturesMetadata: 8,
   mapFeaturesCharts: 12,
   mapFeaturesCategoryPeriodStats: 8,

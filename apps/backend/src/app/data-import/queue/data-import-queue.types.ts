@@ -8,6 +8,7 @@ export const dataImportJobNameSchema = z.enum([
   'import-all-categories',
   'import-all-data',
   'import-category',
+  'ensure-census',
 ]);
 
 export const dataImportSchedulerIdSchema = z.enum(['daily-data-import']);
@@ -19,7 +20,11 @@ export type DataImportQueueName = DataImportJobName | DataImportSchedulerId;
 export const dataImportJobDataSchema = z
   .object({
     requestedAt: z.string().datetime(),
-    requestedBy: z.enum(['scheduler', 'manual']),
+    requestedBy: z.enum(['scheduler', 'manual', 'bootstrap']),
+    censusReleaseId: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,79}$/)
+      .optional(),
     reason: z.string().trim().min(1),
     categoryName: z.string().trim().min(1).optional(),
     rawImportCompletedAt: z.string().datetime().optional(),
@@ -28,12 +33,19 @@ export const dataImportJobDataSchema = z
 
 export type DataImportJobData = z.infer<typeof dataImportJobDataSchema>;
 
-export interface DataImportJobResult {
-  status: 'completed';
-  rawImportCompletedAt: string;
-  etlCompletedAt: string;
-  etlProcessedFeatures: number;
-}
+export type DataImportJobResult =
+  | {
+      status: 'completed';
+      rawImportCompletedAt: string;
+      etlCompletedAt: string;
+      etlProcessedFeatures: number;
+    }
+  | {
+      status: 'completed';
+      censusReleaseId: string;
+      censusOutcome: 'imported' | 'repaired' | 'already-installed';
+      censusAreaCount?: number;
+    };
 
 export interface DataImportQueueJob {
   id?: string;

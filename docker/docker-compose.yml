@@ -150,7 +150,7 @@ services:
       - 'traefik.enable=true'
       - 'traefik.scope=public'
       - 'traefik.docker.network=traefik'
-      - 'traefik.http.routers.criminalidade-martin.rule=Host(`criminalidade.yudi.com.br`) && PathPrefix(`/api/tiles`)'
+      - 'traefik.http.routers.criminalidade-martin.rule=Host(`criminalidade.yudi.com.br`) && (PathPrefix(`/api/tiles/occurrences`) || PathPrefix(`/api/tiles/census`))'
       - 'traefik.http.routers.criminalidade-martin.priority=90'
       - 'traefik.http.services.criminalidade-martin-svc.loadbalancer.server.port=3000'
       - 'traefik.http.routers.criminalidade-martin.entrypoints=web, websecure'

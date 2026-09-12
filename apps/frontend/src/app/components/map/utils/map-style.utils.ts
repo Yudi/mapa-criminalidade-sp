@@ -91,7 +91,14 @@ function createIconStyleFunction(
     const category = feature.get('category') as string;
     if (!activeCategories.includes(category)) return hiddenStyle;
 
-    const cached = styleCache.get(category);
+    // A derived category (for example, "Flagrantes Lavrados") is what the
+    // filter uses, but its source rubrica determines the matching marker art.
+    const rubricaForStyling = feature.get('rubrica_for_styling') as
+      | string
+      | undefined;
+    const markerRubrica = rubricaForStyling || category;
+    const styleKey = `${category}:${markerRubrica}`;
+    const cached = styleCache.get(styleKey);
     if (cached) return cached;
 
     const style = new Style({
@@ -100,11 +107,11 @@ function createIconStyleFunction(
         scale: 0.2,
         anchorXUnits: 'fraction',
         anchorYUnits: 'fraction',
-        src: markerChooser(category),
+        src: markerChooser(markerRubrica),
       }),
     });
 
-    styleCache.set(category, style);
+    styleCache.set(styleKey, style);
     return style;
   };
 }

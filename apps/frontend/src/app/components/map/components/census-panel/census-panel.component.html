@@ -1,0 +1,127 @@
+<h2 mat-dialog-title>{{ area().name }}</h2>
+<mat-dialog-content>
+  <p class="subtitle">
+    {{
+      area().level === 'municipality'
+        ? 'Município'
+        : 'Bairro - ' + area().municipalityName
+    }}
+    - Censo {{ area().year }}
+  </p>
+  <dl>
+    <div>
+      <dt>População</dt>
+      <dd>
+        {{
+          area().population === null
+            ? 'Indisponível'
+            : (area().population | number : '1.0-0' : 'pt-BR')
+        }}
+      </dd>
+    </div>
+    <div>
+      <dt>Área</dt>
+      <dd>{{ area().areaKm2 | number : '1.1-1' : 'pt-BR' }} km²</dd>
+    </div>
+    @if (populationDensity() !== null) {
+    <div>
+      <dt>Densidade demográfica</dt>
+      <dd>{{ populationDensity() | number : '1.1-1' : 'pt-BR' }} hab./km²</dd>
+    </div>
+    }
+  </dl>
+  <section
+    class="crime-summary"
+    aria-label="Ocorrências na área"
+    aria-live="polite"
+  >
+    <h3>Ocorrências</h3>
+    @if (loading()) {
+    <p role="status">Consultando…</p>
+    } @else if (error()) {
+    <p role="alert">{{ error() }}</p>
+    <button mat-button type="button" (click)="retry.emit()">
+      Tentar novamente
+    </button>
+    } @else if (crimes(); as stats) {
+    <p>{{ period() }}</p>
+    <dl>
+      <div>
+        <dt>Georreferenciadas</dt>
+        <dd>{{ stats.occurrences | number : '1.0-0' : 'pt-BR' }}</dd>
+      </div>
+      <div>
+        <dt>Por 100 mil habitantes</dt>
+        <dd>
+          {{
+            stats.per100k === null
+              ? 'Indisponível'
+              : (stats.per100k | number : '1.1-1' : 'pt-BR')
+          }}
+        </dd>
+      </div>
+    </dl>
+    <p class="note">
+      Taxa do período, com a população do Censo {{ area().year }}.
+    </p>
+    } @else if (!datesAvailable()) {
+    <p>Selecione início e fim do período.</p>
+    }
+  </section>
+  <div class="census-groups">
+    @for (group of groups(); track group.name) {
+    <details>
+      <summary>{{ group.name }}</summary>
+      <dl>
+        @for (indicator of group.indicators; track indicator.key) {
+        <div>
+          <dt>{{ indicator.label }}</dt>
+          <dd>
+            @if (indicator.value === null) { Indisponível } @else if
+            (indicator.unit === 'BRL') {
+            {{
+              indicator.value | currency : 'BRL' : 'symbol' : '1.2-2' : 'pt-BR'
+            }}
+            } @else {
+            {{
+              indicator.value
+                | number
+                  : (indicator.unit === 'decimal' ? '1.1-1' : '1.0-0')
+                  : 'pt-BR'
+            }}
+            @if (indicator.denominator !== null && indicator.denominator > 0) {
+            <span class="share"
+              >{{
+                (indicator.value / indicator.denominator) * 100
+                  | number : '1.1-1' : 'pt-BR'
+              }}%</span
+            >
+            } }
+          </dd>
+        </div>
+        }
+      </dl>
+      @if (group.name === 'Renda') {
+      <p class="note">
+        Mensal nominal, entre responsáveis por domicílios particulares
+        permanentes ocupados com renda.
+      </p>
+      }
+    </details>
+    }
+  </div>
+  @if (area().level === 'neighborhood') {
+  <p class="note">Escolaridade disponível por município.</p>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="dismiss.emit()">Fechar</button>
+  <button
+    mat-flat-button
+    type="button"
+    (click)="applyArea.emit()"
+    [disabled]="applied()"
+  >
+    {{ applied() ? 'Área aplicada' : 'Analisar área' }}
+  </button>
+</mat-dialog-actions>

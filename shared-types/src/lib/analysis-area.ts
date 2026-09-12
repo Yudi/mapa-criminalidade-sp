@@ -12,6 +12,19 @@ type Position = [number, number];
 
 /** Reject malformed, degenerate and self-intersecting rings before PostGIS. */
 export function isValidAnalysisArea(area: AnalysisArea): boolean {
+  if (area.census != null) {
+    const ref = area.census;
+    return (
+      area.polygon == null &&
+      area.longitude == null &&
+      area.latitude == null &&
+      area.radius == null &&
+      typeof ref.releaseId === 'string' &&
+      /^[a-z0-9][a-z0-9-]{0,79}$/.test(ref.releaseId) &&
+      ((ref.level === 'municipality' && /^35[0-9]{5}$/.test(ref.code)) ||
+        (ref.level === 'neighborhood' && /^35[0-9]{8}$/.test(ref.code)))
+    );
+  }
   if (area.polygon == null) {
     return (
       validPosition([area.longitude, area.latitude]) &&

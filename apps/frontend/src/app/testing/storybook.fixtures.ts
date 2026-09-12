@@ -155,20 +155,20 @@ export const storyCharts: MapFeatureCharts = {
   ],
   phoneBrandDistribution: [
     {
-      label: 'Samsung · Galaxy',
-      filterValue: 'Samsung · Galaxy',
+      label: 'Samsung - Galaxy',
+      filterValue: 'Samsung - Galaxy',
       count: 288,
       amount: 302,
     },
     {
-      label: 'Apple · iPhone',
-      filterValue: 'Apple · iPhone',
+      label: 'Apple - iPhone',
+      filterValue: 'Apple - iPhone',
       count: 224,
       amount: 231,
     },
     {
-      label: 'Motorola · Moto G',
-      filterValue: 'Motorola · Moto G',
+      label: 'Motorola - Moto G',
+      filterValue: 'Motorola - Moto G',
       count: 157,
       amount: 163,
     },
@@ -187,8 +187,8 @@ export const storyCharts: MapFeatureCharts = {
     { label: '78º D.P. Jardins', count: 212 },
   ],
   weaponTypeDistribution: [
-    { label: 'Revólver · calibre .38', count: 27 },
-    { label: 'Pistola · calibre 9 mm', count: 19 },
+    { label: 'Revólver - calibre .38', count: 27 },
+    { label: 'Pistola - calibre 9 mm', count: 19 },
   ],
   drugTypeDistribution: [
     { label: 'Cocaína', count: 22, amount: 684.5 },

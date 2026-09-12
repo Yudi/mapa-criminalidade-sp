@@ -331,7 +331,7 @@ describe('CardComponent', () => {
   it('flags invalid hours in the collapsed summary without applying the draft', () => {
     const emit = vi.spyOn(component.hourFilterEvent, 'emit');
     component.hourForm.controls.enabled.setValue(true);
-    expect(component.timeFilterSummary()).toBe('08:00–19:00');
+    expect(component.timeFilterSummary()).toBe('08:00-19:00');
     emit.mockClear();
 
     const invalidTime = new Date();

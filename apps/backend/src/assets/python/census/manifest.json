@@ -1,0 +1,303 @@
+{
+  "id": "ibge-2022-sp-20260520-v1",
+  "year": 2022,
+  "stateCode": "35",
+  "expectedMunicipalities": 645,
+  "dictionaries": [
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/dicionario_de_dados_agregados_por_setores_censitarios_20260520.xlsx",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios_Rendimento_do_Responsavel/dicionario_de_dados_renda_responsavel_20260508.xlsx"
+  ],
+  "geometries": {
+    "municipality": "https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/UFs/SP/SP_Municipios_2022.zip",
+    "neighborhood": "https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_de_setores_censitarios__divisoes_intramunicipais/censo_2022/bairros/gpkg/UF/SP/SP_bairros_CD2022.gpkg"
+  },
+  "sources": {
+    "municipality": {
+      "basico": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_basico_BR_20260520.zip",
+      "demografia": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_demografia_BR.zip",
+      "alfabetizacao": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_alfabetizacao_BR.zip",
+      "cor_ou_raca": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_cor_ou_raca_BR.zip",
+      "caracteristicas_domicilio1": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_caracteristicas_domicilio1_BR.zip",
+      "caracteristicas_domicilio2": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_caracteristicas_domicilio2_BR_20250417.zip",
+      "renda_responsavel": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios_Rendimento_do_Responsavel/Agregados_por_municipios_renda_responsavel_BR_20260508_csv.zip"
+    },
+    "neighborhood": {
+      "basico": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_basico_BR_20260520.zip",
+      "demografia": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_demografia_BR.zip",
+      "alfabetizacao": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_alfabetizacao_BR.zip",
+      "cor_ou_raca": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_cor_ou_raca_BR.zip",
+      "caracteristicas_domicilio1": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_caracteristicas_domicilio1_BR.zip",
+      "caracteristicas_domicilio2": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_caracteristicas_domicilio2_BR_20250417.zip",
+      "renda_responsavel": "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios_Rendimento_do_Responsavel/Agregados_por_bairros_renda_responsavel_BR_20260508_csv.zip"
+    }
+  },
+  "indicators": [
+    {
+      "key": "population",
+      "group": "População",
+      "label": "População residente",
+      "theme": "basico",
+      "variables": ["V0001"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "households",
+      "group": "Domicílios",
+      "label": "Domicílios totais",
+      "theme": "basico",
+      "variables": ["V0002"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "occupiedHouseholds",
+      "group": "Domicílios",
+      "label": "Domicílios particulares ocupados",
+      "theme": "basico",
+      "variables": ["V0007"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "vacantHouseholds",
+      "group": "Domicílios",
+      "label": "Domicílios particulares permanentes vagos",
+      "theme": "basico",
+      "variables": ["V0009"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "residentsPerHousehold",
+      "group": "Domicílios",
+      "label": "Moradores por domicílio particular ocupado",
+      "theme": "basico",
+      "variables": ["V0005"],
+      "unit": "decimal",
+      "denominator": []
+    },
+    {
+      "key": "men",
+      "group": "Demografia",
+      "label": "Sexo masculino",
+      "theme": "demografia",
+      "variables": ["V01007"],
+      "unit": "count",
+      "denominator": ["V01006"]
+    },
+    {
+      "key": "women",
+      "group": "Demografia",
+      "label": "Sexo feminino",
+      "theme": "demografia",
+      "variables": ["V01008"],
+      "unit": "count",
+      "denominator": ["V01006"]
+    },
+    {
+      "key": "children",
+      "group": "Demografia",
+      "label": "Pessoas de 0 a 14 anos",
+      "theme": "demografia",
+      "variables": ["V01031", "V01032", "V01033"],
+      "unit": "count",
+      "denominator": ["V01006"]
+    },
+    {
+      "key": "youth",
+      "group": "Demografia",
+      "label": "Pessoas de 15 a 29 anos",
+      "theme": "demografia",
+      "variables": ["V01034", "V01035", "V01036"],
+      "unit": "count",
+      "denominator": ["V01006"]
+    },
+    {
+      "key": "olderAdults",
+      "group": "Demografia",
+      "label": "Pessoas de 60 anos ou mais",
+      "theme": "demografia",
+      "variables": ["V01040", "V01041"],
+      "unit": "count",
+      "denominator": ["V01006"]
+    },
+    {
+      "key": "literate",
+      "group": "Alfabetização",
+      "label": "Pessoas alfabetizadas de 15 anos ou mais",
+      "theme": "alfabetizacao",
+      "variables": [
+        "V00748",
+        "V00749",
+        "V00750",
+        "V00751",
+        "V00752",
+        "V00753",
+        "V00754",
+        "V00755",
+        "V00756",
+        "V00757",
+        "V00758",
+        "V00759",
+        "V00760"
+      ],
+      "unit": "count",
+      "denominator": [
+        "V00644",
+        "V00645",
+        "V00646",
+        "V00647",
+        "V00648",
+        "V00649",
+        "V00650",
+        "V00651",
+        "V00652",
+        "V00653",
+        "V00654",
+        "V00655",
+        "V00656"
+      ]
+    },
+    {
+      "key": "white",
+      "group": "Cor ou raça",
+      "label": "Branca",
+      "theme": "cor_ou_raca",
+      "variables": ["V01317"],
+      "unit": "count",
+      "denominator": ["V01317", "V01318", "V01319", "V01320", "V01321"]
+    },
+    {
+      "key": "black",
+      "group": "Cor ou raça",
+      "label": "Preta",
+      "theme": "cor_ou_raca",
+      "variables": ["V01318"],
+      "unit": "count",
+      "denominator": ["V01317", "V01318", "V01319", "V01320", "V01321"]
+    },
+    {
+      "key": "asian",
+      "group": "Cor ou raça",
+      "label": "Amarela",
+      "theme": "cor_ou_raca",
+      "variables": ["V01319"],
+      "unit": "count",
+      "denominator": ["V01317", "V01318", "V01319", "V01320", "V01321"]
+    },
+    {
+      "key": "mixed",
+      "group": "Cor ou raça",
+      "label": "Parda",
+      "theme": "cor_ou_raca",
+      "variables": ["V01320"],
+      "unit": "count",
+      "denominator": ["V01317", "V01318", "V01319", "V01320", "V01321"]
+    },
+    {
+      "key": "indigenous",
+      "group": "Cor ou raça",
+      "label": "Indígena",
+      "theme": "cor_ou_raca",
+      "variables": ["V01321"],
+      "unit": "count",
+      "denominator": ["V01317", "V01318", "V01319", "V01320", "V01321"]
+    },
+    {
+      "key": "permanentHouseholds",
+      "group": "Domicílios",
+      "label": "Domicílios particulares permanentes ocupados",
+      "theme": "caracteristicas_domicilio1",
+      "variables": ["V00001"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "apartments",
+      "group": "Domicílios",
+      "label": "Apartamentos ocupados",
+      "theme": "caracteristicas_domicilio1",
+      "variables": ["V00049"],
+      "unit": "count",
+      "denominator": ["V00001"]
+    },
+    {
+      "key": "waterNetwork",
+      "group": "Saneamento",
+      "label": "Domicílios que utilizam rede geral de água",
+      "theme": "caracteristicas_domicilio2",
+      "variables": ["V00111"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "sewageNetwork",
+      "group": "Saneamento",
+      "label": "Domicílios com esgoto na rede geral ou pluvial",
+      "theme": "caracteristicas_domicilio2",
+      "variables": ["V00309"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "wasteCollection",
+      "group": "Saneamento",
+      "label": "Domicílios com lixo coletado por serviço de limpeza",
+      "theme": "caracteristicas_domicilio2",
+      "variables": ["V00397"],
+      "unit": "count",
+      "denominator": []
+    },
+    {
+      "key": "responsibleIncomeMean",
+      "group": "Renda",
+      "label": "Renda nominal média mensal dos responsáveis com renda",
+      "theme": "renda_responsavel",
+      "variables": ["V06004"],
+      "unit": "BRL",
+      "denominator": []
+    },
+    {
+      "key": "responsibleIncomeMedian",
+      "group": "Renda",
+      "label": "Renda nominal mediana mensal dos responsáveis com renda",
+      "theme": "renda_responsavel",
+      "variables": ["V06006"],
+      "unit": "BRL",
+      "denominator": []
+    }
+  ],
+  "education": {
+    "url": "https://servicodados.ibge.gov.br/api/v3/agregados/10061/periodos/2022/variaveis/2667?localidades=N6[N3[35]]&classificacao=1568[120704,9493,9494,9495,99713]|58[95253]|2[6794]|86[95251]",
+    "sourceUrl": "https://sidra.ibge.gov.br/tabela/10061",
+    "total": "120704",
+    "categories": {
+      "9493": "Sem instrução e fundamental incompleto",
+      "9494": "Fundamental completo e médio incompleto",
+      "9495": "Médio completo e superior incompleto",
+      "99713": "Superior completo"
+    }
+  },
+  "allowMissingThemes": ["renda_responsavel"],
+  "checksums": {
+    "https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_municipais/municipio_2022/UFs/SP/SP_Municipios_2022.zip": "341664fdb610df9b92a8f01546e1a83474135cf686c4dcf6c2e0ea91552b0013",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_basico_BR_20260520.zip": "0adc228eba0869dfbc2487e19481b96acabe5c2537a2837f1d5235a8dc0232c5",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_demografia_BR.zip": "a680cd67c930ca0ad07c8b566719fb606346aca6c5b2f456e3ce9ceb488e0602",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_alfabetizacao_BR.zip": "62179c6643bc8f52d33281833cb7effa580c4daa9fffc9e91013e65cd442bb46",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_cor_ou_raca_BR.zip": "656eb81fed248bdaa110c926a4fa7b9133d13a300b2fdc11acebfd1eab0fc28a",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_caracteristicas_domicilio1_BR.zip": "0e53c437a01cc3b77882754880aa042b2078c946130f71cb3d6c33a624acba43",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Municipio_csv/Agregados_por_municipios_caracteristicas_domicilio2_BR_20250417.zip": "eb42836f120f4614ac991b59f64429e51e7a0096d4de15d2143d09e9becbfc8b",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios_Rendimento_do_Responsavel/Agregados_por_municipios_renda_responsavel_BR_20260508_csv.zip": "ad52b9e9fe7bf67d45250799d6926e4f13752cfddc5f0f96a7147f9b5fb909fe",
+    "https://geoftp.ibge.gov.br/organizacao_do_territorio/malhas_territoriais/malhas_de_setores_censitarios__divisoes_intramunicipais/censo_2022/bairros/gpkg/UF/SP/SP_bairros_CD2022.gpkg": "4af92f13210d8c35ed848153ad7b2c923be26459d7200ad9755f26e33b1f56ff",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_basico_BR_20260520.zip": "c84bea0184477b8eb750948e50f87a7a57d2af4cfb71b1b061729e2f0a6b9a52",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_demografia_BR.zip": "b2b405df497ee73edff15db569dc077861e4a46e9cee1e49acb70e23d03d81e1",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_alfabetizacao_BR.zip": "0bbdffdb0011182c4845173952548c29993a0832bac18fd1db7a559e0affcf2c",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_cor_ou_raca_BR.zip": "f4c1589bef59f80d3815d9fe8e2291ddce7887aa0ba7a62791eba36521e5631f",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_caracteristicas_domicilio1_BR.zip": "a020c3d29761cb10838ce7db90018c049515eeab400468fdab7ecf73e2d2517d",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/Agregados_por_Bairro_csv/Agregados_por_bairros_caracteristicas_domicilio2_BR_20250417.zip": "4a4f570003df6e9b549ca3c122713372b420cae251b5f7f0dfe8dacb5a7c186d",
+    "https://ftp.ibge.gov.br/Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios_Rendimento_do_Responsavel/Agregados_por_bairros_renda_responsavel_BR_20260508_csv.zip": "db2fda144b62d9badf21ac54fdf43dbba09e029fd21f27393df7c5f4ea7ac333",
+    "https://servicodados.ibge.gov.br/api/v3/agregados/10061/periodos/2022/variaveis/2667?localidades=N6[N3[35]]&classificacao=1568[120704,9493,9494,9495,99713]|58[95253]|2[6794]|86[95251]": "a2ad52bc06788b68a2163bea92bcfc9f58cfcaad7ff2bd9ad09a41d0e98c70ca"
+  },
+  "expectedNeighborhoods": 2170
+}

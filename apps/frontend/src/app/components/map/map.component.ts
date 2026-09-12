@@ -1,7 +1,13 @@
+import { CensusExplorerComponent } from './components/census-panel/census-explorer.component';
+import type {
+  CensusAreaDetail,
+  MapFeatureFilterInput,
+} from '@mapa-criminalidade/shared-types';
 import {
   MapDisplayMode,
   MapFeatureDetailFilters,
 } from '@mapa-criminalidade/shared-types';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import {
   createDensityStyleFunction,
@@ -10,6 +16,7 @@ import {
 import type { TemporalMapState } from '../temporal-analysis/temporal-analysis.utils';
 import {
   AfterViewInit,
+  computed,
   ChangeDetectionStrategy,
   Component,
   OnChanges,
@@ -121,18 +128,55 @@ type HourFilter = { enabled: boolean; startHour: number; endHour: number };
 @Component({
   selector: 'app-map',
   imports: [
+    CensusExplorerComponent,
     MatButtonModule,
     MatIconModule,
     ReactiveFormsModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatTooltipModule,
   ],
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
+  readonly censusMap = signal<OlMap | null>(null);
+  readonly censusAreaName = signal<string | null>(null);
+  readonly censusAppliedCode = computed(() => {
+    const ref = this.selectedArea()?.census;
+    return ref ? `${ref.releaseId}:${ref.level}:${ref.code}` : null;
+  });
+  readonly censusFilter = computed<MapFeatureFilterInput>(() => {
+    const filters = this.currentFilters();
+    return {
+      afterDate: filters.after,
+      beforeDate: filters.before,
+      categories: this.activeCategories(),
+      periods: filters.periods,
+      weekdays: filters.weekdays,
+      startHour: filters.startHour,
+      endHour: filters.endHour,
+      vehicleBrands: filters.vehicleBrands,
+      objectTypes: filters.objectTypes,
+      phoneBrandModels: filters.phoneBrandModels,
+      locationTypes: filters.locationTypes,
+    };
+  });
+  selectCensusArea(area: CensusAreaDetail): void {
+    this.cancelDrawing();
+    this.areaSource.clear();
+    this.areaError.set(null);
+    const selection: AnalysisArea = {
+      census: { releaseId: area.releaseId, level: area.level, code: area.code },
+    };
+    this.censusAreaName.set(area.name);
+    this.selectedArea.set(selection);
+    this.areaControlsOpen.set(false);
+    this.areaChange.emit(selection);
+  }
+  readonly displayControlsOpen = signal(false);
   readonly displayMode = signal<MapDisplayMode>('auto');
   readonly densityBands = DENSITY_BANDS;
 
@@ -291,7 +335,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
   private moveEndListenerKey: EventsKey | null = null;
   private tileLoadEndListenerKey: EventsKey | null = null;
   private isDestroyed = false;
-  private activeCategories = signal<string[]>([]);
+  readonly activeCategories = signal<string[]>([]);
   private currentFilters = signal<ExtendedTileFilterParams>({});
   private clusterLayer: VectorLayer<
     ClusterSource<Feature<Point>>,
@@ -359,6 +403,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.isDestroyed = true;
+    this.censusMap.set(null);
     this.disposeHeatmapLayer();
     if (this.temporalRenderKey) unByKey(this.temporalRenderKey);
     this.cancelDrawing();
@@ -409,6 +454,7 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.olMap = this.mapSetupService.setupMap(this.document);
 
     if (!this.olMap) return;
+    this.censusMap.set(this.olMap);
 
     this.areaLayer = new VectorLayer({
       source: this.areaSource,

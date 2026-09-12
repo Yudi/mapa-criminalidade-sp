@@ -1,0 +1,53 @@
+:host {
+  display: block;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 4;
+}
+.census-control > button {
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+}
+.census-control > .tool-active {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+.layer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.layer-options {
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  pointer-events: auto;
+}
+.layer-options {
+  position: absolute;
+  top: 0;
+  right: 3.75rem;
+  width: min(21rem, calc(100vw - 8rem));
+  box-sizing: border-box;
+  max-height: min(30rem, 55dvh);
+  overflow-y: auto;
+  font: var(--mat-sys-body-small);
+}
+.layer-options mat-form-field {
+  width: 100%;
+}
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+li button {
+  width: 100%;
+  height: auto;
+  min-height: 2.75rem;
+  text-align: start;
+  padding-block: 0.75rem;
+}

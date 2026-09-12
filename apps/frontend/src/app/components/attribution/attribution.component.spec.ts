@@ -34,5 +34,9 @@ describe('AttributionComponent', () => {
       .flush('Example dependency license');
 
     expect(component).toBeTruthy();
+    const host: HTMLElement = fixture.nativeElement;
+    const credits = host.querySelectorAll('a[href*="ibge.gov.br"]');
+    expect(credits).toHaveLength(1);
+    expect(credits[0].textContent).toContain('Censo Demográfico 2022');
   });
 });

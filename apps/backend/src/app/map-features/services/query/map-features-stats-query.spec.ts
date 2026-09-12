@@ -106,16 +106,14 @@ describe('temporal statistics', () => {
       label: `Category ${index}`,
       count: 1,
     }));
-    const executeReadOnlyStatsQuery = jest
-      .fn()
-      .mockResolvedValue([
-        {
-          dataset_revision: '17',
-          total: '15',
-          monthly: [{ label: '2025-01', count: 15 }],
-          categories,
-        },
-      ]);
+    const executeReadOnlyStatsQuery = jest.fn().mockResolvedValue([
+      {
+        dataset_revision: '17',
+        total: '15',
+        monthly: [{ label: '2025-01', count: 15 }],
+        categories,
+      },
+    ]);
     const query = new MapFeaturesStatsQuery(
       { executeReadOnlyStatsQuery } as unknown as PrismaService,
       uncachedLoader

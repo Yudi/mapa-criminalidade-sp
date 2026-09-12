@@ -213,6 +213,13 @@ describe('MapFeaturesQueryService', () => {
 
     const [query] = queryRawUnsafe.mock.calls[0] as [string];
     expect((query.match(/FROM map_features/g) ?? []).length).toBe(1);
+    expect(query).toContain('COUNT(*) AS feature_count');
+    expect(query).toContain(
+      'GROUP BY category, rubrica_for_styling, all_rubricas, periodo_normalized'
+    );
+    expect((query.match(/SUM\(feature_count\) AS count/g) ?? []).length).toBe(
+      2
+    );
     expect(queryRawUnsafe).toHaveBeenCalledWith(
       expect.any(String),
       -47,

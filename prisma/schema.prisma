@@ -127,3 +127,38 @@ model MapDatasetRevision {
 
   @@map("map_dataset_revision")
 }
+
+// Immutable, explicitly imported releases. No scheduled census refresh.
+model CensusRelease {
+  id         String   @id
+  year       Int
+  stateCode  String   @map("state_code")
+  active     Boolean  @default(false)
+  manifest   Json
+  importedAt DateTime @default(now()) @map("imported_at") @db.Timestamptz(6)
+  areas      CensusArea[]
+
+  @@map("census_releases")
+}
+
+model CensusArea {
+  releaseId       String @map("release_id")
+  level           String
+  code            String
+  name            String
+  municipalityCode String @map("municipality_code")
+  municipalityName String @map("municipality_name")
+  population      Int?
+  indicators      Json
+  geom            Unsupported("geometry(MultiPolygon,4326)")
+  geomWeb         Unsupported("geometry(MultiPolygon,3857)") @map("geom_web")
+  labelPoint      Unsupported("geometry(Point,3857)") @map("label_point")
+  areaKm2         Float @map("area_km2")
+  release         CensusRelease @relation(fields: [releaseId], references: [id])
+
+  @@id([releaseId, level, code])
+  @@index([geom], type: Gist, map: "census_areas_geom_idx")
+  @@index([geomWeb], type: Gist, map: "census_areas_geom_web_idx")
+  @@index([releaseId, level, municipalityCode], map: "census_areas_municipality_idx")
+  @@map("census_areas")
+}

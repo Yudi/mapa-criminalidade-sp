@@ -1,0 +1,135 @@
+<div class="census-control">
+  <button
+    #toggleButton
+    mat-mini-fab
+    type="button"
+    (click)="toggle()"
+    [attr.aria-expanded]="opened()"
+    [disabled]="drawing()"
+    [matTooltip]="
+      layerError() ? 'Falha nos limites — abrir controles' : 'Limites e Censo'
+    "
+    matTooltipPosition="left"
+    aria-label="Limites e Censo"
+    [class.tool-active]="level() !== 'off'"
+  >
+    <mat-icon>{{ layerError() ? 'warning' : 'public' }}</mat-icon>
+  </button>
+  @if (opened()) {
+  <section class="layer-options" aria-label="Camadas do Censo">
+    <div class="layer-heading">
+      <strong>Limites e Censo</strong>
+      <button
+        mat-icon-button
+        type="button"
+        aria-label="Fechar limites e Censo"
+        (click)="toggle()"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+    @if (releaseLoading()) {
+    <p role="status">Carregando…</p>
+    } @if (release()) {
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Limites territoriais</mat-label>
+      <mat-select [value]="level()" (selectionChange)="setLevel($event.value)">
+        <mat-option value="off">Ocultar limites</mat-option>
+        <mat-option value="municipality">Municípios</mat-option>
+        <mat-option value="neighborhood">Bairros oficiais</mat-option>
+      </mat-select>
+    </mat-form-field>
+    @if (level() !== 'off') { @if (level() === 'neighborhood') {
+    <p>Bairros não disponíveis em todos os municípios.</p>
+    }
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>{{
+        level() === 'municipality' ? 'Buscar município' : 'Buscar bairro'
+      }}</mat-label>
+      <input
+        matInput
+        [formControl]="searchControl"
+        maxlength="100"
+        autocomplete="off"
+      />
+      <mat-hint>Mínimo de 2 caracteres.</mat-hint>
+    </mat-form-field>
+    @if (searchLoading()) {
+    <p role="status">Buscando…</p>
+    } @if (searchError()) {
+    <p role="alert">{{ searchError() }}</p>
+    <button mat-button type="button" (click)="search()">
+      Tentar novamente
+    </button>
+    } @if (searched() && !results().length) {
+    <p role="status">Nenhuma área encontrada.</p>
+    }
+    <ul>
+      @for (result of results(); track result.code) {
+      <li>
+        <button
+          mat-button
+          type="button"
+          (click)="
+            select({
+              releaseId: result.releaseId,
+              level: result.level,
+              code: result.code
+            })
+          "
+        >
+          {{ result.name
+          }}{{
+            result.level === 'neighborhood'
+              ? ' - ' + result.municipalityName
+              : ''
+          }}
+        </button>
+      </li>
+      }
+    </ul>
+    } } @else if (!releaseLoading() && !layerError()) {
+    <p role="status">Censo ainda indisponível.</p>
+    } @if (layerError()) {
+    <p role="alert">{{ layerError() }}</p>
+    <button mat-button type="button" (click)="retryLayer()">
+      Tentar novamente
+    </button>
+    }
+  </section>
+  }
+</div>
+<ng-template #censusDialog>
+  @if (area(); as area) {
+  <app-census-panel
+    [area]="area"
+    [crimes]="crimes()"
+    [loading]="loading()"
+    [error]="error()"
+    [datesAvailable]="datesAvailable()"
+    [applied]="
+      appliedCode() === area.releaseId + ':' + area.level + ':' + area.code
+    "
+    (applyArea)="applySelectedArea()"
+    (dismiss)="dismiss()"
+    (retry)="retryStats()"
+  />
+  } @else {
+  <h2 mat-dialog-title>Dados da área</h2>
+  <mat-dialog-content>
+    @if (detailLoading()) {
+    <p role="status">Carregando…</p>
+    } @if (detailError()) {
+    <p role="alert">{{ detailError() }}</p>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="dismiss()">Fechar</button>
+    @if (detailError()) {
+    <button mat-flat-button type="button" (click)="retryDetail()">
+      Tentar novamente
+    </button>
+    }
+  </mat-dialog-actions>
+  }
+</ng-template>

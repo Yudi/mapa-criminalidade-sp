@@ -112,11 +112,11 @@ for (const viewport of [
     await expect(
       page.getByRole('heading', { name: 'Análise temporal' })
     ).toBeVisible();
-    await page.getByLabel('A · referência').fill('2024-02');
+    await page.getByLabel('A - referência').fill('2024-02');
     await page.getByLabel('B', { exact: true }).fill('2024-03');
     await page.getByRole('button', { name: 'Comparar', exact: true }).click();
     await expect(
-      page.getByText('Períodos parciais · datas alinhadas', { exact: true })
+      page.getByText('Períodos parciais - datas alinhadas', { exact: true })
     ).toBeVisible();
     await expect(
       page.getByLabel('Sem base percentual', { exact: true })

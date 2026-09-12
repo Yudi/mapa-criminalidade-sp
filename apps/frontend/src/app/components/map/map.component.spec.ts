@@ -13,6 +13,7 @@ import VectorSource from 'ol/source/Vector';
 import CircleStyle from 'ol/style/Circle';
 import Icon from 'ol/style/Icon';
 import Style from 'ol/style/Style';
+import { MapMarkersService } from '../../shared/map-markers.service';
 
 import {
   CLIENT_CLUSTER_LAYER_MIN_ZOOM,
@@ -148,6 +149,26 @@ describe('MapComponent', () => {
     expect(style.getText()).toBeNull();
   });
 
+  it('uses the source rubrica to resolve a derived category marker', () => {
+    const markersService = new MapMarkersService();
+    const markerChooser = vi.fn((rubrica: string) =>
+      markersService.markerChooser(rubrica)
+    );
+    const style = createOccurrenceStyleFunction(
+      ['Flagrantes Lavrados'],
+      markerChooser
+    )(
+      new Feature({
+        category: 'Flagrantes Lavrados',
+        rubrica_for_styling: 'PRISÃO EM FLAGRANTE',
+        server_singleton: 1,
+      })
+    ) as Style;
+
+    expect(markerChooser).toHaveBeenCalledWith('PRISÃO EM FLAGRANTE');
+    expect((style.getImage() as Icon).getSrc()).toBe('markers/prisao.png');
+  });
+
   it('renders dense low-zoom aggregates as clusters', () => {
     const style = createOccurrenceStyleFunction(
       ['Roubo'],
@@ -209,6 +230,7 @@ describe('MapComponent', () => {
     const rawFeature = new Feature({
       geometry: new Point([1, 2]),
       category: 'Roubo',
+      rubrica_for_styling: 'Roubo (art. 157)',
       feature_id: 'feature-1',
       num_bo: '123',
       ano_bo: 2024,
@@ -237,6 +259,9 @@ describe('MapComponent', () => {
 
     expect(source.getFeatures()).toHaveLength(1);
     expect(source.getFeatures()[0].get('num_bo')).toBe('123');
+    expect(source.getFeatures()[0].get('rubrica_for_styling')).toBe(
+      'Roubo (art. 157)'
+    );
     expect(addFeaturesSpy).toHaveBeenCalledTimes(1);
     expect(addFeatureSpy).not.toHaveBeenCalled();
   });

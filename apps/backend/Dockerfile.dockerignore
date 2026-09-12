@@ -30,3 +30,6 @@ apps/*
 # image context, even though the backend source tree is otherwise included.
 apps/backend/temp/
 apps/backend/uploads/
+
+# Schema migrations must be bundled for backend-migrate, including census initialization.
+!prisma/migrations/**/migration.sql

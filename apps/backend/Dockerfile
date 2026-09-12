@@ -48,9 +48,10 @@ WORKDIR /app
 
 COPY --from=builder /workspace/dist/apps/backend/assets/python/requirements.txt /tmp/python-requirements.txt
 
-RUN apk add --no-cache ca-certificates dumb-init postgresql-client python3 py3-pip tzdata \
-    && python3 -m venv /opt/venv \
+RUN apk add --no-cache ca-certificates dumb-init postgresql-client python3 py3-pip py3-gdal tzdata \
+    && python3 -m venv --system-site-packages /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /tmp/python-requirements.txt \
+    && /opt/venv/bin/python -c "from osgeo import ogr; assert ogr.GetDriverByName('GPKG'); assert ogr.GetDriverByName('ESRI Shapefile')" \
     && rm /tmp/python-requirements.txt \
     && addgroup -S -g 10001 app \
     && adduser -S -u 10001 -G app app \

@@ -1,3 +1,4 @@
+import { CensusImportService } from '../services/census-import.service';
 import {
   Injectable,
   Logger,
@@ -77,7 +78,8 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly dataImportService: DataImportService,
-    private readonly mapFeaturesEtlService: MapFeaturesEtlService
+    private readonly mapFeaturesEtlService: MapFeaturesEtlService,
+    private readonly censusImportService: CensusImportService
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -114,6 +116,7 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
 
     await this.queue.setGlobalConcurrency(1);
     await this.registerSchedules();
+    await this.enqueueCensusCheck();
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -185,6 +188,43 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /** Startup-only existence/completeness check; deliberately no census scheduler. */
+  private async enqueueCensusCheck(): Promise<void> {
+    const release = await this.censusImportService.configuredRelease();
+    const jobId = `census-${release.id}`;
+    const existing = await this.queue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (!['completed', 'failed'].includes(state)) return;
+      // A database restore can leave an old completed Redis job behind. A new
+      // startup must check database completeness, not infer it from job history.
+      await existing.remove().catch(() => undefined);
+    }
+    await this.queue.add(
+      'ensure-census',
+      dataImportJobDataSchema.parse({
+        requestedAt: new Date().toISOString(),
+        requestedBy: 'bootstrap',
+        reason: 'ensure configured census exists and is complete',
+        censusReleaseId: release.id,
+      }),
+      { jobId, attempts: 5, backoff: { type: 'exponential', delay: 60_000 } }
+    );
+  }
+
+  async getCensusImportStatus() {
+    const release = await this.censusImportService.configuredRelease();
+    const job = await this.queue.getJob(`census-${release.id}`);
+    return {
+      releaseId: release.id,
+      state: job ? await job.getState() : 'no-job',
+      progress: job?.progress ?? null,
+      attemptsMade: job?.attemptsMade ?? 0,
+      failedReason: job?.failedReason || null,
+      result: job?.returnvalue ?? null,
+    };
+  }
+
   private async registerSchedules(): Promise<void> {
     for (const schedulerId of REMOVED_SCHEDULER_IDS) {
       if (await this.queue.removeJobScheduler(schedulerId)) {
@@ -248,6 +288,23 @@ export class DataImportQueueService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `Processing data import job ${jobName} (${job.id}): ${jobData.reason}`
     );
+
+    if (jobName === 'ensure-census') {
+      if (!jobData.censusReleaseId)
+        throw new Error('Census release ID is required');
+      const result = await this.censusImportService.ensureImported(
+        jobData.censusReleaseId,
+        (phase) =>
+          job.updateProgress({ releaseId: jobData.censusReleaseId, phase })
+      );
+      // Census publication does not touch the huge crime dataset or run crime ETL.
+      return {
+        status: 'completed',
+        censusReleaseId: result.releaseId,
+        censusOutcome: result.outcome,
+        censusAreaCount: result.areaCount,
+      };
+    }
 
     let rawImportCompletedAt = jobData.rawImportCompletedAt;
     let rawImportError: Error | undefined;

@@ -1,3 +1,5 @@
+import { CensusService } from '../shared/census.service';
+import { StoryCensusService } from './story-census.service';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -145,6 +147,7 @@ function createStoryMapCanvas(
   imports: [MapComponent],
   providers: [
     MapMarkersService,
+    { provide: CensusService, useClass: StoryCensusService },
     {
       provide: VectorTileMapSetupService,
       useClass: StoryMapSetupService,
@@ -272,6 +275,7 @@ export class MapStoryHarnessComponent implements OnDestroy {
     const state = this.dataState();
     const categories = this.categories();
     if (!ready || !component?.olMap) return;
+    component.activeCategories.set(categories);
     this.renderFakeData(
       component.olMap,
       component.displayMode(),

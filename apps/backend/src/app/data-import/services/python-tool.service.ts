@@ -59,7 +59,7 @@ export class PythonToolService implements OnModuleDestroy {
     if (this.isShuttingDown) {
       throw new Error('Python tool is shutting down');
     }
-    const scriptPath = await this.resolveAssetScript(scriptName);
+    const scriptPath = await this.resolveAssetPath(scriptName);
     if (this.isShuttingDown) {
       throw new Error('Python tool is shutting down');
     }
@@ -155,7 +155,7 @@ export class PythonToolService implements OnModuleDestroy {
     );
   }
 
-  private async resolveAssetScript(scriptName: string): Promise<string> {
+  async resolveAssetPath(scriptName: string): Promise<string> {
     const candidates = [
       path.resolve(process.cwd(), 'assets', 'python', scriptName),
       path.resolve(

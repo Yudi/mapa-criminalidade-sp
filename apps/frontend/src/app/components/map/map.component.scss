@@ -14,7 +14,7 @@
 .map-status-stack {
   display: grid;
   gap: 0.5rem;
-  inset: 0.75rem 0.75rem auto auto;
+  inset: auto 4.5rem 0.75rem 0.75rem;
   max-width: min(32rem, calc(100% - 2rem));
   pointer-events: none;
   position: absolute;
@@ -66,9 +66,11 @@
 
 .area-controls {
   position: absolute;
-  inset: auto 0.75rem 0.75rem;
+  inset: 0.75rem 4.5rem auto auto;
   z-index: 3;
-  max-width: 44rem;
+  width: min(24rem, calc(100% - 8rem));
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
   padding: 0.75rem;
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 0.75rem;
@@ -90,23 +92,10 @@
   width: 9rem;
 }
 
-.area-controls--compact {
-  width: fit-content;
-  max-width: calc(100% - 1.5rem);
-  padding: 0.25rem;
-}
-.area-summary,
 .area-heading {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-}
-.area-summary > span {
-  padding-inline-start: 0.5rem;
-  min-width: 0;
-}
-.area-summary > button {
-  flex-shrink: 0;
 }
 .area-heading {
   justify-content: space-between;
@@ -119,7 +108,12 @@
   border: 1px solid var(--mat-sys-outline-variant);
   border-radius: 0.75rem;
   padding: 0.5rem;
-  max-width: 21rem;
+  position: absolute;
+  inset: 0.75rem 4.5rem auto auto;
+  z-index: 3;
+  width: min(21rem, calc(100% - 8rem));
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
   font: var(--mat-sys-body-small);
 }
 .display-controls mat-form-field {
@@ -179,4 +173,25 @@
     #ff0000
   );
   border: 1px solid var(--mat-sys-outline);
+}
+
+.map-tools {
+  position: absolute;
+  inset: 0.75rem 0.75rem auto auto;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.map-tools > button {
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+}
+.map-tools > .tool-active {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.map-tools app-census-explorer {
+  position: static;
 }

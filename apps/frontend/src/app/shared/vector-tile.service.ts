@@ -10,7 +10,7 @@ import {
 import { GraphqlClientService } from './graphql-client.service';
 import { MAP_FEATURES_METADATA_QUERY } from './map-features.graphql';
 
-const TILE_SCHEMA_VERSION = 'v3';
+const TILE_SCHEMA_VERSION = 'v4';
 
 export type { TileMetadata, TileFilterParams };
 export interface ExtendedTileFilterParams extends TileFilterParams {
@@ -26,10 +26,8 @@ export class VectorTileService {
     // Smooth heatmaps require raw points, never zoom-dependent cluster centers.
     const mode = params?.mode === 'heatmap' ? 'markers' : params?.mode;
     const baseUrl =
-      mode === 'density' || mode === 'markers'
-        ? `${environment.apiUrl}/tiles/{z}/{x}/{y}.mvt`
-        : environment.tileUrlTemplate ??
-          `${environment.apiUrl}/tiles/{z}/{x}/{y}.mvt`;
+      environment.tileUrlTemplate ??
+      `${environment.apiUrl}/tiles/{z}/{x}/{y}.mvt`;
 
     const queryParams = [
       `tileSchema=${encodeURIComponent(TILE_SCHEMA_VERSION)}`,

@@ -105,7 +105,7 @@ describe('MapFeaturesVectorTileQuery', () => {
       periods: ['Noite, madrugada'],
       vehicleBrands: ['Marca, especial'],
       objectTypes: ['Celular'],
-      phoneBrandModels: ['Samsung · Galaxy'],
+      phoneBrandModels: ['Samsung - Galaxy'],
       locationTypes: ['Via pública'],
       weekdays: [7, 1, 7],
     });
@@ -116,7 +116,7 @@ describe('MapFeaturesVectorTileQuery', () => {
       periods: ['Noite, madrugada'],
       vehicleBrands: ['Marca, especial'],
       objectTypes: ['Celular'],
-      phoneBrandModels: ['Samsung · Galaxy'],
+      phoneBrandModels: ['Samsung - Galaxy'],
       locationTypes: ['Via pública'],
       weekdays: [1, 7],
     });

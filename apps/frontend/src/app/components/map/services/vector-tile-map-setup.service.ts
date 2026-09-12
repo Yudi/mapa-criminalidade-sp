@@ -415,12 +415,18 @@ export class VectorTileMapSetupService {
       ano_bo: feature.get('ano_bo'),
       delegacia: feature.get('delegacia'),
       category: feature.get('category'),
+      rubrica_for_styling: feature.get('rubrica_for_styling'),
     };
   }
 
   private createFeatureStyle(feature: FeatureLike): Style {
     const category = feature.get('category') as string | undefined;
-    const iconPath = this.markersService.markerChooser(category ?? '');
+    const rubricaForStyling = feature.get('rubrica_for_styling') as
+      | string
+      | undefined;
+    const iconPath = this.markersService.markerChooser(
+      rubricaForStyling || category || ''
+    );
 
     return new Style({
       image: new Icon({

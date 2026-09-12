@@ -67,6 +67,7 @@ export function createClientClusterFeature(
     ano_bo: feature.get('ano_bo'),
     delegacia: feature.get('delegacia'),
     category: feature.get('category'),
+    rubrica_for_styling: feature.get('rubrica_for_styling'),
   });
 
   return clusterFeature;

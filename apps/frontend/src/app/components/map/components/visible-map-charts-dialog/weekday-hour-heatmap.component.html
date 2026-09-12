@@ -44,7 +44,9 @@
               cell.count +
               ' ocorrências'
             "
-          >{{ cell.count | number }}</td>
+          >
+            {{ cell.count | number }}
+          </td>
           }
           <td class="unknown">{{ row.unknown | number }}</td>
         </tr>
@@ -62,9 +64,7 @@
   <p class="coverage">
     <strong>Com data e hora: {{ matrix().known | number }}.</strong> Hora
     incerta: {{ matrix().unknownHour | number }}. Sem data:
-    {{ matrix().unknownDate | number }} ({{
-      matrix().unknownBoth | number
-    }}
+    {{ matrix().unknownDate | number }} ({{ matrix().unknownBoth | number }}
     também sem hora).
   </p>
   <p>
