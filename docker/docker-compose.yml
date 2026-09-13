@@ -19,8 +19,8 @@ x-frontend-limits: &frontend-limits
 
 x-backend-limits: &backend-limits
   cpus: '1.00'
-  mem_limit: 512m
-  mem_reservation: 256m
+  mem_limit: 1g
+  mem_reservation: 512m
   pids_limit: 256
 
 x-martin-limits: &martin-limits
@@ -87,9 +87,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/postgres?schema=public}
       REDIS_URL: ${REDIS_URL:-redis://redis-queue:6379/0}
       REDIS_CACHE_URL: ${REDIS_CACHE_URL:-redis://redis-cache:6379/0}
-      NODE_OPTIONS: --max-old-space-size=256
+      NODE_OPTIONS: --max-old-space-size=768
       PRISMA_POOL_MAX: 3
-      MAP_FEATURES_ETL_BATCH_SIZE: 2000
+      MAP_FEATURES_ETL_BATCH_SIZE: 500
       PORT: 8080
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://criminalidade.yudi.com.br}
       READINESS_CHECK_RUNTIME_DEPS: 'true'
@@ -215,7 +215,7 @@ services:
         '-c',
         'min_wal_size=${POSTGRES_MIN_WAL_SIZE:-256MB}',
         '-c',
-        'max_wal_size=${POSTGRES_MAX_WAL_SIZE:-1GB}',
+        'max_wal_size=${POSTGRES_MAX_WAL_SIZE:-4GB}',
         '-c',
         'max_connections=${POSTGRES_MAX_CONNECTIONS:-20}',
         '-c',
