@@ -212,6 +212,45 @@ describe('AppComponent', () => {
     subscription.unsubscribe();
   });
 
+  it('does not cancel a pending statistics request for duplicate bounds', () => {
+    vi.useFakeTimers();
+    const pending = new Subject<{
+      categories: CategoryInfo[];
+      periods: [];
+    }>();
+    occurrencesService.getCategoryPeriodStatsForBounds.mockReturnValueOnce(
+      pending
+    );
+    const app = TestBed.createComponent(AppComponent).componentInstance;
+    const emissions: Omit<CategoryInfo, 'sourceType'>[][] = [];
+    const subscription = app.categories.subscribe((value) =>
+      emissions.push(value)
+    );
+    const bounds = {
+      minLon: -47,
+      minLat: -24,
+      maxLon: -46,
+      maxLat: -23,
+      zoom: MIN_CRIME_TILE_ZOOM,
+    };
+
+    app.onBoundsChange(bounds);
+    vi.advanceTimersByTime(300);
+    app.onBoundsChange({ ...bounds });
+
+    expect(pending.observed).toBe(true);
+    vi.advanceTimersByTime(300);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds
+    ).toHaveBeenCalledTimes(1);
+
+    pending.next({ categories, periods: [] });
+    pending.complete();
+    expect(emissions).toEqual([categories]);
+    expect(app.viewportStatsLoading()).toBe(false);
+    subscription.unsubscribe();
+  });
+
   it('shares one statistics request between category and period filters', () => {
     vi.useFakeTimers();
     const fixture = TestBed.createComponent(AppComponent);
@@ -430,6 +469,46 @@ describe('AppComponent', () => {
     expect(
       occurrencesService.getCategoryPeriodStatsForBounds.mock.calls[1][9]
     ).toBeUndefined();
+    subscription.unsubscribe();
+  });
+
+  it('keeps a pending exact-area statistics request while panning', () => {
+    vi.useFakeTimers();
+    const pending = new Subject<{
+      categories: CategoryInfo[];
+      periods: [];
+    }>();
+    occurrencesService.getCategoryPeriodStatsForBounds.mockReturnValueOnce(
+      pending
+    );
+    const app = TestBed.createComponent(AppComponent).componentInstance;
+    const emissions: Omit<CategoryInfo, 'sourceType'>[][] = [];
+    const subscription = app.categories.subscribe((value) =>
+      emissions.push(value)
+    );
+    const bounds = {
+      minLon: -47,
+      minLat: -24,
+      maxLon: -46,
+      maxLat: -23,
+      zoom: 12,
+    };
+
+    app.onBoundsChange(bounds);
+    app.onAreaChange({ longitude: -46.6, latitude: -23.5, radius: 500 });
+    vi.advanceTimersByTime(300);
+    app.onBoundsChange({ ...bounds, minLon: -48 });
+
+    expect(pending.observed).toBe(true);
+    vi.advanceTimersByTime(300);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds
+    ).toHaveBeenCalledTimes(1);
+
+    pending.next({ categories, periods: [] });
+    pending.complete();
+    expect(emissions).toEqual([categories]);
+    expect(app.viewportStatsLoading()).toBe(false);
     subscription.unsubscribe();
   });
 

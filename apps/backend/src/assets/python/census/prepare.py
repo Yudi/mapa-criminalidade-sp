@@ -5,14 +5,31 @@ Requires GDAL Python bindings (osgeo); raw national archives are temporary.
 import argparse
 import csv
 import hashlib
+import ipaddress
 import io
 import json
 import math
 import re
+import shutil
+import socket
 import tempfile
+import time
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
+
+
+ALLOWED_DOWNLOAD_HOSTS = frozenset({
+    'ftp.ibge.gov.br',
+    'geoftp.ibge.gov.br',
+    'servicodados.ibge.gov.br',
+})
+MAX_DOWNLOAD_BYTES = 1_500_000_000
+MIN_FREE_SPACE_BYTES = 64 * 1024 * 1024
+MAX_REDIRECTS = 5
+DOWNLOAD_TIMEOUT_SECONDS = 10 * 60
+SOCKET_TIMEOUT_SECONDS = 120
 
 
 def number(raw):
@@ -44,14 +61,101 @@ def indicator(row, spec, url):
                 universe=' / '.join(spec['denominator']) or None)
 
 
+def validate_download_url(url):
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme.lower() != 'https':
+        raise ValueError(f'Download protocol is not allowed: {parsed.scheme}')
+    hostname = (parsed.hostname or '').lower()
+    if hostname not in ALLOWED_DOWNLOAD_HOSTS:
+        raise ValueError(f'Download host is not allowed: {hostname}')
+    if parsed.port not in (None, 443) or parsed.username or parsed.password:
+        raise ValueError('Download URL must use the standard HTTPS origin')
+    try:
+        addresses = {
+            result[4][0]
+            for result in socket.getaddrinfo(
+                hostname, 443, type=socket.SOCK_STREAM
+            )
+        }
+    except socket.gaierror as error:
+        raise ValueError(f'Could not resolve download host: {hostname}') from error
+    if not addresses or any(
+        not ipaddress.ip_address(address).is_global for address in addresses
+    ):
+        raise ValueError(f'Download host resolves to a non-public address: {hostname}')
+    return url
+
+
+class ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def __init__(self):
+        self.redirects = 0
+
+    def redirect_request(
+        self, request, file_pointer, code, message, headers, new_url
+    ):
+        self.redirects += 1
+        if self.redirects > MAX_REDIRECTS:
+            raise ValueError(f'Exceeded {MAX_REDIRECTS} download redirects')
+        validate_download_url(new_url)
+        return super().redirect_request(
+            request, file_pointer, code, message, headers, new_url
+        )
+
+
+def assert_free_space(path, expected_bytes=0):
+    available = shutil.disk_usage(path.parent).free
+    required = expected_bytes + MIN_FREE_SPACE_BYTES
+    if available < required:
+        raise ValueError(
+            f'Insufficient free space for download: {available} bytes available, '
+            f'{required} required'
+        )
+
+
 def download(url, path, sources, checksums=None):
+    validate_download_url(url)
     request = urllib.request.Request(url, headers={'User-Agent': 'mapa-criminalidade-census-import/1'})
     digest = hashlib.sha256()
-    with urllib.request.urlopen(request, timeout=120) as response, path.open('wb') as output:
-        while chunk := response.read(1024 * 1024):
-            digest.update(chunk)
-            output.write(chunk)
+    deadline = time.monotonic() + DOWNLOAD_TIMEOUT_SECONDS
+    opener = urllib.request.build_opener(ValidatingRedirectHandler())
+    try:
+        with opener.open(request, timeout=SOCKET_TIMEOUT_SECONDS) as response:
+            validate_download_url(response.geturl())
+            content_length = response.headers.get('Content-Length')
+            expected_bytes = (
+                int(content_length)
+                if content_length and content_length.isdigit()
+                else 0
+            )
+            if expected_bytes > MAX_DOWNLOAD_BYTES:
+                raise ValueError(f'Download exceeds {MAX_DOWNLOAD_BYTES} byte limit')
+            assert_free_space(path, expected_bytes)
+            received = 0
+            with path.open('xb') as output:
+                while True:
+                    if time.monotonic() > deadline:
+                        raise TimeoutError(
+                            f'Download exceeded {DOWNLOAD_TIMEOUT_SECONDS} second deadline'
+                        )
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    received += len(chunk)
+                    if received > MAX_DOWNLOAD_BYTES:
+                        raise ValueError(f'Download exceeds {MAX_DOWNLOAD_BYTES} byte limit')
+                    assert_free_space(path)
+                    digest.update(chunk)
+                    output.write(chunk)
+            if content_length and content_length.isdigit() and received != expected_bytes:
+                raise ValueError(
+                    f'Download length mismatch: expected {expected_bytes} bytes, '
+                    f'received {received}'
+                )
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
     if checksums and url in checksums and digest.hexdigest() != checksums[url]:
+        path.unlink(missing_ok=True)
         raise ValueError(f'Source changed; review the manifest before replacing this release: {url}')
     sources.append(dict(url=url, sha256=digest.hexdigest()))
     return path

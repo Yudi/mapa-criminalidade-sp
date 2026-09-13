@@ -55,6 +55,7 @@ const FEATURE_DETAIL_FIELDS = `
       source_id
       source_table
       rubrica
+      descr_modo_objeto
       descr_tipo_objeto
       descr_subtipo_objeto
       descr_ocorrencia

@@ -30,6 +30,24 @@ try {
       stdio: 'inherit',
     }
   );
+  const {
+    rows: [tileDetailContract],
+  } = await db.query(`
+    SELECT
+      (SELECT pg_get_functiondef('public.occurrences(integer,integer,integer,json)'::regprocedure)) AS occurrence_definition,
+      COUNT(*) FILTER (WHERE indexdef LIKE '%USING gin%' AND indexdef LIKE '%vehicle_brands%')::int AS vehicle_indexes,
+      COUNT(*) FILTER (WHERE indexdef LIKE '%USING gin%' AND indexdef LIKE '%object_types%')::int AS object_indexes,
+      COUNT(*) FILTER (WHERE indexdef LIKE '%USING gin%' AND indexdef LIKE '%phone_brand_models%')::int AS phone_indexes,
+      COUNT(*) FILTER (WHERE indexdef LIKE '%USING gin%' AND indexdef LIKE '%location_types%')::int AS location_indexes
+    FROM pg_indexes
+    WHERE schemaname = 'public' AND tablename = 'map_feature_tile_points'
+  `);
+  assert(!tileDetailContract.occurrence_definition.includes('map_features detail'));
+  assert(tileDetailContract.occurrence_definition.includes('tile_point.vehicle_brands'));
+  assert.equal(tileDetailContract.vehicle_indexes, 1);
+  assert.equal(tileDetailContract.object_indexes, 1);
+  assert.equal(tileDetailContract.phone_indexes, 1);
+  assert.equal(tileDetailContract.location_indexes, 1);
   const chartSource = await readFile(
     new URL(
       '../apps/backend/src/app/map-features/services/query/map-features-query-sql.ts',

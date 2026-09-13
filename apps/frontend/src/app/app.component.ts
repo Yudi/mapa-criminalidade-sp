@@ -49,6 +49,7 @@ import {
   debounceTime,
   distinctUntilChanged,
   EMPTY,
+  filter,
   finalize,
   map,
   Observable,
@@ -333,7 +334,21 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           .pipe(
             // Cancel the old scope immediately, before the next debounced query.
             takeUntil(this.areaSubject.pipe(skip(1))),
-            takeUntil(this.boundsSubject.pipe(skip(1))),
+            takeUntil(
+              this.boundsSubject.pipe(
+                skip(1),
+                filter(
+                  (nextBounds) =>
+                    !area &&
+                    nextBounds != null &&
+                    (nextBounds.minLon !== bounds.minLon ||
+                      nextBounds.minLat !== bounds.minLat ||
+                      nextBounds.maxLon !== bounds.maxLon ||
+                      nextBounds.maxLat !== bounds.maxLat ||
+                      nextBounds.zoom !== bounds.zoom)
+                )
+              )
+            ),
             tap(() => this.viewportStatsLoading.set(false)),
             catchError((error: unknown) => {
               this.viewportStatsLoading.set(false);
