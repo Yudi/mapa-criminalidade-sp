@@ -1,14 +1,13 @@
+import { CensusAreaDetail, CensusRelease } from './graphql-projections';
 import VectorTileSource from 'ol/source/VectorTile';
 import MVT from 'ol/format/MVT';
 import { environment } from '../../environments/environment';
 import { inject, Injectable } from '@angular/core';
 import { map } from 'rxjs';
 import {
-  CensusAreaDetail,
   CensusAreaSummary,
   CensusCrimeStats,
   CensusLevel,
-  CensusReleaseSummary,
   MapFeatureFilterInput,
 } from '@mapa-criminalidade/shared-types';
 import { GraphqlClientService } from './graphql-client.service';
@@ -28,9 +27,9 @@ export class CensusService {
   }
   release() {
     return this.graphql
-      .request<{ censusRelease: CensusReleaseSummary | null }>({
+      .request<{ censusRelease: CensusRelease | null }>({
         query:
-          'query CensusRelease { censusRelease { id year municipalityCount neighborhoodCount } }',
+          'query CensusRelease { censusRelease { id year } }',
       })
       .pipe(map((data) => data.censusRelease));
   }
@@ -49,7 +48,7 @@ export class CensusService {
       .request<{ censusArea: CensusAreaDetail }>({
         query: `query CensusArea($area: CensusAreaReferenceInput!) {
         censusArea(area: $area) { releaseId level code name municipalityName year population areaKm2 bounds
-          indicators { key group label value unit denominator sourceUrl variables universe } }
+          indicators { key group label value unit denominator } }
       }`,
         variables: { area },
       })

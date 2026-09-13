@@ -2,7 +2,6 @@ const CATEGORY_FIELDS = `
   name
   count
   rubricaForStyling
-  sourceType
 `;
 
 const PERIOD_FIELDS = `
@@ -13,27 +12,13 @@ const PERIOD_FIELDS = `
 const CHART_BUCKET_FIELDS = `
   label
   count
-  amount
 `;
 
 const GROUPED_OCCURRENCE_FIELDS = `
   numBo
   anoBo
-  latitude
-  longitude
   primaryCategory
-  allCategories
-  recordCount
-  sourceTables
   occurrences {
-    id
-    sourceTable
-    numBo
-    anoBo
-    category
-    rubricaForStyling
-    latitude
-    longitude
     dataOcorrencia
     horaOcorrencia
     dataRegistro
@@ -42,48 +27,27 @@ const GROUPED_OCCURRENCE_FIELDS = `
     bairro
     cidade
     localTipo
-    periodo
     conduta
     naturezaApurada
-    delegacia
   }
 `;
 
 const FEATURE_DETAIL_FIELDS = `
-  id
   imlUnavailable
-  numBo
-  anoBo
-  delegacia
-  latitude
-  longitude
-  category
-  rubricaForStyling
   dataOcorrencia
-  sourceTables
   featureData {
     location {
       logradouro
       numero
       bairro
       cidade
-      cep
       tipo_local
-      subtipo_local
     }
     occurrence {
       hora_ocorrencia
-      periodo
       delegacia
       delegacia_circunscricao
-      departamento
-      seccional
       natureza_apurada
-      conduta
-      autoria
-      flagrante
-      data_registro
-      data_comunicacao
     }
     all_rubricas
     records {
@@ -91,7 +55,6 @@ const FEATURE_DETAIL_FIELDS = `
       source_id
       source_table
       rubrica
-      descr_modo_objeto
       descr_tipo_objeto
       descr_subtipo_objeto
       descr_ocorrencia
@@ -99,14 +62,12 @@ const FEATURE_DETAIL_FIELDS = `
       marca
       quantidade
       bloqueio
-      desbloqueio
       tipo_veiculo
       cor
       placa
       ano_fabricacao
       ano_modelo
       natureza_apurada
-      conduta
       tipo_arma
       calibre
       tipo_droga
@@ -114,26 +75,15 @@ const FEATURE_DETAIL_FIELDS = `
       tipo_pessoa
       sexo
       idade
-      cor
       profissao
       grau_instrucao
       nacionalidade
-    }
-    summary {
-      total_records
-      celulares_count
-      veiculos_count
-      objetos_count
-      dados_criminais_count
-      produtividade_count
     }
   }
   imlRecords {
     sourceId
     sourceTable
     dataEntradaIml
-    anoBo
-    numBo
     delegaciaRegistro
     numeroLaudo
     anoLaudo
@@ -149,11 +99,6 @@ export const MAP_FEATURES_METADATA_QUERY = `
   query MapFeaturesMetadata {
     mapFeaturesMetadata {
       datasetRevision
-      format
-      minZoom
-      maxZoom
-      layers
-      tileUrlTemplate
       dateRange {
         earliest
         latest
@@ -173,26 +118,10 @@ export const MAP_FEATURES_DATE_RANGE_QUERY = `
   }
 `;
 
-export const MAP_FEATURES_CATEGORIES_QUERY = `
-  query MapFeaturesCategories($filter: MapFeatureFilterInput) {
-    mapFeaturesCategories(filter: $filter) {
-      ${CATEGORY_FIELDS}
-    }
-  }
-`;
-
 export const MAP_FEATURES_CATEGORIES_FOR_LOCATION_QUERY = `
   query MapFeaturesCategoriesForLocation($input: MapFeatureLocationInput!) {
     mapFeaturesCategoriesForLocation(input: $input) {
       ${CATEGORY_FIELDS}
-    }
-  }
-`;
-
-export const MAP_FEATURES_PERIODS_QUERY = `
-  query MapFeaturesPeriods($filter: MapFeatureFilterInput) {
-    mapFeaturesPeriods(filter: $filter) {
-      ${PERIOD_FIELDS}
     }
   }
 `;
@@ -234,6 +163,7 @@ export const MAP_FEATURES_CHARTS_QUERY = `
         ${CHART_BUCKET_FIELDS}
       }
       objectTypeDistribution {
+        amount
         filterValue
         ${CHART_BUCKET_FIELDS}
       }
@@ -242,6 +172,7 @@ export const MAP_FEATURES_CHARTS_QUERY = `
         ${CHART_BUCKET_FIELDS}
       }
       phoneBrandDistribution {
+        amount
         filterValue
         ${CHART_BUCKET_FIELDS}
       }
@@ -259,6 +190,7 @@ export const MAP_FEATURES_CHARTS_QUERY = `
         ${CHART_BUCKET_FIELDS}
       }
       drugTypeDistribution {
+        amount
         ${CHART_BUCKET_FIELDS}
       }
     }
@@ -273,14 +205,6 @@ export const GROUPED_OCCURRENCE_BY_BO_QUERY = `
   }
 `;
 
-export const MAP_FEATURE_FULL_QUERY = `
-  query MapFeatureFull($input: MapFeatureLookupInput!) {
-    mapFeatureFull(input: $input) {
-      ${FEATURE_DETAIL_FIELDS}
-    }
-  }
-`;
-
 export const MAP_FEATURE_BY_ID_QUERY = `
   query MapFeatureById($id: ID!) {
     mapFeatureById(id: $id) {
@@ -288,3 +212,20 @@ export const MAP_FEATURE_BY_ID_QUERY = `
     }
   }
 `;
+
+const CHART_FACET_FIELDS = {
+  categories: `categoryDistribution { ${CHART_BUCKET_FIELDS} }`,
+  weekdays: `weekdayDistribution { filterValue ${CHART_BUCKET_FIELDS} }`,
+  objectTypes: `objectTypeDistribution { amount filterValue ${CHART_BUCKET_FIELDS} }`,
+  vehicleBrands: `vehicleBrandDistribution { filterValue ${CHART_BUCKET_FIELDS} }`,
+  phoneBrandModels: `phoneBrandDistribution { amount filterValue ${CHART_BUCKET_FIELDS} }`,
+  locationTypes: `locationTypeDistribution { filterValue ${CHART_BUCKET_FIELDS} }`,
+} as const;
+
+export type ChartFacet = keyof typeof CHART_FACET_FIELDS;
+
+export function chartFacetQuery(facet: ChartFacet): string {
+  return `query MapFeaturesCharts($filter: MapFeatureFilterInput) {
+    mapFeaturesCharts(filter: $filter) { ${CHART_FACET_FIELDS[facet]} }
+  }`;
+}

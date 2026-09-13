@@ -1,8 +1,5 @@
+import { GroupedOccurrence, FeatureDetail } from '../graphql-projections';
 import { z } from 'zod';
-import {
-  GroupedOccurrence,
-  MapFeatureResponse,
-} from '@mapa-criminalidade/shared-types';
 
 const nullableStringSchema = z.string().nullable();
 
@@ -28,24 +25,12 @@ const featureDataSchema = z.object({
   occurrence: z.object({}).passthrough(),
   all_rubricas: z.array(z.string()),
   records: z.array(sourceRecordSchema),
-  summary: z
-    .object({
-      total_records: z.number(),
-      celulares_count: z.number(),
-      veiculos_count: z.number(),
-      objetos_count: z.number(),
-      dados_criminais_count: z.number(),
-      produtividade_count: z.number(),
-    })
-    .passthrough(),
 });
 
 const imlRecordSchema = z.object({
   sourceId: z.number(),
   sourceTable: z.string(),
   dataEntradaIml: nullableStringSchema,
-  anoBo: nullableStringSchema,
-  numBo: nullableStringSchema,
   delegaciaRegistro: nullableStringSchema,
   numeroLaudo: nullableStringSchema,
   anoLaudo: nullableStringSchema,
@@ -58,14 +43,6 @@ const imlRecordSchema = z.object({
 
 const unifiedOccurrenceSchema = z
   .object({
-    id: z.string(),
-    sourceTable: z.string(),
-    numBo: z.string(),
-    anoBo: z.number().nullable(),
-    category: z.string(),
-    rubricaForStyling: z.string(),
-    latitude: z.number(),
-    longitude: z.number(),
     dataOcorrencia: nullableStringSchema,
     horaOcorrencia: nullableStringSchema,
     dataRegistro: nullableStringSchema,
@@ -74,10 +51,8 @@ const unifiedOccurrenceSchema = z
     bairro: nullableStringSchema,
     cidade: nullableStringSchema,
     localTipo: nullableStringSchema,
-    periodo: nullableStringSchema,
     conduta: nullableStringSchema,
     naturezaApurada: nullableStringSchema,
-    delegacia: nullableStringSchema,
   })
   .passthrough();
 
@@ -85,28 +60,15 @@ export const groupedOccurrenceSchema = z
   .object({
     numBo: z.string(),
     anoBo: z.number(),
-    latitude: z.number(),
-    longitude: z.number(),
     primaryCategory: z.string(),
-    allCategories: z.array(z.string()),
-    recordCount: z.number(),
     occurrences: z.array(unifiedOccurrenceSchema),
-    sourceTables: z.array(z.string()),
   })
   .passthrough();
 
 export const mapFeatureResponseSchema = z
   .object({
-    id: z.string(),
-    numBo: z.string(),
-    anoBo: z.number(),
-    delegacia: nullableStringSchema,
-    latitude: z.number(),
-    longitude: z.number(),
-    category: z.string(),
-    rubricaForStyling: z.string(),
+    imlUnavailable: z.boolean().optional(),
     dataOcorrencia: nullableStringSchema,
-    sourceTables: z.array(z.string()),
     featureData: featureDataSchema,
     imlRecords: z.array(imlRecordSchema),
   })
@@ -124,10 +86,10 @@ export function parseGroupedOccurrence(
 
 export function parseMapFeatureResponse(
   value: unknown
-): MapFeatureResponse | null {
+): FeatureDetail | null {
   if (value === null || value === undefined) {
     return null;
   }
 
-  return mapFeatureResponseSchema.parse(value) as MapFeatureResponse;
+  return mapFeatureResponseSchema.parse(value) as FeatureDetail;
 }

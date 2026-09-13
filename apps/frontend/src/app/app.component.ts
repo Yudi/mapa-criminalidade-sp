@@ -1,3 +1,4 @@
+import { CategoryInfo } from './shared/graphql-projections';
 import { TemporalAnalysisComponent } from './components/temporal-analysis/temporal-analysis.component';
 import {
   TemporalRange,
@@ -62,7 +63,6 @@ import {
 } from 'rxjs';
 import {
   AnalysisArea,
-  CategoryInfo,
   DateRange,
   MapFeatureFilterInput,
   MapFeatureDetailFilters,

@@ -1,3 +1,4 @@
+import { FeatureDetail } from '../../../../shared/graphql-projections';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -21,7 +22,6 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatCardModule } from '@angular/material/card';
 import {
-  MapFeatureResponse,
   CelularRecord,
   VeiculoRecord,
   ObjetoRecord,
@@ -70,7 +70,7 @@ export class FeatureDetailDialogComponent implements OnInit {
 
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
-  readonly feature = signal<MapFeatureResponse | null>(null);
+  readonly feature = signal<FeatureDetail | null>(null);
   readonly celulares = computed(() => {
     const f = this.feature();
     if (!f) return [];

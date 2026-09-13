@@ -119,7 +119,7 @@ describe('chart drilldown', () => {
       ...filter,
       weekdays: undefined,
       phoneBrandModels: ['Samsung - Galaxy'],
-    });
+    }, 'weekdays');
 
     component.selectBucket({ key: 'weekdays', value: 1 });
     expect(component.filter().weekdays).toEqual([2]);

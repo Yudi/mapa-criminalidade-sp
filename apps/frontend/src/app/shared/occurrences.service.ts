@@ -1,3 +1,10 @@
+import {
+  GroupedOccurrence,
+  CategoryInfo,
+  FeatureDetail,
+  StartupMetadata,
+  CategoryPeriodStats,
+} from './graphql-projections';
 import { MapFeatureTemporalStats } from '@mapa-criminalidade/shared-types';
 import { Service, inject } from '@angular/core';
 import {
@@ -12,22 +19,12 @@ import {
   throwError,
 } from 'rxjs';
 import {
-  GroupedOccurrence,
-  CategoryInfo,
   DateRange,
-  GroupedOccurrenceByBoQuery,
   MapFeatureFilterInput,
   MapFeatureDetailFilters,
   MapFeatureLocationInput,
   MapFeatureLookupInput,
-  MapFeatureResponse,
   MapFeatureCharts,
-  MapFeaturesCategoryPeriodStats,
-  MapFeaturesChartsQuery,
-  MapFeaturesCategoryPeriodStatsQuery,
-  MapFeaturesCategoriesForLocationQuery,
-  MapFeaturesStartupMetadata,
-  MapFeaturesMetadataQuery,
   MapFeaturesDateRangeQuery,
 } from '@mapa-criminalidade/shared-types';
 import { DateService } from './date.service';
@@ -38,6 +35,8 @@ import {
   MAP_FEATURES_CATEGORIES_FOR_LOCATION_QUERY,
   MAP_FEATURES_CATEGORY_PERIOD_STATS_QUERY,
   MAP_FEATURES_CHARTS_QUERY,
+  chartFacetQuery,
+  ChartFacet,
   MAP_FEATURES_DATE_RANGE_QUERY,
   MAP_FEATURES_METADATA_QUERY,
   MAP_FEATURE_BY_ID_QUERY,
@@ -48,7 +47,7 @@ import {
 } from './schemas/map-feature-response.schema';
 
 interface MapFeatureByIdQuery {
-  mapFeatureById: MapFeatureResponse | null;
+  mapFeatureById: FeatureDetail | null;
 }
 @Service()
 export class OccurrencesService {
@@ -60,10 +59,10 @@ export class OccurrencesService {
   });
   private readonly inFlight = new Map<string, Observable<unknown>>();
 
-  getTileMetadata(): Observable<MapFeaturesStartupMetadata> {
+  getTileMetadata(): Observable<StartupMetadata> {
     return this.cachedRequest('metadata', () =>
       this.graphql
-        .request<MapFeaturesMetadataQuery>({
+        .request<{ mapFeaturesMetadata: StartupMetadata }>({
           query: MAP_FEATURES_METADATA_QUERY,
         })
         .pipe(map((data) => data.mapFeaturesMetadata))
@@ -92,7 +91,7 @@ export class OccurrencesService {
     endHour?: number,
     area?: MapFeatureFilterInput['area'],
     details?: MapFeatureDetailFilters
-  ): Observable<MapFeaturesCategoryPeriodStats> {
+  ): Observable<CategoryPeriodStats> {
     if (
       ![minLon, minLat, maxLon, maxLat].every(Number.isFinite) ||
       minLon > maxLon ||
@@ -120,7 +119,7 @@ export class OccurrencesService {
     return this.cachedRequest(cacheKey, () =>
       this.graphql
         .request<
-          MapFeaturesCategoryPeriodStatsQuery,
+          { mapFeaturesCategoryPeriodStats: CategoryPeriodStats },
           { filter: MapFeatureFilterInput }
         >({
           query: MAP_FEATURES_CATEGORY_PERIOD_STATS_QUERY,
@@ -130,18 +129,22 @@ export class OccurrencesService {
     );
   }
 
-  getTemporalStats(
-    filter: MapFeatureFilterInput
-  ): Observable<MapFeatureTemporalStats> {
+  getTemporalStats<
+    K extends keyof MapFeatureTemporalStats = keyof MapFeatureTemporalStats
+  >(
+    filter: MapFeatureFilterInput,
+    fields?: readonly K[]
+  ): Observable<Pick<MapFeatureTemporalStats, K>> {
+    const selections = fields ?? TEMPORAL_DEFAULT_FIELDS;
     // The backend cache is revision-aware; do not retain temporal snapshots across imports.
     return this.graphql
       .request<
-        { mapFeaturesTemporalStats: MapFeatureTemporalStats },
+        { mapFeaturesTemporalStats: Pick<MapFeatureTemporalStats, K> },
         { filter: MapFeatureFilterInput }
       >({
         query: `query TemporalStats($filter: MapFeatureFilterInput!) {
         mapFeaturesTemporalStats(filter: $filter) {
-          datasetRevision total monthly { label count } categories { label count }
+          ${selections.map((field) => TEMPORAL_FIELDS[field]).join(' ')}
         }
       }`,
         variables: { filter },
@@ -151,12 +154,26 @@ export class OccurrencesService {
 
   getChartsForBounds(
     filter: MapFeatureFilterInput
-  ): Observable<MapFeatureCharts> {
-    const cacheKey = this.filterCacheKey('charts-bounds', filter);
+  ): Observable<MapFeatureCharts>;
+  getChartsForBounds(
+    filter: MapFeatureFilterInput,
+    facet: ChartFacet
+  ): Observable<Partial<MapFeatureCharts>>;
+  getChartsForBounds(
+    filter: MapFeatureFilterInput,
+    facet?: ChartFacet
+  ): Observable<Partial<MapFeatureCharts>> {
+    const cacheKey = this.filterCacheKey(
+      `charts-bounds${facet ? `-${facet}` : ''}`,
+      filter
+    );
     return this.cachedRequest(cacheKey, () =>
       this.graphql
-        .request<MapFeaturesChartsQuery, { filter: MapFeatureFilterInput }>({
-          query: MAP_FEATURES_CHARTS_QUERY,
+        .request<
+          { mapFeaturesCharts: Partial<MapFeatureCharts> },
+          { filter: MapFeatureFilterInput }
+        >({
+          query: facet ? chartFacetQuery(facet) : MAP_FEATURES_CHARTS_QUERY,
           variables: { filter },
         })
         .pipe(map((data) => data.mapFeaturesCharts))
@@ -197,7 +214,7 @@ export class OccurrencesService {
     return this.cachedRequest(cacheKey, () =>
       this.graphql
         .request<
-          MapFeaturesCategoriesForLocationQuery,
+          { mapFeaturesCategoriesForLocation: CategoryInfo[] },
           { input: MapFeatureLocationInput }
         >({
           query: MAP_FEATURES_CATEGORIES_FOR_LOCATION_QUERY,
@@ -214,7 +231,10 @@ export class OccurrencesService {
 
     return this.cachedRequest(`by-num-bo-${normalizedNumBo}`, () =>
       this.graphql
-        .request<GroupedOccurrenceByBoQuery, { input: MapFeatureLookupInput }>({
+        .request<
+          { groupedOccurrenceByBo: GroupedOccurrence | null },
+          { input: MapFeatureLookupInput }
+        >({
           query: GROUPED_OCCURRENCE_BY_BO_QUERY,
           variables: { input: { numBo: normalizedNumBo } },
         })
@@ -235,7 +255,7 @@ export class OccurrencesService {
       () =>
         this.graphql
           .request<
-            GroupedOccurrenceByBoQuery,
+            { groupedOccurrenceByBo: GroupedOccurrence | null },
             { input: MapFeatureLookupInput }
           >({
             query: GROUPED_OCCURRENCE_BY_BO_QUERY,
@@ -246,7 +266,7 @@ export class OccurrencesService {
           )
     );
   }
-  getFullFeature(featureId: string): Observable<MapFeatureResponse | null> {
+  getFullFeature(featureId: string): Observable<FeatureDetail | null> {
     const normalizedFeatureId = featureId.trim();
     if (!normalizedFeatureId) {
       return throwError(
@@ -331,3 +351,14 @@ function stableFilterKey(value: unknown): string {
 
   return JSON.stringify(normalized);
 }
+
+const TEMPORAL_FIELDS = {
+  datasetRevision: 'datasetRevision',
+  total: 'total',
+  monthly: 'monthly { label count }',
+  categories: 'categories { label count }',
+} as const;
+
+const TEMPORAL_DEFAULT_FIELDS = [
+  'datasetRevision', 'total', 'monthly', 'categories',
+] as const;

@@ -1,3 +1,4 @@
+import { CensusAreaDetail, CensusRelease } from '../../../../shared/graphql-projections';
 import {
   MatDialog,
   MatDialogModule,
@@ -32,11 +33,9 @@ import { Fill, Stroke, Style, Text } from 'ol/style';
 import { transformExtent } from 'ol/proj';
 import { unByKey } from 'ol/Observable';
 import {
-  CensusAreaDetail,
   CensusAreaSummary,
   CensusCrimeStats,
   CensusLevel,
-  CensusReleaseSummary,
   MapFeatureFilterInput,
   occurrencesPer100k,
 } from '@mapa-criminalidade/shared-types';
@@ -70,7 +69,7 @@ export class CensusExplorerComponent {
   readonly drawing = input(false);
   readonly appliedCode = input<string | null>(null);
   readonly applyArea = output<CensusAreaDetail>();
-  readonly release = signal<CensusReleaseSummary | null>(null);
+  readonly release = signal<CensusRelease | null>(null);
   readonly level = signal<CensusLevel | 'off'>('off');
   readonly controlsOpened = output<void>();
   readonly opened = signal(false);

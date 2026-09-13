@@ -22,6 +22,35 @@ describe('OccurrencesService', () => {
     service = TestBed.inject(OccurrencesService);
   });
 
+  it('keeps facet responses separate from complete chart responses in the cache', async () => {
+    const facet = { weekdayDistribution: [{ label: 'Segunda', count: 2, filterValue: '1' }] };
+    const complete = { ...facet, totalFeatures: 2, totalRecords: 3 };
+    graphql.request.mockReturnValueOnce(of({ mapFeaturesCharts: facet }))
+      .mockReturnValueOnce(of({ mapFeaturesCharts: complete }));
+
+    await expect(firstValueFrom(service.getChartsForBounds({}, 'weekdays'))).resolves.toEqual(facet);
+    await expect(firstValueFrom(service.getChartsForBounds({}))).resolves.toEqual(complete);
+    await expect(firstValueFrom(service.getChartsForBounds({}, 'weekdays'))).resolves.toEqual(facet);
+    expect(graphql.request).toHaveBeenCalledTimes(2);
+    expect(graphql.request.mock.calls[0][0].query).toContain('weekdayDistribution');
+    expect(graphql.request.mock.calls[0][0].query).not.toContain('totalFeatures');
+    expect(graphql.request.mock.calls[0][0].query).not.toContain('categoryDistribution');
+  });
+
+  it('requests monthly data separately from revision-safe comparison data', async () => {
+    graphql.request.mockReturnValue(of({ mapFeaturesTemporalStats: {} }));
+    await firstValueFrom(service.getTemporalStats({}, ['monthly']));
+    await firstValueFrom(service.getTemporalStats({}, ['datasetRevision', 'total', 'categories']));
+    const trendQuery = graphql.request.mock.calls[0][0].query;
+    const comparisonQuery = graphql.request.mock.calls[1][0].query;
+    expect(trendQuery).toContain('monthly { label count }');
+    expect(trendQuery).not.toContain('categories');
+    expect(trendQuery).not.toContain('datasetRevision');
+    expect(comparisonQuery).toContain('datasetRevision');
+    expect(comparisonQuery).toContain('categories { label count }');
+    expect(comparisonQuery).not.toContain('monthly');
+  });
+
   it('accepts valid zero coordinates for location queries', async () => {
     graphql.request.mockReturnValue(
       of({ mapFeaturesCategoriesForLocation: [{ name: 'Furto' }] })

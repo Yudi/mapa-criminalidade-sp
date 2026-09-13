@@ -1,3 +1,4 @@
+import { CensusAreaDetail } from '../../../../shared/graphql-projections';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,7 +10,6 @@ import { DecimalPipe, CurrencyPipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
 import {
-  CensusAreaDetail,
   CensusCrimeStats,
 } from '@mapa-criminalidade/shared-types';
 

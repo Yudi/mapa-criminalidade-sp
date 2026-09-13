@@ -93,7 +93,7 @@ describe('AppComponent', () => {
     vi.useFakeTimers();
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
-    const emissions: CategoryInfo[][] = [];
+    const emissions: Omit<CategoryInfo, 'sourceType'>[][] = [];
     const subscription = app.categories.subscribe((value) =>
       emissions.push(value)
     );
@@ -287,7 +287,7 @@ describe('AppComponent', () => {
       .mockReturnValueOnce(of({ categories, periods: [] }));
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
-    const emissions: CategoryInfo[][] = [];
+    const emissions: Omit<CategoryInfo, 'sourceType'>[][] = [];
     const subscription = app.categories.subscribe((value) =>
       emissions.push(value)
     );
@@ -440,7 +440,7 @@ describe('AppComponent', () => {
       pending
     );
     const app = TestBed.createComponent(AppComponent).componentInstance;
-    const emissions: CategoryInfo[][] = [];
+    const emissions: Omit<CategoryInfo, 'sourceType'>[][] = [];
     const subscription = app.categories.subscribe((value) =>
       emissions.push(value)
     );

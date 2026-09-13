@@ -1,11 +1,10 @@
+import { StartupMetadata } from './graphql-projections';
 import { Service, inject } from '@angular/core';
 import { Observable, map, shareReplay, take } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   TileMetadata,
   TileFilterParams,
-  MapFeaturesStartupMetadata,
-  MapFeaturesMetadataQuery,
 } from '@mapa-criminalidade/shared-types';
 import { GraphqlClientService } from './graphql-client.service';
 import { MAP_FEATURES_METADATA_QUERY } from './map-features.graphql';
@@ -21,7 +20,7 @@ export interface ExtendedTileFilterParams extends TileFilterParams {
 @Service()
 export class VectorTileService {
   private graphql = inject(GraphqlClientService);
-  private metadataCache$: Observable<MapFeaturesStartupMetadata> | null = null;
+  private metadataCache$: Observable<StartupMetadata> | null = null;
   buildTileUrl(params?: ExtendedTileFilterParams): string {
     // Smooth heatmaps require raw points, never zoom-dependent cluster centers.
     const mode = params?.mode === 'heatmap' ? 'markers' : params?.mode;
@@ -106,10 +105,10 @@ export class VectorTileService {
       ),
     ].sort((left, right) => left - right);
   }
-  getMetadata(): Observable<MapFeaturesStartupMetadata> {
+  getMetadata(): Observable<StartupMetadata> {
     if (!this.metadataCache$) {
       this.metadataCache$ = this.graphql
-        .request<MapFeaturesMetadataQuery>({
+        .request<{ mapFeaturesMetadata: StartupMetadata }>({
           query: MAP_FEATURES_METADATA_QUERY,
         })
         .pipe(

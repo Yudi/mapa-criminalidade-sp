@@ -1,3 +1,4 @@
+import { GroupedOccurrence } from './graphql-projections';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import {
@@ -14,7 +15,7 @@ import {
   timeout,
   throwError,
 } from 'rxjs';
-import { GroupedOccurrence } from '@mapa-criminalidade/shared-types';
+
 import { DateService } from './date.service';
 import { OccurrencesService } from './occurrences.service';
 import { BoundedTtlLruCache } from './bounded-cache';

@@ -98,8 +98,8 @@ export class TemporalAnalysisComponent implements OnChanges, OnDestroy {
   );
   readonly comparable = signal<ReturnType<typeof compareRanges>>(null);
   readonly results = signal<{
-    first: MapFeatureTemporalStats;
-    second: MapFeatureTemporalStats;
+    first: Omit<MapFeatureTemporalStats, 'monthly'>;
+    second: Omit<MapFeatureTemporalStats, 'monthly'>;
   } | null>(null);
   readonly changes = computed(() => {
     const results = this.results();
@@ -212,11 +212,17 @@ export class TemporalAnalysisComponent implements OnChanges, OnDestroy {
     this.comparing.set(true);
     // Sequential scans respect the small production statistics pool.
     this.compareRequest = this.occurrences
-      .getTemporalStats({ ...this.filter(), ...ranges.first })
+      .getTemporalStats(
+        { ...this.filter(), ...ranges.first },
+        ['datasetRevision', 'total', 'categories']
+      )
       .pipe(
         switchMap((first) =>
           this.occurrences
-            .getTemporalStats({ ...this.filter(), ...ranges.second })
+            .getTemporalStats(
+              { ...this.filter(), ...ranges.second },
+              ['datasetRevision', 'total', 'categories']
+            )
             .pipe(map((second) => ({ first, second })))
         )
       )
@@ -258,11 +264,14 @@ export class TemporalAnalysisComponent implements OnChanges, OnDestroy {
     this.loading.set(true);
     // The query and the displayed partial-month labels use exactly the same cutoff.
     this.trendRequest = this.occurrences
-      .getTemporalStats({
-        ...this.filter(),
-        afterDate: covered[0].afterDate,
-        beforeDate: covered[covered.length - 1].beforeDate,
-      })
+      .getTemporalStats(
+        {
+          ...this.filter(),
+          afterDate: covered[0].afterDate,
+          beforeDate: covered[covered.length - 1].beforeDate,
+        },
+        ['monthly']
+      )
       .subscribe({
         next: (stats) => {
           this.frames.set(monthlyFrames(range, this.coverage(), stats.monthly));

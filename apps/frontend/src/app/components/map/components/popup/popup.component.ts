@@ -1,3 +1,4 @@
+import { GroupedOccurrence, UnifiedOccurrence } from '../../../../shared/graphql-projections';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -7,10 +8,7 @@ import {
   signal,
 } from '@angular/core';
 
-import {
-  GroupedOccurrence,
-  UnifiedOccurrence,
-} from '@mapa-criminalidade/shared-types';
+
 
 @Component({
   selector: 'app-popup',

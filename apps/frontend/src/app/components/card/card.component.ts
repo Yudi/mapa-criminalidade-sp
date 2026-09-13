@@ -1,3 +1,4 @@
+import { CategoryInfo } from '../../shared/graphql-projections';
 import {
   DetailFilterEntry,
   detailFilterEntries,
@@ -36,7 +37,6 @@ import { Observable, Subscription } from 'rxjs';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NgOptimizedImage } from '@angular/common';
 import {
-  CategoryInfo,
   DateRange,
   PeriodInfo,
 } from '@mapa-criminalidade/shared-types';
