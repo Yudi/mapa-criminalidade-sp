@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 const MAX_REJECTION_BYTES: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CleanReport {
     pub source_rows: usize,
     pub accepted_rows: usize,
@@ -389,7 +390,15 @@ mod tests {
         assert_eq!(report.accepted_rows, 2);
         assert_eq!(report.rejected_rows, 1);
         assert_eq!(fs::read_to_string(&output_path).unwrap(), "A;B\n1;2\n3;4\n");
-        assert!(appended_path(&output_path, ".manifest.json").exists());
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &fs::read(appended_path(&output_path, ".manifest.json")).unwrap(),
+        )
+        .unwrap();
+        // The backend reconciles COPY counts using these JSON field names.
+        assert_eq!(manifest["sourceRows"], 3);
+        assert_eq!(manifest["acceptedRows"], 2);
+        assert_eq!(manifest["rejectedRows"], 1);
+        assert!(manifest.get("source_rows").is_none());
         assert!(appended_path(&output_path, ".rejected.csv").exists());
 
         let _ = fs::remove_file(input_path);
