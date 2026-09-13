@@ -126,8 +126,18 @@ export interface MapFeaturesMetadata extends OccurrenceTileMetadata {
   totalFeatures: number;
 }
 
+export type MapFeaturesStartupMetadata = Omit<
+  MapFeaturesMetadata,
+  | 'availableCategories'
+  | 'availableRubricas'
+  | 'availablePeriods'
+  | 'categoryStats'
+  | 'periodStats'
+  | 'totalFeatures'
+>;
+
 export interface MapFeaturesMetadataQuery {
-  mapFeaturesMetadata: MapFeaturesMetadata;
+  mapFeaturesMetadata: MapFeaturesStartupMetadata;
 }
 
 export interface MapFeaturesDateRangeQuery {

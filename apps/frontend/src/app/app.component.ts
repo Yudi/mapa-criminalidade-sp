@@ -333,6 +333,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           .pipe(
             // Cancel the old scope immediately, before the next debounced query.
             takeUntil(this.areaSubject.pipe(skip(1))),
+            takeUntil(this.boundsSubject.pipe(skip(1))),
             tap(() => this.viewportStatsLoading.set(false)),
             catchError((error: unknown) => {
               this.viewportStatsLoading.set(false);

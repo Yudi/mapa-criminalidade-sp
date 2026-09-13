@@ -153,21 +153,11 @@ export const MAP_FEATURES_METADATA_QUERY = `
       minZoom
       maxZoom
       layers
-      availableCategories
-      availableRubricas
-      availablePeriods
       tileUrlTemplate
-      totalFeatures
       dateRange {
         earliest
         latest
         defaultAfter
-      }
-      categoryStats {
-        ${CATEGORY_FIELDS}
-      }
-      periodStats {
-        ${PERIOD_FIELDS}
       }
     }
   }

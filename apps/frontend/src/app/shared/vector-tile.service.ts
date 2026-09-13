@@ -4,7 +4,7 @@ import { environment } from '../../environments/environment';
 import {
   TileMetadata,
   TileFilterParams,
-  OccurrenceTileMetadata,
+  MapFeaturesStartupMetadata,
   MapFeaturesMetadataQuery,
 } from '@mapa-criminalidade/shared-types';
 import { GraphqlClientService } from './graphql-client.service';
@@ -21,7 +21,7 @@ export interface ExtendedTileFilterParams extends TileFilterParams {
 @Service()
 export class VectorTileService {
   private graphql = inject(GraphqlClientService);
-  private metadataCache$: Observable<OccurrenceTileMetadata> | null = null;
+  private metadataCache$: Observable<MapFeaturesStartupMetadata> | null = null;
   buildTileUrl(params?: ExtendedTileFilterParams): string {
     // Smooth heatmaps require raw points, never zoom-dependent cluster centers.
     const mode = params?.mode === 'heatmap' ? 'markers' : params?.mode;
@@ -106,7 +106,7 @@ export class VectorTileService {
       ),
     ].sort((left, right) => left - right);
   }
-  getMetadata(): Observable<OccurrenceTileMetadata> {
+  getMetadata(): Observable<MapFeaturesStartupMetadata> {
     if (!this.metadataCache$) {
       this.metadataCache$ = this.graphql
         .request<MapFeaturesMetadataQuery>({

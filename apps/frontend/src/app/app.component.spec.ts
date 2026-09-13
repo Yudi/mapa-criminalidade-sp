@@ -173,6 +173,45 @@ describe('AppComponent', () => {
     subscription.unsubscribe();
   });
 
+  it('cancels the previous statistics request as soon as the map moves', () => {
+    vi.useFakeTimers();
+    const initialRequest = new Subject<{
+      categories: CategoryInfo[];
+      periods: [];
+    }>();
+    occurrencesService.getCategoryPeriodStatsForBounds
+      .mockReturnValueOnce(initialRequest)
+      .mockReturnValueOnce(of({ categories, periods: [] }));
+    const app = TestBed.createComponent(AppComponent).componentInstance;
+    const subscription = app.categories.subscribe();
+    const initialBounds = {
+      minLon: -47,
+      minLat: -24,
+      maxLon: -46,
+      maxLat: -23,
+      zoom: MIN_CRIME_TILE_ZOOM,
+    };
+
+    app.onBoundsChange(initialBounds);
+    vi.advanceTimersByTime(300);
+    expect(initialRequest.observed).toBe(true);
+
+    app.onBoundsChange({ ...initialBounds, minLon: -48 });
+
+    expect(initialRequest.observed).toBe(false);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds
+    ).toHaveBeenCalledTimes(1);
+    expect(app.statsError()).toBe(false);
+
+    vi.advanceTimersByTime(300);
+    expect(
+      occurrencesService.getCategoryPeriodStatsForBounds
+    ).toHaveBeenCalledTimes(2);
+
+    subscription.unsubscribe();
+  });
+
   it('shares one statistics request between category and period filters', () => {
     vi.useFakeTimers();
     const fixture = TestBed.createComponent(AppComponent);

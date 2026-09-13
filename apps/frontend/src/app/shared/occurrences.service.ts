@@ -26,7 +26,7 @@ import {
   MapFeaturesChartsQuery,
   MapFeaturesCategoryPeriodStatsQuery,
   MapFeaturesCategoriesForLocationQuery,
-  MapFeaturesMetadata,
+  MapFeaturesStartupMetadata,
   MapFeaturesMetadataQuery,
   MapFeaturesDateRangeQuery,
 } from '@mapa-criminalidade/shared-types';
@@ -60,7 +60,7 @@ export class OccurrencesService {
   });
   private readonly inFlight = new Map<string, Observable<unknown>>();
 
-  getTileMetadata(): Observable<MapFeaturesMetadata> {
+  getTileMetadata(): Observable<MapFeaturesStartupMetadata> {
     return this.cachedRequest('metadata', () =>
       this.graphql
         .request<MapFeaturesMetadataQuery>({

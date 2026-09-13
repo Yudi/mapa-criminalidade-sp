@@ -39,6 +39,12 @@ const UUID_V7_REGEX =
 const TILE_URL_TEMPLATE =
   process.env.TILE_URL_TEMPLATE ?? '/api/tiles/occurrences/{z}/{x}/{y}';
 
+type MetadataResult = {
+  [Key in keyof MapFeatureMetadataObject]:
+    | MapFeatureMetadataObject[Key]
+    | Promise<MapFeatureMetadataObject[Key]>;
+};
+
 @Resolver()
 export class MapFeaturesResolver {
   constructor(
@@ -48,21 +54,15 @@ export class MapFeaturesResolver {
   ) {}
 
   @Query(() => MapFeatureMetadataObject, { name: 'mapFeaturesMetadata' })
-  async getMetadata(): Promise<MapFeatureMetadataObject> {
+  async getMetadata(): Promise<MetadataResult> {
     return this.loadMetadata();
   }
 
   private async loadMetadata(
     retried = false
-  ): Promise<MapFeatureMetadataObject> {
+  ): Promise<MetadataResult> {
     const datasetRevision = await this.queryService.getDatasetRevision();
-    // Keep the expensive statistics scan out of a three-way fan-out on the
-    // production pool (which is intentionally limited to three connections).
-    const stats = await this.queryService.getCategoryPeriodStats();
-    const [dateRange, count] = await Promise.all([
-      this.queryService.getDateRange(),
-      this.queryService.getCount(),
-    ]);
+    const dateRange = await this.queryService.getDateRange();
     if (datasetRevision !== (await this.queryService.getDatasetRevision())) {
       if (retried)
         throw new Error(
@@ -70,9 +70,19 @@ export class MapFeaturesResolver {
         );
       return this.loadMetadata(true);
     }
-    const { categories, periods } = stats;
-    const categoryNames = categories.map((category) => category.name);
-    const periodNames = periods.map((period) => period.name);
+    // GraphQL reads only selected properties. Share one lazy scan across all
+    // aggregate fields, including aliases and fragments in legacy queries.
+    const verifyRevision = async <T>(value: T): Promise<T> => {
+      if (datasetRevision !== (await this.queryService.getDatasetRevision())) {
+        throw new Error('Dataset changed during metadata loading; retry the request');
+      }
+      return value;
+    };
+    let stats: ReturnType<MapFeaturesQueryService['getCategoryPeriodStats']> | undefined;
+    const loadStats = () =>
+      (stats ??= this.queryService.getCategoryPeriodStats().then(verifyRevision));
+    let count: Promise<number> | undefined;
+    const queryService = this.queryService;
 
     return {
       format: 'mvt',
@@ -80,13 +90,25 @@ export class MapFeaturesResolver {
       minZoom: MIN_CRIME_TILE_ZOOM,
       maxZoom: MAX_CRIME_TILE_ZOOM,
       layers: ['occurrences'],
-      availableCategories: categoryNames,
-      availableRubricas: categoryNames,
-      availablePeriods: periodNames,
-      categoryStats: categories,
-      periodStats: periods,
+      get availableCategories() {
+        return loadStats().then(({ categories }) => categories.map(({ name }) => name));
+      },
+      get availableRubricas() {
+        return loadStats().then(({ categories }) => categories.map(({ name }) => name));
+      },
+      get availablePeriods() {
+        return loadStats().then(({ periods }) => periods.map(({ name }) => name));
+      },
+      get categoryStats() {
+        return loadStats().then(({ categories }) => categories);
+      },
+      get periodStats() {
+        return loadStats().then(({ periods }) => periods);
+      },
       dateRange,
-      totalFeatures: count,
+      get totalFeatures() {
+        return (count ??= queryService.getCount().then(verifyRevision));
+      },
       tileUrlTemplate: TILE_URL_TEMPLATE,
     };
   }
