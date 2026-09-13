@@ -30,8 +30,6 @@ RUN addgroup -S app && adduser -S app -G app
 
 COPY --from=builder --chown=app:app /workspace/dist/apps/frontend ./
 
-USER app
-
 EXPOSE 4000
 
 CMD ["node", "server/server.mjs"]

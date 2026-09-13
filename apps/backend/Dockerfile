@@ -66,10 +66,6 @@ COPY --from=rust-builder /usr/src/dataset-handling/target/release/dataset-handli
 RUN chmod +x /usr/local/bin/dataset-handling \
     && chown -R app:app /app
 
-# Keep the API/import worker out of the root account.  The /app/temp and
-# /app/uploads directories are created above with app ownership; deployment
-# bind mounts must be provisioned for uid/gid 10001/10001 as well.
-USER app
 
 EXPOSE 8080
 
