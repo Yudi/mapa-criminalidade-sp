@@ -69,6 +69,7 @@ export class FeatureDetailDialogComponent implements OnInit {
   readonly data = inject<FeatureDetailDialogData>(MAT_DIALOG_DATA);
 
   readonly loading = signal(true);
+  readonly imlLoading = signal(false);
   readonly error = signal<string | null>(null);
   readonly feature = signal<FeatureDetail | null>(null);
   readonly celulares = computed(() => {
@@ -139,10 +140,10 @@ export class FeatureDetailDialogComponent implements OnInit {
 
   private loadFeature(): void {
     this.occurrencesService
-      .getFullFeature(this.data.featureId)
+      .getFullFeatureProgressive(this.data.featureId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (feature) => {
+        next: ({ feature, complete }) => {
           if (!feature) {
             this.error.set('Ocorrência não encontrada');
             this.loading.set(false);
@@ -151,11 +152,20 @@ export class FeatureDetailDialogComponent implements OnInit {
 
           this.feature.set(feature);
           this.loading.set(false);
+          this.imlLoading.set(!complete);
         },
         error: (err) => {
           console.error('Error loading feature:', err);
-          this.error.set('Erro ao carregar dados da ocorrência');
+          if (this.feature()) {
+            this.feature.update((feature) => feature && {
+              ...feature,
+              imlUnavailable: true,
+            });
+          } else {
+            this.error.set('Erro ao carregar dados da ocorrência');
+          }
           this.loading.set(false);
+          this.imlLoading.set(false);
         },
       });
   }

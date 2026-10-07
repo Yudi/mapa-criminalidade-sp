@@ -47,6 +47,14 @@
   padding: 16px 0;
 }
 
+.iml-loading {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 12px 0;
+}
+
 .iml-warning {
   align-items: center;
   background: var(--mat-sys-tertiary-container);

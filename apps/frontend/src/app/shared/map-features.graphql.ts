@@ -32,8 +32,7 @@ const GROUPED_OCCURRENCE_FIELDS = `
   }
 `;
 
-const FEATURE_DETAIL_FIELDS = `
-  imlUnavailable
+const FEATURE_DETAIL_BASE_FIELDS = `
   dataOcorrencia
   featureData {
     location {
@@ -81,6 +80,10 @@ const FEATURE_DETAIL_FIELDS = `
       nacionalidade
     }
   }
+`;
+
+const FEATURE_DETAIL_IML_FIELDS = `
+  imlUnavailable
   imlRecords {
     sourceId
     sourceTable
@@ -209,7 +212,19 @@ export const GROUPED_OCCURRENCE_BY_BO_QUERY = `
 export const MAP_FEATURE_BY_ID_QUERY = `
   query MapFeatureById($id: ID!) {
     mapFeatureById(id: $id) {
-      ${FEATURE_DETAIL_FIELDS}
+      ${FEATURE_DETAIL_BASE_FIELDS}
+      ${FEATURE_DETAIL_IML_FIELDS}
+    }
+  }
+`;
+
+export const MAP_FEATURE_BY_ID_DEFERRED_QUERY = `
+  query MapFeatureByIdDeferred($id: ID!) {
+    mapFeatureById(id: $id) {
+      ${FEATURE_DETAIL_BASE_FIELDS}
+      ... @defer(label: "iml") {
+        ${FEATURE_DETAIL_IML_FIELDS}
+      }
     }
   }
 `;

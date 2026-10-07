@@ -1,20 +1,24 @@
 import { Test } from '@nestjs/testing';
 import { GraphQLSchemaBuilderModule, GraphQLSchemaFactory } from '@nestjs/graphql';
-import { parse, validate } from 'graphql';
+import { extendSchema, parse, specifiedRules, validate } from 'graphql';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MapFeaturesResolver } from './map-features.resolver';
 import { CensusResolver } from '../census/census.resolver';
+import { createGraphqlQueryLimitsRule } from '../shared/graphql-query-limits';
 
 it('accepts the frontend query selections in the current resolver schema', async () => {
   const module = await Test.createTestingModule({
     imports: [GraphQLSchemaBuilderModule],
   }).compile();
   try {
-    const schema = await module.get(GraphQLSchemaFactory).create([
+    const generatedSchema = await module.get(GraphQLSchemaFactory).create([
       MapFeaturesResolver,
       CensusResolver,
     ]);
+    const schema = extendSchema(generatedSchema, parse(
+      'directive @defer(if: Boolean, label: String) on FRAGMENT_SPREAD | INLINE_FRAGMENT'
+    ));
     const frontend = resolve(__dirname, '../../../../frontend/src/app/shared');
     const source = readFileSync(resolve(frontend, 'map-features.graphql.ts'), 'utf8');
     const constants = new Map(
@@ -35,7 +39,7 @@ it('accepts the frontend query selections in the current resolver schema', async
     const census = readFileSync(resolve(frontend, 'census.service.ts'), 'utf8');
     queries.push(...[...census.matchAll(/(?:`|')(query Census[\s\S]*?)(?:`|')/g)]
       .map((match) => match[1]));
-    expect(queries).toHaveLength(11);
+    expect(queries).toHaveLength(12);
     const facets = source.split('const CHART_FACET_FIELDS = {')[1].split('} as const;')[0];
     const facetTemplate = source.split('return `query MapFeaturesCharts')[1].split('`;')[0];
     for (const match of facets.matchAll(/\w+: `([^`]+)`/g)) {
@@ -54,9 +58,12 @@ it('accepts the frontend query selections in the current resolver schema', async
         /\$\{[^}]+\}/, fields.map((field) => temporalFields.get(field)).join(' ')
       ));
     }
-    expect(queries).toHaveLength(19);
+    expect(queries).toHaveLength(20);
     for (const query of queries) {
-      expect(validate(schema, parse(query)).map((error) => error.message)).toEqual([]);
+      expect(validate(schema, parse(query), [
+        ...specifiedRules,
+        createGraphqlQueryLimitsRule(),
+      ]).map((error) => error.message)).toEqual([]);
     }
   } finally {
     await module.close();

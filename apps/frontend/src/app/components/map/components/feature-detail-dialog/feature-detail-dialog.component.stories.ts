@@ -2,13 +2,13 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import type { Meta, StoryObj } from '@storybook/angular';
 import { componentWrapperDecorator, moduleMetadata } from '@storybook/angular';
 import { expect, fn, within } from 'storybook/test';
-import { NEVER, of, throwError } from 'rxjs';
+import { concatWith, NEVER, of, throwError } from 'rxjs';
 import { MapFeatureResponse } from '@mapa-criminalidade/shared-types';
 import { OccurrencesService } from '../../../../shared/occurrences.service';
 import { storyFeature } from '../../../../testing/storybook.fixtures';
 import { FeatureDetailDialogComponent } from './feature-detail-dialog.component';
 
-type DetailState = 'loaded' | 'loading' | 'not-found' | 'error';
+type DetailState = 'loaded' | 'loading' | 'iml-loading' | 'not-found' | 'error';
 
 interface FeatureDetailStoryArgs {
   state: DetailState;
@@ -59,12 +59,18 @@ function detailResponse(args: FeatureDetailStoryArgs) {
   switch (args.state) {
     case 'loading':
       return NEVER;
+    case 'iml-loading':
+      return of({
+        feature: { ...featureForArgs(args), imlRecords: [], imlUnavailable: false },
+        complete: false,
+        imlError: false,
+      }).pipe(concatWith(NEVER));
     case 'not-found':
-      return of(null);
+      return of({ feature: null, complete: true, imlError: false });
     case 'error':
       return throwError(() => new Error('Falha fictícia'));
     default:
-      return of(featureForArgs(args));
+      return of({ feature: featureForArgs(args), complete: true, imlError: false });
   }
 }
 
@@ -83,7 +89,7 @@ const meta = {
   argTypes: {
     state: {
       control: 'select',
-      options: ['loaded', 'loading', 'not-found', 'error'],
+      options: ['loaded', 'loading', 'iml-loading', 'not-found', 'error'],
     },
     sparse: { control: 'boolean' },
     imlUnavailable: { control: 'boolean' },
@@ -113,7 +119,7 @@ const meta = {
         {
           provide: OccurrencesService,
           useValue: {
-            getFullFeature: () => detailResponse(args),
+            getFullFeatureProgressive: () => detailResponse(args),
           },
         },
       ],
@@ -166,6 +172,12 @@ export const PeriodoDescritivo: Story = {
 export const Carregando: Story = {
   args: {
     state: 'loading',
+  },
+};
+
+export const CarregandoIml: Story = {
+  args: {
+    state: 'iml-loading',
   },
 };
 

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of, throwError } from 'rxjs';
+import { firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { DateService } from './date.service';
 import { GraphqlClientService } from './graphql-client.service';
 import { OccurrencesService } from './occurrences.service';
@@ -8,10 +8,13 @@ import { createRelativeDateRange } from '../testing/relative-date.fixture';
 describe('OccurrencesService', () => {
   const relativeDateRange = createRelativeDateRange();
   let service: OccurrencesService;
-  let graphql: { request: ReturnType<typeof vi.fn> };
+  let graphql: {
+    request: ReturnType<typeof vi.fn>;
+    requestDeferred: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
-    graphql = { request: vi.fn() };
+    graphql = { request: vi.fn(), requestDeferred: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         OccurrencesService,
@@ -35,6 +38,51 @@ describe('OccurrencesService', () => {
     expect(graphql.request.mock.calls[0][0].query).toContain('weekdayDistribution');
     expect(graphql.request.mock.calls[0][0].query).not.toContain('totalFeatures');
     expect(graphql.request.mock.calls[0][0].query).not.toContain('categoryDistribution');
+  });
+
+  it('emits occurrence details before IML enrichment and caches only completion', () => {
+    const progress = new Subject<{
+      data: { mapFeatureById: unknown };
+      complete: boolean;
+      errors: never[];
+    }>();
+    graphql.requestDeferred.mockReturnValue(progress);
+    const values: unknown[] = [];
+    service.getFullFeatureProgressive(' feature-id ').subscribe((value) => values.push(value));
+    const base = {
+      dataOcorrencia: '2026-09-28',
+      featureData: { location: {}, occurrence: {}, all_rubricas: [], records: [] },
+    };
+    progress.next({ data: { mapFeatureById: base }, complete: false, errors: [] });
+    expect(values).toEqual([{
+      feature: { ...base, imlRecords: [], imlUnavailable: false },
+      complete: false,
+      imlError: false,
+    }]);
+    const completed = { ...base, imlRecords: [], imlUnavailable: false };
+    progress.next({ data: { mapFeatureById: completed }, complete: true, errors: [] });
+    progress.complete();
+    expect(values).toHaveLength(2);
+    expect(values[1]).toEqual({ feature: completed, complete: true, imlError: false });
+
+    const cached: unknown[] = [];
+    service.getFullFeatureProgressive('feature-id').subscribe((value) => cached.push(value));
+    expect(cached).toEqual([{ feature: completed, complete: true, imlError: false }]);
+    expect(graphql.requestDeferred).toHaveBeenCalledTimes(1);
+    expect(graphql.requestDeferred.mock.calls[0][0].query).toContain('@defer');
+  });
+
+  it('does not report a failed detail resolver as a missing occurrence', () => {
+    graphql.requestDeferred.mockReturnValue(of({
+      data: { mapFeatureById: null },
+      complete: true,
+      errors: [{ message: 'Internal server error' }],
+    }));
+    let receivedError: unknown;
+    service.getFullFeatureProgressive('feature-id').subscribe({
+      error: (error: unknown) => { receivedError = error; },
+    });
+    expect(receivedError).toEqual(new Error('Internal server error'));
   });
 
   it('requests monthly data separately from revision-safe comparison data', async () => {

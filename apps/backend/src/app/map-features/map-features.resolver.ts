@@ -1,5 +1,13 @@
 import { BadRequestException } from '@nestjs/common';
-import { Args, ID, Int, Query, Resolver } from '@nestjs/graphql';
+import {
+  Args,
+  ID,
+  Int,
+  Parent,
+  Query,
+  ResolveField,
+  Resolver,
+} from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { ValidatorsService } from '../shared/validators/validators.service';
 import { DevelopmentOnlyGuard } from '../shared/guards/development-only.guard';
@@ -9,6 +17,7 @@ import {
   DateRangeObject,
   EtlStatusObject,
   GroupedOccurrenceObject,
+  ImlRecordObject,
   MapFeatureChartsObject,
   MapFeatureCategoryPeriodStatsObject,
   MapFeatureDetailObject,
@@ -22,6 +31,7 @@ import {
 import { MapFeaturesMapperService } from './services/map-features-mapper.service';
 import { MapFeaturesQueryService } from './services/map-features-query.service';
 import { AmbiguousMapFeatureLookupError } from './services/query/map-features-detail-query';
+import type { MapFeature } from './types/map-features.types';
 import {
   MAX_CRIME_TILE_ZOOM,
   MIN_CRIME_TILE_ZOOM,
@@ -45,8 +55,16 @@ type MetadataResult = {
     | Promise<MapFeatureMetadataObject[Key]>;
 };
 
-@Resolver()
+@Resolver(() => MapFeatureDetailObject)
 export class MapFeaturesResolver {
+  private readonly detailFeatures = new WeakMap<
+    MapFeatureDetailObject,
+    MapFeature
+  >();
+  private readonly detailEnrichments = new WeakMap<
+    MapFeatureDetailObject,
+    ReturnType<MapFeaturesQueryService['getImlEnrichment']>
+  >();
   constructor(
     private readonly queryService: MapFeaturesQueryService,
     private readonly mapper: MapFeaturesMapperService,
@@ -280,11 +298,7 @@ export class MapFeaturesResolver {
       return null;
     }
 
-    const enrichment = await this.queryService.getImlEnrichment(feature);
-    return {
-      ...this.mapper.toDetail(feature, enrichment.records),
-      imlUnavailable: enrichment.unavailable,
-    };
+    return this.toLazyDetail(feature);
   }
 
   @Query(() => MapFeatureDetailObject, {
@@ -304,11 +318,34 @@ export class MapFeaturesResolver {
       return null;
     }
 
-    const enrichment = await this.queryService.getImlEnrichment(feature);
-    return {
-      ...this.mapper.toDetail(feature, enrichment.records),
-      imlUnavailable: enrichment.unavailable,
-    };
+    return this.toLazyDetail(feature);
+  }
+
+  @ResolveField(() => [ImlRecordObject])
+  async imlRecords(@Parent() detail: MapFeatureDetailObject) {
+    return (await this.loadDetailEnrichment(detail)).records;
+  }
+
+  @ResolveField(() => Boolean, { nullable: true })
+  async imlUnavailable(@Parent() detail: MapFeatureDetailObject) {
+    return (await this.loadDetailEnrichment(detail)).unavailable;
+  }
+
+  private toLazyDetail(feature: MapFeature): MapFeatureDetailObject {
+    const detail = this.mapper.toDetail(feature);
+    this.detailFeatures.set(detail, feature);
+    return detail;
+  }
+
+  private loadDetailEnrichment(detail: MapFeatureDetailObject) {
+    const feature = this.detailFeatures.get(detail);
+    if (!feature) throw new Error('Missing feature for IML enrichment');
+    let enrichment = this.detailEnrichments.get(detail);
+    if (!enrichment) {
+      enrichment = this.queryService.getImlEnrichment(feature);
+      this.detailEnrichments.set(detail, enrichment);
+    }
+    return enrichment;
   }
 
   @Query(() => DateRangeObject, { name: 'mapFeaturesDateRange' })

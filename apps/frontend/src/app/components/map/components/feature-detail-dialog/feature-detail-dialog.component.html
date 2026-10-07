@@ -18,12 +18,7 @@
     <mat-icon>error</mat-icon>
     <p>{{ error() }}</p>
   </div>
-  } @else if (feature(); as f) { @if (f.imlUnavailable) {
-  <div class="iml-warning" role="status">
-    <mat-icon aria-hidden="true">info</mat-icon>
-    <span>Os registros do IML estão temporariamente indisponíveis.</span>
-  </div>
-  }
+  } @else if (feature(); as f) {
   <section class="overview-section">
     <div class="info-grid">
       <div class="info-item">
@@ -102,6 +97,18 @@
     </div>
     }
   </section>
+
+  @if (imlLoading()) {
+  <div class="iml-loading" role="status">
+    <mat-spinner diameter="20" aria-label="Carregando registros do IML"></mat-spinner>
+    <span>Carregando registros do IML...</span>
+  </div>
+  } @else if (f.imlUnavailable) {
+  <div class="iml-warning" role="status">
+    <mat-icon aria-hidden="true">info</mat-icon>
+    <span>Os registros do IML estão temporariamente indisponíveis.</span>
+  </div>
+  }
 
   @if (hasImlRecords()) {
   <mat-divider></mat-divider>

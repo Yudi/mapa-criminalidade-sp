@@ -40,6 +40,7 @@ import {
   MAP_FEATURES_DATE_RANGE_QUERY,
   MAP_FEATURES_METADATA_QUERY,
   MAP_FEATURE_BY_ID_QUERY,
+  MAP_FEATURE_BY_ID_DEFERRED_QUERY,
 } from './map-features.graphql';
 import {
   parseGroupedOccurrence,
@@ -48,6 +49,17 @@ import {
 
 interface MapFeatureByIdQuery {
   mapFeatureById: FeatureDetail | null;
+}
+interface DeferredMapFeatureByIdQuery {
+  mapFeatureById:
+    | (Pick<FeatureDetail, 'dataOcorrencia' | 'featureData'> &
+        Partial<Pick<FeatureDetail, 'imlRecords' | 'imlUnavailable'>>)
+    | null;
+}
+export interface FeatureDetailProgress {
+  feature: FeatureDetail | null;
+  complete: boolean;
+  imlError: boolean;
 }
 @Service()
 export class OccurrencesService {
@@ -284,6 +296,67 @@ export class OccurrencesService {
         })
         .pipe(map((data) => parseMapFeatureResponse(data.mapFeatureById)))
     );
+  }
+
+  getFullFeatureProgressive(
+    featureId: string
+  ): Observable<FeatureDetailProgress> {
+    const normalizedFeatureId = featureId.trim();
+    if (!normalizedFeatureId) {
+      return throwError(
+        () => new Error('Identificador da ocorrência inválido')
+      );
+    }
+    const cacheKey = this.filterCacheKey('full-feature-progressive', {
+      id: normalizedFeatureId,
+    });
+    const cached = this.cache.get(cacheKey) as FeatureDetail | null | undefined;
+    if (cached !== undefined) {
+      return of({ feature: cached, complete: true, imlError: false });
+    }
+    const pending = this.inFlight.get(cacheKey) as
+      | Observable<FeatureDetailProgress>
+      | undefined;
+    if (pending) return pending;
+
+    const request = this.graphql
+      .requestDeferred<DeferredMapFeatureByIdQuery, { id: string }>({
+        query: MAP_FEATURE_BY_ID_DEFERRED_QUERY,
+        variables: { id: normalizedFeatureId },
+      })
+      .pipe(
+        map(({ data, complete, errors }): FeatureDetailProgress => {
+          if (data.mapFeatureById === undefined) {
+            throw new Error('GraphQL response did not include occurrence details');
+          }
+          if (data.mapFeatureById === null && errors.length) {
+            throw new Error(errors.map((error) => error.message).join('; '));
+          }
+          return {
+            feature: parseMapFeatureResponse(
+              data.mapFeatureById && {
+                ...data.mapFeatureById,
+                imlRecords: data.mapFeatureById.imlRecords ?? [],
+                imlUnavailable:
+                  data.mapFeatureById.imlUnavailable ?? (errors.length > 0),
+              }
+            ),
+            complete,
+            imlError: errors.length > 0,
+          };
+        }),
+        tap(({ feature, complete, imlError }) => {
+          if (complete && !imlError) this.cache.set(cacheKey, feature);
+        }),
+        finalize(() => {
+          if (this.inFlight.get(cacheKey) === request) {
+            this.inFlight.delete(cacheKey);
+          }
+        }),
+        shareReplay({ bufferSize: 1, refCount: true })
+      );
+    this.inFlight.set(cacheKey, request);
+    return request;
   }
   clearCache(): void {
     this.cache.clear();
