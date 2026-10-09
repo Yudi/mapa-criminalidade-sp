@@ -76,6 +76,8 @@ fn is_data_row(row: &[DataType], _column_count: usize) -> bool {
 
 const MAX_HEADER_CANDIDATE_ROWS: usize = 25;
 const MIN_HEADER_SIGNAL_COUNT: usize = 2;
+// Exclusive serial for 10000-01-01; values below include all of 9999-12-31.
+const MAX_EXCEL_DATE_SERIAL_EXCLUSIVE: f64 = 2_958_466.0;
 
 /// Find a useful schema row without assuming every workbook has the same
 /// number of title/banner rows. Generic workbooks retain the historical first
@@ -475,54 +477,56 @@ fn extract_row_values(row: &[DataType], column_names: &[String]) -> Vec<String> 
 fn cell_to_string(cell: &DataType, column_name: &str) -> String {
     match cell {
         DataType::DateTime(days) => {
-            let days_integer_part: i64 = *days as i64;
-            let days_fractional_part: f64 = *days - days_integer_part as f64;
+            let Some((date, days_fractional_part)) = excel_serial_parts(*days) else {
+                return cell.to_string();
+            };
             let normalized_column = column_name.to_lowercase();
 
             if normalized_column.contains("data") {
-                if let Some(date) = NaiveDate::from_ymd_opt(1899, 12, 30).and_then(
-                    |date: NaiveDate| {
-                        date.checked_add_signed(chrono::Duration::days(days_integer_part))
-                    },
-                ) {
-                    date.format("%Y-%m-%d").to_string()
-                } else {
-                    cell.to_string()
-                }
+                date.format("%Y-%m-%d").to_string()
             } else if normalized_column.contains("hora") {
                 let total_seconds: u32 = (days_fractional_part * 86400.0).round() as u32;
                 let hours: u32 = total_seconds / 3600;
                 let minutes: u32 = (total_seconds % 3600) / 60;
                 let seconds: u32 = total_seconds % 60;
                 format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+            } else if days_fractional_part > 0.0 {
+                let total_seconds = (days_fractional_part * 86_400.0).round() as u32;
+                format!(
+                    "{} {:02}:{:02}:{:02}",
+                    date.format("%Y-%m-%d"),
+                    total_seconds / 3600,
+                    (total_seconds % 3600) / 60,
+                    total_seconds % 60
+                )
             } else {
-                let date = NaiveDate::from_ymd_opt(1899, 12, 30)
-                    .and_then(|date| {
-                        date.checked_add_signed(chrono::Duration::days(days_integer_part))
-                    });
-                match date {
-                    Some(date) if days_fractional_part > 0.0 => {
-                        let total_seconds = (days_fractional_part * 86_400.0).round() as u32;
-                        format!(
-                            "{} {:02}:{:02}:{:02}",
-                            date.format("%Y-%m-%d"),
-                            total_seconds / 3600,
-                            (total_seconds % 3600) / 60,
-                            total_seconds % 60
-                        )
-                    }
-                    Some(date) => date.format("%Y-%m-%d").to_string(),
-                    None => cell.to_string(),
-                }
+                date.format("%Y-%m-%d").to_string()
             }
         }
         _ => cell.to_string(),
     }
 }
 
+fn excel_serial_parts(days: f64) -> Option<(NaiveDate, f64)> {
+    if !days.is_finite() || !(0.0..MAX_EXCEL_DATE_SERIAL_EXCLUSIVE).contains(&days) {
+        return None;
+    }
+
+    // Check the serial before casting or constructing a duration. This keeps
+    // malformed workbook values away from saturating casts and panic-based
+    // Chrono constructors.
+    let days_integer_part = days.floor() as i64;
+    let days_fractional_part = days - days_integer_part as f64;
+    let epoch = NaiveDate::from_ymd_opt(1899, 12, 30)?;
+    let duration = chrono::Duration::try_days(days_integer_part)?;
+    let date = epoch.checked_add_signed(duration)?;
+
+    Some((date, days_fractional_part))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{escape_csv_formula_value, find_header_row, is_data_sheet};
+    use super::{cell_to_string, escape_csv_formula_value, find_header_row, is_data_sheet};
     use calamine::{Cell, DataType, Range};
 
     #[test]
@@ -544,6 +548,41 @@ mod tests {
     fn preserves_regular_values() {
         for safe_value in ["normal", "1+1", "", " NULL "] {
             assert_eq!(escape_csv_formula_value(safe_value), safe_value);
+        }
+    }
+
+    #[test]
+    fn converts_valid_excel_date_serials() {
+        assert_eq!(
+            cell_to_string(&DataType::DateTime(44_927.0), "data"),
+            "2023-01-01"
+        );
+        assert_eq!(
+            cell_to_string(&DataType::DateTime(44_927.5), "timestamp"),
+            "2023-01-01 12:00:00"
+        );
+        assert_eq!(
+            cell_to_string(&DataType::DateTime(44_927.5), "hora"),
+            "12:00:00"
+        );
+        assert_eq!(
+            cell_to_string(&DataType::DateTime(2_958_465.0), "data"),
+            "9999-12-31"
+        );
+    }
+
+    #[test]
+    fn malformed_excel_date_serials_fall_back_without_panicking() {
+        for serial in [
+            f64::NAN,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            -1.0,
+            2_958_466.0,
+            f64::MAX,
+        ] {
+            let cell = DataType::DateTime(serial);
+            assert_eq!(cell_to_string(&cell, "data"), cell.to_string());
         }
     }
 
