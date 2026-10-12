@@ -124,9 +124,9 @@ describe('GraphQL query limits', () => {
       createGraphqlQueryLimitsRule(),
     ]);
 
-    expect(errors.some((error) => error.message.includes('Cannot spread fragment'))).toBe(
-      true
-    );
+    expect(
+      errors.some((error) => error.message.includes('Cannot spread fragment'))
+    ).toBe(true);
   });
 
   it('resets alias budgets for each operation definition', () => {
@@ -170,13 +170,13 @@ describe('GraphQL query limits', () => {
   it('bounds exponential fragment expansion when all expanded fields are introspection', () => {
     const fragments = Array.from({ length: 16 }, (_, index) => {
       if (index === 0) return 'fragment F0 on Query { __typename }';
-      return `fragment F${index} on Query { ...F${index - 1} ...F${index - 1} }`;
+      return `fragment F${index} on Query { ...F${index - 1} ...F${
+        index - 1
+      } }`;
     }).join('\n');
-    const errors = validate(
-      schema,
-      parse(`query { ...F15 } ${fragments}`),
-      [createGraphqlQueryLimitsRule()]
-    );
+    const errors = validate(schema, parse(`query { ...F15 } ${fragments}`), [
+      createGraphqlQueryLimitsRule(),
+    ]);
 
     expect(errors.map((error) => error.message)).toContain(
       `GraphQL query cost exceeds the limit of ${GRAPHQL_QUERY_LIMITS.maxCost}`

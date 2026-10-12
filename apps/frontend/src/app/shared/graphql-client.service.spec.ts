@@ -86,46 +86,76 @@ describe('GraphqlClientService', () => {
 
   it('emits deferred data before completion and merges its patch', () => {
     const states: unknown[] = [];
-    service.requestDeferred<{ detail: { title: string; iml: string } }>({
-      query: '{ detail { title ... @defer { iml } } }',
-    }).subscribe((state) => states.push(state));
+    service
+      .requestDeferred<{ detail: { title: string; iml: string } }>({
+        query: '{ detail { title ... @defer { iml } } }',
+      })
+      .subscribe((state) => states.push(state));
 
     const request = httpTesting.expectOne(`${environment.apiUrl}/graphql`);
     expect(request.request.headers.get('Accept')).toContain('multipart/mixed');
     const contentType = 'multipart/mixed; boundary="graphql"';
-    request.event(new HttpHeaderResponse({ headers: new HttpHeaders({ 'content-type': contentType }) }));
-    const first = '--graphql\r\ncontent-type: application/json\r\n\r\n' +
+    request.event(
+      new HttpHeaderResponse({
+        headers: new HttpHeaders({ 'content-type': contentType }),
+      })
+    );
+    const first =
+      '--graphql\r\ncontent-type: application/json\r\n\r\n' +
       '{"data":{"detail":{"title":"BO"}},"hasNext":true}\r\n';
-    request.event({ type: HttpEventType.DownloadProgress, loaded: first.length, partialText: first });
-    expect(states).toEqual([{ data: { detail: { title: 'BO' } }, complete: false, errors: [] }]);
+    request.event({
+      type: HttpEventType.DownloadProgress,
+      loaded: first.length,
+      partialText: first,
+    });
+    expect(states).toEqual([
+      { data: { detail: { title: 'BO' } }, complete: false, errors: [] },
+    ]);
 
-    const body = first + '--graphql\r\ncontent-type: application/json\r\n\r\n' +
+    const body =
+      first +
+      '--graphql\r\ncontent-type: application/json\r\n\r\n' +
       '{"incremental":[{"path":["detail"],"data":{"iml":"ready"}}],"hasNext":false}' +
       '\r\n--graphql--\r\n';
     request.flush(body, { headers: { 'content-type': contentType } });
     expect(states).toEqual([
       { data: { detail: { title: 'BO' } }, complete: false, errors: [] },
-      { data: { detail: { title: 'BO', iml: 'ready' } }, complete: true, errors: [] },
+      {
+        data: { detail: { title: 'BO', iml: 'ready' } },
+        complete: true,
+        errors: [],
+      },
     ]);
   });
 
   it('rejects a truncated deferred response', () => {
     let receivedError: unknown;
-    service.requestDeferred<{ detail: string }>({ query: '{ detail }' }).subscribe({
-      error: (error: unknown) => { receivedError = error; },
-    });
+    service
+      .requestDeferred<{ detail: string }>({ query: '{ detail }' })
+      .subscribe({
+        error: (error: unknown) => {
+          receivedError = error;
+        },
+      });
     const request = httpTesting.expectOne(`${environment.apiUrl}/graphql`);
-    request.flush('--graphql\r\ncontent-type: application/json\r\n\r\n' +
-      '{"data":{"detail":"partial"},"hasNext":true}\r\n', {
-      headers: { 'content-type': 'multipart/mixed; boundary=graphql' },
-    });
-    expect(receivedError).toEqual(new Error('Incomplete GraphQL multipart response'));
+    request.flush(
+      '--graphql\r\ncontent-type: application/json\r\n\r\n' +
+        '{"data":{"detail":"partial"},"hasNext":true}\r\n',
+      {
+        headers: { 'content-type': 'multipart/mixed; boundary=graphql' },
+      }
+    );
+    expect(receivedError).toEqual(
+      new Error('Incomplete GraphQL multipart response')
+    );
   });
 
   it('cancels a deferred HTTP request on unsubscribe', () => {
-    const subscription = service.requestDeferred<{ detail: string }>({
-      query: '{ detail }',
-    }).subscribe();
+    const subscription = service
+      .requestDeferred<{ detail: string }>({
+        query: '{ detail }',
+      })
+      .subscribe();
     const request = httpTesting.expectOne(`${environment.apiUrl}/graphql`);
     subscription.unsubscribe();
     expect(request.cancelled).toBe(true);

@@ -177,8 +177,10 @@ export class VisibleMapChartsDialogComponent implements OnInit, OnDestroy {
         subtitle: 'Categorias das ocorrências.',
         icon: 'donut_large',
         displayType: 'pie',
-        buckets: (facets.categories?.categoryDistribution ?? charts.categoryDistribution).filter(
-          (bucket) => this.data.filter.categories?.includes(bucket.label)
+        buckets: (
+          facets.categories?.categoryDistribution ?? charts.categoryDistribution
+        ).filter((bucket) =>
+          this.data.filter.categories?.includes(bucket.label)
         ),
         filterKey: 'categories',
         selectedValues: this.categoriesChanged()
@@ -197,7 +199,8 @@ export class VisibleMapChartsDialogComponent implements OnInit, OnDestroy {
         subtitle: '',
         icon: 'calendar_month',
         displayType: 'bar',
-        buckets: (facets.weekdays?.weekdayDistribution ?? charts.weekdayDistribution),
+        buckets:
+          facets.weekdays?.weekdayDistribution ?? charts.weekdayDistribution,
         filterKey: 'weekdays',
         selectedValues: this.filter().weekdays,
       },
@@ -213,7 +216,9 @@ export class VisibleMapChartsDialogComponent implements OnInit, OnDestroy {
         subtitle: '',
         icon: 'inventory_2',
         displayType: 'bar',
-        buckets: (facets.objectTypes?.objectTypeDistribution ?? charts.objectTypeDistribution),
+        buckets:
+          facets.objectTypes?.objectTypeDistribution ??
+          charts.objectTypeDistribution,
         filterKey: 'objectTypes',
         selectedValues: this.filter().objectTypes,
         amountLabel: 'Quantidade',
@@ -223,7 +228,9 @@ export class VisibleMapChartsDialogComponent implements OnInit, OnDestroy {
         subtitle: '',
         icon: 'directions_car',
         displayType: 'bar',
-        buckets: (facets.vehicleBrands?.vehicleBrandDistribution ?? charts.vehicleBrandDistribution),
+        buckets:
+          facets.vehicleBrands?.vehicleBrandDistribution ??
+          charts.vehicleBrandDistribution,
         filterKey: 'vehicleBrands',
         selectedValues: this.filter().vehicleBrands,
       },
@@ -232,7 +239,9 @@ export class VisibleMapChartsDialogComponent implements OnInit, OnDestroy {
         subtitle: '',
         icon: 'smartphone',
         displayType: 'bar',
-        buckets: (facets.phoneBrandModels?.phoneBrandDistribution ?? charts.phoneBrandDistribution),
+        buckets:
+          facets.phoneBrandModels?.phoneBrandDistribution ??
+          charts.phoneBrandDistribution,
         filterKey: 'phoneBrandModels',
         selectedValues: this.filter().phoneBrandModels,
         amountLabel: 'Quantidade',
@@ -242,7 +251,9 @@ export class VisibleMapChartsDialogComponent implements OnInit, OnDestroy {
         subtitle: '',
         icon: 'place',
         displayType: 'bar',
-        buckets: (facets.locationTypes?.locationTypeDistribution ?? charts.locationTypeDistribution),
+        buckets:
+          facets.locationTypes?.locationTypeDistribution ??
+          charts.locationTypeDistribution,
         filterKey: 'locationTypes',
         selectedValues: this.filter().locationTypes,
       },

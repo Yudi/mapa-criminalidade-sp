@@ -54,7 +54,9 @@ export class MultipartGraphqlParser<T> {
       if (bodyEnd < bodyStart) break;
       let payload: IncrementalPayload<T>;
       try {
-        payload = JSON.parse(this.buffer.slice(bodyStart, bodyEnd).trim()) as IncrementalPayload<T>;
+        payload = JSON.parse(
+          this.buffer.slice(bodyStart, bodyEnd).trim()
+        ) as IncrementalPayload<T>;
       } catch {
         // A download-progress event can end in the middle of a JSON payload.
         if (next < 0) break;
@@ -80,7 +82,9 @@ export function applyIncrementalPatch<T>(
     throw new Error('GraphQL patch path does not exist');
   }
   const next = applyIncrementalPatch(child, rest, data);
-  return (Array.isArray(current)
-    ? Object.assign([...current], { [key]: next })
-    : { ...current, [key]: next }) as T;
+  return (
+    Array.isArray(current)
+      ? Object.assign([...current], { [key]: next })
+      : { ...current, [key]: next }
+  ) as T;
 }

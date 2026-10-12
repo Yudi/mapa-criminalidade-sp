@@ -84,9 +84,7 @@ export function parseGroupedOccurrence(
   return groupedOccurrenceSchema.parse(value) as GroupedOccurrence;
 }
 
-export function parseMapFeatureResponse(
-  value: unknown
-): FeatureDetail | null {
+export function parseMapFeatureResponse(value: unknown): FeatureDetail | null {
   if (value === null || value === undefined) {
     return null;
   }

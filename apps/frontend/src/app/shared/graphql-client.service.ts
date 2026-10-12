@@ -85,7 +85,8 @@ export class GraphqlClientService {
         errors = [...errors, ...(part.errors ?? [])];
         if (
           errors.some(
-            (error) => error.extensions?.['code'] === GRAPHQL_REQUEST_TIMEOUT_CODE
+            (error) =>
+              error.extensions?.['code'] === GRAPHQL_REQUEST_TIMEOUT_CODE
           )
         ) {
           this.requestTimeoutService.notify();
@@ -106,43 +107,42 @@ export class GraphqlClientService {
         for (const part of parser.append(addition)) acceptPart(part);
       };
 
-      const subscription = this.http.request(
-        'POST',
-        `${environment.apiUrl}/graphql`,
-        {
+      const subscription = this.http
+        .request('POST', `${environment.apiUrl}/graphql`, {
           body: request,
           headers: { Accept: 'multipart/mixed, application/json' },
           observe: 'events',
           reportProgress: true,
           responseType: 'text',
-        }
-      ).subscribe({
-        next: (event) => {
-          try {
-            if (event.type === HttpEventType.ResponseHeader) {
-              parser.setContentType(event.headers.get('content-type'));
-            } else if (event.type === HttpEventType.DownloadProgress) {
-              if (event.partialText !== undefined) acceptText(event.partialText);
-            } else if (event.type === HttpEventType.Response) {
-              parser.setContentType(event.headers.get('content-type'));
-              if (parser.isMultipart) {
-                acceptText(event.body ?? '');
-                if (!parser.isClosed || !complete) {
-                  throw new Error('Incomplete GraphQL multipart response');
+        })
+        .subscribe({
+          next: (event) => {
+            try {
+              if (event.type === HttpEventType.ResponseHeader) {
+                parser.setContentType(event.headers.get('content-type'));
+              } else if (event.type === HttpEventType.DownloadProgress) {
+                if (event.partialText !== undefined)
+                  acceptText(event.partialText);
+              } else if (event.type === HttpEventType.Response) {
+                parser.setContentType(event.headers.get('content-type'));
+                if (parser.isMultipart) {
+                  acceptText(event.body ?? '');
+                  if (!parser.isClosed || !complete) {
+                    throw new Error('Incomplete GraphQL multipart response');
+                  }
+                } else {
+                  acceptPart(
+                    JSON.parse(event.body ?? '') as IncrementalPayload<TData>
+                  );
                 }
-              } else {
-                acceptPart(
-                  JSON.parse(event.body ?? '') as IncrementalPayload<TData>
-                );
               }
+            } catch (error) {
+              subscriber.error(error);
             }
-          } catch (error) {
-            subscriber.error(error);
-          }
-        },
-        error: (error: unknown) => subscriber.error(error),
-        complete: () => subscriber.complete(),
-      });
+          },
+          error: (error: unknown) => subscriber.error(error),
+          complete: () => subscriber.complete(),
+        });
       return () => subscription.unsubscribe();
     });
   }

@@ -6,13 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import {
-  Args,
-  GraphQLModule,
-  Int,
-  Query,
-  Resolver,
-} from '@nestjs/graphql';
+import { Args, GraphQLModule, Int, Query, Resolver } from '@nestjs/graphql';
 import { Throttle, ThrottlerModule } from '@nestjs/throttler';
 import { Test } from '@nestjs/testing';
 import { AddressInfo } from 'node:net';
@@ -83,7 +77,9 @@ class YogaFixtureResolver {
 
   @Query(() => String)
   unexpectedDeferredFailure(): Promise<string> {
-    return Promise.reject(new Error('private deferred connection: fixture-secret'));
+    return Promise.reject(
+      new Error('private deferred connection: fixture-secret')
+    );
   }
 
   @Query(() => [String])
@@ -118,7 +114,9 @@ class YogaFixtureResolver {
   }
 }
 
-async function startFixtureServer(isProduction: boolean): Promise<FixtureServer> {
+async function startFixtureServer(
+  isProduction: boolean
+): Promise<FixtureServer> {
   const testingModule = await Test.createTestingModule({
     imports: [
       GraphQLModule.forRoot(createGraphqlOptions(isProduction)),
@@ -185,18 +183,17 @@ function parseMultipartParts(
   body: string
 ): GraphqlPart[] {
   const boundary = contentType?.match(/boundary="?([^";]+)"?/)?.[1];
-  if (!boundary) throw new Error('The response did not include a multipart boundary');
+  if (!boundary)
+    throw new Error('The response did not include a multipart boundary');
 
-  return body
-    .split(`--${boundary}`)
-    .flatMap((part) => {
-      const bodyStart = part.indexOf('\r\n\r\n');
-      if (bodyStart < 0) return [];
+  return body.split(`--${boundary}`).flatMap((part) => {
+    const bodyStart = part.indexOf('\r\n\r\n');
+    if (bodyStart < 0) return [];
 
-      const json = part.slice(bodyStart + 4).trim();
-      if (!json) return [];
-      return [JSON.parse(json) as GraphqlPart];
-    });
+    const json = part.slice(bodyStart + 4).trim();
+    if (!json) return [];
+    return [JSON.parse(json) as GraphqlPart];
+  });
 }
 
 async function readFirstChunk(
@@ -312,7 +309,9 @@ describe('Nest GraphQL Yoga integration', () => {
     const body = await response.text();
     const payload = JSON.parse(body) as GraphqlPart;
     expect(payload.errors?.[0]?.message).toBe('Internal server error');
-    expect(payload.errors?.[0]?.extensions?.['code']).toBe('INTERNAL_SERVER_ERROR');
+    expect(payload.errors?.[0]?.extensions?.['code']).toBe(
+      'INTERNAL_SERVER_ERROR'
+    );
     expect(body).not.toContain('fixture-secret');
     expect(body).not.toContain('private database connection');
   });
@@ -326,9 +325,13 @@ describe('Nest GraphQL Yoga integration', () => {
     });
     development.resolver.setDeferredPromise(deferredPromise);
 
-    const response = await postGraphql(development, 'query { ping ... @defer { deferredValue } }', {
-      accept: MULTIPART_ACCEPT,
-    });
+    const response = await postGraphql(
+      development,
+      'query { ping ... @defer { deferredValue } }',
+      {
+        accept: MULTIPART_ACCEPT,
+      }
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('multipart/mixed');
     const reader = response.body?.getReader();
@@ -340,7 +343,9 @@ describe('Nest GraphQL Yoga integration', () => {
       while (!initial.includes('"hasNext":true')) {
         const firstChunk = await readFirstChunk(reader, deadline - Date.now());
         if (!firstChunk || firstChunk.done) {
-          throw new Error('Yoga did not send the deferred initial payload in time');
+          throw new Error(
+            'Yoga did not send the deferred initial payload in time'
+          );
         }
         initial += new TextDecoder().decode(firstChunk.value);
       }
@@ -349,7 +354,10 @@ describe('Nest GraphQL Yoga integration', () => {
       expect(initial).not.toContain('controlled-late-value');
       release?.('controlled-late-value');
       const body = await readRemainingBody(reader, initial);
-      const parts = parseMultipartParts(response.headers.get('content-type'), body);
+      const parts = parseMultipartParts(
+        response.headers.get('content-type'),
+        body
+      );
       expect(body).toContain('controlled-late-value');
       expect(parts.at(-1)?.hasNext).toBe(false);
     } finally {
@@ -367,9 +375,12 @@ describe('Nest GraphQL Yoga integration', () => {
       { accept: MULTIPART_ACCEPT }
     );
     const body = await response.text();
-    const parts = parseMultipartParts(response.headers.get('content-type'), body);
-    const patchErrors = parts.flatMap((part) =>
-      part.incremental?.flatMap((patch) => patch.errors ?? []) ?? []
+    const parts = parseMultipartParts(
+      response.headers.get('content-type'),
+      body
+    );
+    const patchErrors = parts.flatMap(
+      (part) => part.incremental?.flatMap((patch) => patch.errors ?? []) ?? []
     );
 
     expect(response.status).toBe(200);
@@ -393,9 +404,12 @@ describe('Nest GraphQL Yoga integration', () => {
       { accept: MULTIPART_ACCEPT }
     );
     const body = await response.text();
-    const parts = parseMultipartParts(response.headers.get('content-type'), body);
-    const patchErrors = parts.flatMap((part) =>
-      part.incremental?.flatMap((patch) => patch.errors ?? []) ?? []
+    const parts = parseMultipartParts(
+      response.headers.get('content-type'),
+      body
+    );
+    const patchErrors = parts.flatMap(
+      (part) => part.incremental?.flatMap((patch) => patch.errors ?? []) ?? []
     );
     expect(patchErrors[0]?.message).toBe('Internal server error');
     expect(body).not.toContain('fixture-secret');
@@ -411,7 +425,10 @@ describe('Nest GraphQL Yoga integration', () => {
       { accept: MULTIPART_ACCEPT }
     );
     const body = await response.text();
-    const parts = parseMultipartParts(response.headers.get('content-type'), body);
+    const parts = parseMultipartParts(
+      response.headers.get('content-type'),
+      body
+    );
     const patches = parts.flatMap((part) => part.incremental ?? []);
 
     expect(response.status).toBe(200);
@@ -457,7 +474,8 @@ describe('Nest GraphQL Yoga integration', () => {
   });
 
   it('allows development introspection and rejects it in production', async () => {
-    if (!development || !production) throw new Error('GraphQL fixtures are not running');
+    if (!development || !production)
+      throw new Error('GraphQL fixtures are not running');
 
     const query = '{ __schema { queryType { name } } }';
     const developmentResponse = await postGraphql(development, query);
@@ -487,16 +505,23 @@ describe('Nest GraphQL Yoga integration', () => {
     const limitedPayload = await readGraphqlResponse(limitedResponse);
     const parseResponse = await postGraphql(development, 'query {');
     const parsePayload = await readGraphqlResponse(parseResponse);
-    const validationResponse = await postGraphql(development, '{ missingField }');
+    const validationResponse = await postGraphql(
+      development,
+      '{ missingField }'
+    );
     const validationPayload = await readGraphqlResponse(validationResponse);
 
     expect(limitedResponse.status).toBe(400);
-    expect(limitedPayload.errors?.[0]?.message).toContain('aliases exceed the limit');
+    expect(limitedPayload.errors?.[0]?.message).toContain(
+      'aliases exceed the limit'
+    );
     expect(limitedPayload.errors?.[0]?.extensions?.['code']).toBe(
       'GRAPHQL_VALIDATION_FAILED'
     );
     expect(parseResponse.status).toBe(400);
-    expect(parsePayload.errors?.[0]?.extensions?.['code']).toBe('GRAPHQL_PARSE_FAILED');
+    expect(parsePayload.errors?.[0]?.extensions?.['code']).toBe(
+      'GRAPHQL_PARSE_FAILED'
+    );
     expect(validationResponse.status).toBe(400);
     expect(validationPayload.errors?.[0]?.extensions?.['code']).toBe(
       'GRAPHQL_VALIDATION_FAILED'
@@ -515,8 +540,12 @@ describe('Nest GraphQL Yoga integration', () => {
     const invalidPayload = await readGraphqlResponse(invalid);
 
     expect(missing.status).toBe(400);
-    expect(missingPayload.errors?.[0]?.extensions?.['code']).toBe('BAD_USER_INPUT');
+    expect(missingPayload.errors?.[0]?.extensions?.['code']).toBe(
+      'BAD_USER_INPUT'
+    );
     expect(invalid.status).toBe(400);
-    expect(invalidPayload.errors?.[0]?.extensions?.['code']).toBe('BAD_USER_INPUT');
+    expect(invalidPayload.errors?.[0]?.extensions?.['code']).toBe(
+      'BAD_USER_INPUT'
+    );
   });
 });

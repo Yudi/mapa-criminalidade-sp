@@ -26,18 +26,33 @@ describe('OccurrencesService', () => {
   });
 
   it('keeps facet responses separate from complete chart responses in the cache', async () => {
-    const facet = { weekdayDistribution: [{ label: 'Segunda', count: 2, filterValue: '1' }] };
+    const facet = {
+      weekdayDistribution: [{ label: 'Segunda', count: 2, filterValue: '1' }],
+    };
     const complete = { ...facet, totalFeatures: 2, totalRecords: 3 };
-    graphql.request.mockReturnValueOnce(of({ mapFeaturesCharts: facet }))
+    graphql.request
+      .mockReturnValueOnce(of({ mapFeaturesCharts: facet }))
       .mockReturnValueOnce(of({ mapFeaturesCharts: complete }));
 
-    await expect(firstValueFrom(service.getChartsForBounds({}, 'weekdays'))).resolves.toEqual(facet);
-    await expect(firstValueFrom(service.getChartsForBounds({}))).resolves.toEqual(complete);
-    await expect(firstValueFrom(service.getChartsForBounds({}, 'weekdays'))).resolves.toEqual(facet);
+    await expect(
+      firstValueFrom(service.getChartsForBounds({}, 'weekdays'))
+    ).resolves.toEqual(facet);
+    await expect(
+      firstValueFrom(service.getChartsForBounds({}))
+    ).resolves.toEqual(complete);
+    await expect(
+      firstValueFrom(service.getChartsForBounds({}, 'weekdays'))
+    ).resolves.toEqual(facet);
     expect(graphql.request).toHaveBeenCalledTimes(2);
-    expect(graphql.request.mock.calls[0][0].query).toContain('weekdayDistribution');
-    expect(graphql.request.mock.calls[0][0].query).not.toContain('totalFeatures');
-    expect(graphql.request.mock.calls[0][0].query).not.toContain('categoryDistribution');
+    expect(graphql.request.mock.calls[0][0].query).toContain(
+      'weekdayDistribution'
+    );
+    expect(graphql.request.mock.calls[0][0].query).not.toContain(
+      'totalFeatures'
+    );
+    expect(graphql.request.mock.calls[0][0].query).not.toContain(
+      'categoryDistribution'
+    );
   });
 
   it('emits occurrence details before IML enrichment and caches only completion', () => {
@@ -48,39 +63,68 @@ describe('OccurrencesService', () => {
     }>();
     graphql.requestDeferred.mockReturnValue(progress);
     const values: unknown[] = [];
-    service.getFullFeatureProgressive(' feature-id ').subscribe((value) => values.push(value));
+    service
+      .getFullFeatureProgressive(' feature-id ')
+      .subscribe((value) => values.push(value));
     const base = {
       dataOcorrencia: '2026-09-28',
-      featureData: { location: {}, occurrence: {}, all_rubricas: [], records: [] },
+      featureData: {
+        location: {},
+        occurrence: {},
+        all_rubricas: [],
+        records: [],
+      },
     };
-    progress.next({ data: { mapFeatureById: base }, complete: false, errors: [] });
-    expect(values).toEqual([{
-      feature: { ...base, imlRecords: [], imlUnavailable: false },
+    progress.next({
+      data: { mapFeatureById: base },
       complete: false,
-      imlError: false,
-    }]);
+      errors: [],
+    });
+    expect(values).toEqual([
+      {
+        feature: { ...base, imlRecords: [], imlUnavailable: false },
+        complete: false,
+        imlError: false,
+      },
+    ]);
     const completed = { ...base, imlRecords: [], imlUnavailable: false };
-    progress.next({ data: { mapFeatureById: completed }, complete: true, errors: [] });
+    progress.next({
+      data: { mapFeatureById: completed },
+      complete: true,
+      errors: [],
+    });
     progress.complete();
     expect(values).toHaveLength(2);
-    expect(values[1]).toEqual({ feature: completed, complete: true, imlError: false });
+    expect(values[1]).toEqual({
+      feature: completed,
+      complete: true,
+      imlError: false,
+    });
 
     const cached: unknown[] = [];
-    service.getFullFeatureProgressive('feature-id').subscribe((value) => cached.push(value));
-    expect(cached).toEqual([{ feature: completed, complete: true, imlError: false }]);
+    service
+      .getFullFeatureProgressive('feature-id')
+      .subscribe((value) => cached.push(value));
+    expect(cached).toEqual([
+      { feature: completed, complete: true, imlError: false },
+    ]);
     expect(graphql.requestDeferred).toHaveBeenCalledTimes(1);
     expect(graphql.requestDeferred.mock.calls[0][0].query).toContain('@defer');
   });
 
   it('does not report a failed detail resolver as a missing occurrence', () => {
-    graphql.requestDeferred.mockReturnValue(of({
-      data: { mapFeatureById: null },
-      complete: true,
-      errors: [{ message: 'Internal server error' }],
-    }));
+    graphql.requestDeferred.mockReturnValue(
+      of({
+        data: { mapFeatureById: null },
+        complete: true,
+        errors: [{ message: 'Internal server error' }],
+      })
+    );
     let receivedError: unknown;
     service.getFullFeatureProgressive('feature-id').subscribe({
-      error: (error: unknown) => { receivedError = error; },
+      error: (error: unknown) => {
+        receivedError = error;
+      },
     });
     expect(receivedError).toEqual(new Error('Internal server error'));
   });
@@ -88,7 +132,9 @@ describe('OccurrencesService', () => {
   it('requests monthly data separately from revision-safe comparison data', async () => {
     graphql.request.mockReturnValue(of({ mapFeaturesTemporalStats: {} }));
     await firstValueFrom(service.getTemporalStats({}, ['monthly']));
-    await firstValueFrom(service.getTemporalStats({}, ['datasetRevision', 'total', 'categories']));
+    await firstValueFrom(
+      service.getTemporalStats({}, ['datasetRevision', 'total', 'categories'])
+    );
     const trendQuery = graphql.request.mock.calls[0][0].query;
     const comparisonQuery = graphql.request.mock.calls[1][0].query;
     expect(trendQuery).toContain('monthly { label count }');

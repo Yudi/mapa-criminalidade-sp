@@ -212,17 +212,19 @@ export class TemporalAnalysisComponent implements OnChanges, OnDestroy {
     this.comparing.set(true);
     // Sequential scans respect the small production statistics pool.
     this.compareRequest = this.occurrences
-      .getTemporalStats(
-        { ...this.filter(), ...ranges.first },
-        ['datasetRevision', 'total', 'categories']
-      )
+      .getTemporalStats({ ...this.filter(), ...ranges.first }, [
+        'datasetRevision',
+        'total',
+        'categories',
+      ])
       .pipe(
         switchMap((first) =>
           this.occurrences
-            .getTemporalStats(
-              { ...this.filter(), ...ranges.second },
-              ['datasetRevision', 'total', 'categories']
-            )
+            .getTemporalStats({ ...this.filter(), ...ranges.second }, [
+              'datasetRevision',
+              'total',
+              'categories',
+            ])
             .pipe(map((second) => ({ first, second })))
         )
       )

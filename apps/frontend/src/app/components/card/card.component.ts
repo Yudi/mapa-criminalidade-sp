@@ -36,10 +36,7 @@ import DataFormValues from '../../shared/dataForm.interface';
 import { Observable, Subscription } from 'rxjs';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NgOptimizedImage } from '@angular/common';
-import {
-  DateRange,
-  PeriodInfo,
-} from '@mapa-criminalidade/shared-types';
+import { DateRange, PeriodInfo } from '@mapa-criminalidade/shared-types';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ObjectHandlingService } from '../../shared/object-handling.service';
 import { DateService } from '../../shared/date.service';

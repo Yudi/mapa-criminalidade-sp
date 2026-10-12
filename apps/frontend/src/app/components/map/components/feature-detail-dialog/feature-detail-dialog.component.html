@@ -100,7 +100,10 @@
 
   @if (imlLoading()) {
   <div class="iml-loading" role="status">
-    <mat-spinner diameter="20" aria-label="Carregando registros do IML"></mat-spinner>
+    <mat-spinner
+      diameter="20"
+      aria-label="Carregando registros do IML"
+    ></mat-spinner>
     <span>Carregando registros do IML...</span>
   </div>
   } @else if (f.imlUnavailable) {
@@ -108,9 +111,7 @@
     <mat-icon aria-hidden="true">info</mat-icon>
     <span>Os registros do IML estão temporariamente indisponíveis.</span>
   </div>
-  }
-
-  @if (hasImlRecords()) {
+  } @if (hasImlRecords()) {
   <mat-divider></mat-divider>
   <section class="records-section iml-section">
     <section class="record-group">

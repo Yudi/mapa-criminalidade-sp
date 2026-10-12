@@ -9,9 +9,7 @@ import {
 import { DecimalPipe, CurrencyPipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialogModule } from '@angular/material/dialog';
-import {
-  CensusCrimeStats,
-} from '@mapa-criminalidade/shared-types';
+import { CensusCrimeStats } from '@mapa-criminalidade/shared-types';
 
 @Component({
   selector: 'app-census-panel',

@@ -55,15 +55,13 @@ describe('Census backend import orchestration', () => {
       python as unknown as PythonToolService
     );
     jest.spyOn(service, 'configuredRelease').mockResolvedValue(manifest);
-    jest
-      .mocked(validateCensusArtifact)
-      .mockResolvedValue({
-        id: manifest.id,
-        year: 2022,
-        stateCode: '35',
-        counts: { municipality: 645, neighborhood: 2170 },
-        dataSha256: 'b'.repeat(64),
-      });
+    jest.mocked(validateCensusArtifact).mockResolvedValue({
+      id: manifest.id,
+      year: 2022,
+      stateCode: '35',
+      counts: { municipality: 645, neighborhood: 2170 },
+      dataSha256: 'b'.repeat(64),
+    });
     jest.mocked(readCensusAreas).mockImplementation(async function* () {
       yield* [];
     });

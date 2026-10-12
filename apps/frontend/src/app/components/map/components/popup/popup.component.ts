@@ -1,4 +1,7 @@
-import { GroupedOccurrence, UnifiedOccurrence } from '../../../../shared/graphql-projections';
+import {
+  GroupedOccurrence,
+  UnifiedOccurrence,
+} from '../../../../shared/graphql-projections';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -7,8 +10,6 @@ import {
   output,
   signal,
 } from '@angular/core';
-
-
 
 @Component({
   selector: 'app-popup',

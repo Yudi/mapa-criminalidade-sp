@@ -1,8 +1,6 @@
 import { CensusAreaDetail } from '../../shared/graphql-projections';
 import { CensusExplorerComponent } from './components/census-panel/census-explorer.component';
-import type {
-  MapFeatureFilterInput,
-} from '@mapa-criminalidade/shared-types';
+import type { MapFeatureFilterInput } from '@mapa-criminalidade/shared-types';
 import {
   MapDisplayMode,
   MapFeatureDetailFilters,

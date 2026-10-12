@@ -1,6 +1,10 @@
 import { GRAPHQL_REQUEST_TIMEOUT_CODE } from '@mapa-criminalidade/shared-types';
 import { HttpException } from '@nestjs/common';
-import { GraphQLError, GraphQLErrorExtensions, GraphQLFormattedError } from 'graphql';
+import {
+  GraphQLError,
+  GraphQLErrorExtensions,
+  GraphQLFormattedError,
+} from 'graphql';
 import { isAsyncIterable, mapAsyncIterator, Plugin } from 'graphql-yoga';
 import { isRequestTimeoutError } from './error.utils';
 
@@ -8,9 +12,8 @@ export function formatGraphqlError(
   formattedError: GraphQLFormattedError,
   error: unknown
 ): GraphQLFormattedError {
-  const originalError = error instanceof GraphQLError
-    ? error.originalError ?? error
-    : error;
+  const originalError =
+    error instanceof GraphQLError ? error.originalError ?? error : error;
   if (!isRequestTimeoutError(originalError)) {
     return formattedError;
   }
@@ -52,7 +55,9 @@ function formatExecutionError(error: GraphQLError): GraphQLError {
       ...extensions,
       code: HTTP_ERROR_CODES[status] ?? 'INTERNAL_SERVER_ERROR',
       ...(HTTP_ERROR_CODES[status] ? {} : { status }),
-      ...(isExpectedHttpError ? { originalError: originalError.getResponse() } : {}),
+      ...(isExpectedHttpError
+        ? { originalError: originalError.getResponse() }
+        : {}),
     };
   }
   if (isUnexpectedResolverError) {
@@ -68,11 +73,16 @@ function formatExecutionError(error: GraphQLError): GraphQLError {
     // Preserve HTTP 400 for invalid documents even with Accept: application/json.
     extensions.http = { ...extensions.http, status: 400, spec: false };
   }
-  const formatted = formatGraphqlError({
-    ...error.toJSON(),
-    message: isUnexpectedResolverError ? 'Internal server error' : error.message,
-    extensions,
-  }, error);
+  const formatted = formatGraphqlError(
+    {
+      ...error.toJSON(),
+      message: isUnexpectedResolverError
+        ? 'Internal server error'
+        : error.message,
+      extensions,
+    },
+    error
+  );
   return new GraphQLError(formatted.message, {
     nodes: error.nodes,
     source: error.source,
@@ -116,9 +126,11 @@ export function useGraphqlErrors(): Plugin {
     },
     onExecutionResult({ result, setResult }) {
       if (!result) return;
-      setResult(isAsyncIterable(result)
-        ? mapAsyncIterator(result, formatResult)
-        : formatResult(result));
+      setResult(
+        isAsyncIterable(result)
+          ? mapAsyncIterator(result, formatResult)
+          : formatResult(result)
+      );
     },
   };
 }

@@ -6,7 +6,7 @@ const requestFrom = (ip: string, forwardedFor?: string): Request =>
   ({
     ip,
     headers: { 'x-forwarded-for': forwardedFor },
-  }) as unknown as Request;
+  } as unknown as Request);
 
 describe('GeocodingController', () => {
   afterEach(() => {
@@ -40,12 +40,7 @@ describe('GeocodingController', () => {
       Array.from({ length: 10 }, () => [{ lat: '-23.5', lon: '-46.6' }])
     );
     await expect(
-      controller.search(
-        'Paulista',
-        'São Paulo',
-        'SP',
-        requestFrom('192.0.2.2')
-      )
+      controller.search('Paulista', 'São Paulo', 'SP', requestFrom('192.0.2.2'))
     ).resolves.toEqual([{ lat: '-23.5', lon: '-46.6' }]);
     expect(get).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledWith(
@@ -252,19 +247,9 @@ describe('GeocodingController', () => {
       .mockRejectedValueOnce(new Error('timeout'))
       .mockResolvedValueOnce({ data: [] });
     const controller = new GeocodingController();
-    const first = controller.search(
-      'A',
-      'B',
-      'SP',
-      requestFrom('192.0.2.60')
-    );
+    const first = controller.search('A', 'B', 'SP', requestFrom('192.0.2.60'));
     await expect(first).rejects.toMatchObject({ status: 503 });
-    const retry = controller.search(
-      'A',
-      'B',
-      'SP',
-      requestFrom('192.0.2.61')
-    );
+    const retry = controller.search('A', 'B', 'SP', requestFrom('192.0.2.61'));
     await jest.advanceTimersByTimeAsync(1_000);
     await expect(retry).resolves.toEqual([]);
     expect(get).toHaveBeenCalledTimes(2);

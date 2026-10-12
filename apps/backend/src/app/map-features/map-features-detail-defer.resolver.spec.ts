@@ -7,7 +7,10 @@ import { MapFeatureDetailObject } from './graphql/map-features.graphql';
 
 it('loads IML data only when its fields are selected and shares the enrichment', async () => {
   const feature = { id: '018f0000-0000-7000-8000-000000000001' } as MapFeature;
-  const detail = { featureData: { records: [] }, imlRecords: [] } as unknown as MapFeatureDetailObject;
+  const detail = {
+    featureData: { records: [] },
+    imlRecords: [],
+  } as unknown as MapFeatureDetailObject;
   const queryService = {
     getFeatureById: jest.fn().mockResolvedValue(feature),
     getImlEnrichment: jest.fn().mockResolvedValue({
@@ -24,9 +27,11 @@ it('loads IML data only when its fields are selected and shares the enrichment',
 
   expect(await resolver.getFeatureById(feature.id)).toBe(detail);
   expect(queryService.getImlEnrichment).not.toHaveBeenCalled();
-  expect(await Promise.all([
-    resolver.imlRecords(detail),
-    resolver.imlUnavailable(detail),
-  ])).toEqual([[{ sourceId: 1 }], false]);
+  expect(
+    await Promise.all([
+      resolver.imlRecords(detail),
+      resolver.imlUnavailable(detail),
+    ])
+  ).toEqual([[{ sourceId: 1 }], false]);
   expect(queryService.getImlEnrichment).toHaveBeenCalledTimes(1);
 });

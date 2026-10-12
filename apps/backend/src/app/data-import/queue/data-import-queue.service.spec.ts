@@ -195,12 +195,10 @@ describe('automatic census queue initialization', () => {
     };
     const censusImportService = {
       configuredRelease: jest.fn().mockResolvedValue({ id: 'ibge-test' }),
-      ensureImported: jest
-        .fn()
-        .mockResolvedValue({
-          releaseId: 'ibge-test',
-          outcome: 'already-installed',
-        }),
+      ensureImported: jest.fn().mockResolvedValue({
+        releaseId: 'ibge-test',
+        outcome: 'already-installed',
+      }),
     };
     const mapFeaturesEtlService = { runIncrementalEtl: jest.fn() };
     const service = Object.assign(

@@ -36,7 +36,11 @@ could deliver the cheap metadata before the expensive count finishes:
 query MetadataWithDeferredTotals {
   mapFeaturesMetadata {
     datasetRevision
-    dateRange { earliest latest defaultAfter }
+    dateRange {
+      earliest
+      latest
+      defaultAfter
+    }
     ... @defer(label: "totals") {
       totalFeatures
     }

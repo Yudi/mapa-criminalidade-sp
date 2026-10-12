@@ -42,8 +42,14 @@ try {
     FROM pg_indexes
     WHERE schemaname = 'public' AND tablename = 'map_feature_tile_points'
   `);
-  assert(!tileDetailContract.occurrence_definition.includes('map_features detail'));
-  assert(tileDetailContract.occurrence_definition.includes('tile_point.vehicle_brands'));
+  assert(
+    !tileDetailContract.occurrence_definition.includes('map_features detail')
+  );
+  assert(
+    tileDetailContract.occurrence_definition.includes(
+      'tile_point.vehicle_brands'
+    )
+  );
   assert.equal(tileDetailContract.vehicle_indexes, 1);
   assert.equal(tileDetailContract.object_indexes, 1);
   assert.equal(tileDetailContract.phone_indexes, 1);
@@ -301,19 +307,28 @@ try {
   await db.query('BEGIN');
   try {
     // A derived canonical category can share a report with multiple real rubrics.
-    await db.query(`UPDATE map_features SET category='Flagrantes Lavrados',
+    await db.query(
+      `UPDATE map_features SET category='Flagrantes Lavrados',
       rubrica_for_styling='Furto',
       feature_data=jsonb_set(feature_data, '{all_rubricas}', '["Furto","Roubo"]'::jsonb)
-      WHERE id=$1::uuid`, [ids[0]]);
+      WHERE id=$1::uuid`,
+      [ids[0]]
+    );
     for (const [categories, expectedCategory, expectedRubric] of [
       [['Roubo'], 'Roubo', 'Roubo'],
       [['Furto'], 'Furto', 'Furto'],
       [['Flagrantes Lavrados'], 'Flagrantes Lavrados', 'Furto'],
       [undefined, 'Flagrantes Lavrados', 'Furto'],
     ]) {
-      for (const [zoom, mode] of [[10, 'auto'], [16, 'auto'], [10, 'markers']]) {
+      for (const [zoom, mode] of [
+        [10, 'auto'],
+        [16, 'auto'],
+        [10, 'markers'],
+      ]) {
         const features = await load(zoom, {
-          mode, categories, vehicleBrands: ['VW/Audi, especial'],
+          mode,
+          categories,
+          vehicleBrands: ['VW/Audi, especial'],
         });
         assert.equal(features.length, 1);
         assert.equal(features[0].get('feature_id'), ids[0]);

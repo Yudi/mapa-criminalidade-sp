@@ -61,7 +61,11 @@ function detailResponse(args: FeatureDetailStoryArgs) {
       return NEVER;
     case 'iml-loading':
       return of({
-        feature: { ...featureForArgs(args), imlRecords: [], imlUnavailable: false },
+        feature: {
+          ...featureForArgs(args),
+          imlRecords: [],
+          imlUnavailable: false,
+        },
         complete: false,
         imlError: false,
       }).pipe(concatWith(NEVER));
@@ -70,7 +74,11 @@ function detailResponse(args: FeatureDetailStoryArgs) {
     case 'error':
       return throwError(() => new Error('Falha fictícia'));
     default:
-      return of({ feature: featureForArgs(args), complete: true, imlError: false });
+      return of({
+        feature: featureForArgs(args),
+        complete: true,
+        imlError: false,
+      });
   }
 }
 

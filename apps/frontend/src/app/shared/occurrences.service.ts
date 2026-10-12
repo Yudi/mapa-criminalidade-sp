@@ -327,7 +327,9 @@ export class OccurrencesService {
       .pipe(
         map(({ data, complete, errors }): FeatureDetailProgress => {
           if (data.mapFeatureById === undefined) {
-            throw new Error('GraphQL response did not include occurrence details');
+            throw new Error(
+              'GraphQL response did not include occurrence details'
+            );
           }
           if (data.mapFeatureById === null && errors.length) {
             throw new Error(errors.map((error) => error.message).join('; '));
@@ -338,7 +340,7 @@ export class OccurrencesService {
                 ...data.mapFeatureById,
                 imlRecords: data.mapFeatureById.imlRecords ?? [],
                 imlUnavailable:
-                  data.mapFeatureById.imlUnavailable ?? (errors.length > 0),
+                  data.mapFeatureById.imlUnavailable ?? errors.length > 0,
               }
             ),
             complete,
@@ -433,5 +435,8 @@ const TEMPORAL_FIELDS = {
 } as const;
 
 const TEMPORAL_DEFAULT_FIELDS = [
-  'datasetRevision', 'total', 'monthly', 'categories',
+  'datasetRevision',
+  'total',
+  'monthly',
+  'categories',
 ] as const;

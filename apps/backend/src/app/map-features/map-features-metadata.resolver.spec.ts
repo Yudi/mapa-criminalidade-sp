@@ -9,10 +9,15 @@ import { resolve } from 'node:path';
 import { createGraphqlOptions } from '../shared/graphql-options';
 
 const startupQuerySource = readFileSync(
-  resolve(__dirname, '../../../../frontend/src/app/shared/map-features.graphql.ts'),
+  resolve(
+    __dirname,
+    '../../../../frontend/src/app/shared/map-features.graphql.ts'
+  ),
   'utf8'
 );
-const startupQuery = startupQuerySource.split('export const MAP_FEATURES_METADATA_QUERY = `')[1].split('`;')[0];
+const startupQuery = startupQuerySource
+  .split('export const MAP_FEATURES_METADATA_QUERY = `')[1]
+  .split('`;')[0];
 
 const schema = buildSchema(`
   type Category { name: String!, count: Int! }
@@ -40,11 +45,12 @@ describe('map metadata lazy aggregates', () => {
     {} as MapFeaturesMapperService,
     new ValidatorsService()
   );
-  const execute = (source: string) => graphql({
-    schema,
-    source,
-    rootValue: { mapFeaturesMetadata: () => resolver.getMetadata() },
-  });
+  const execute = (source: string) =>
+    graphql({
+      schema,
+      source,
+      rootValue: { mapFeaturesMetadata: () => resolver.getMetadata() },
+    });
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -61,7 +67,8 @@ describe('map metadata lazy aggregates', () => {
     const result = await execute(startupQuery);
     expect(result.errors).toBeUndefined();
     expect(result.data?.mapFeaturesMetadata).toMatchObject({
-      datasetRevision: '1', dateRange: { latest: '2026-09-13' },
+      datasetRevision: '1',
+      dateRange: { latest: '2026-09-13' },
     });
     expect(service.getCategoryPeriodStats).not.toHaveBeenCalled();
     expect(service.getCount).not.toHaveBeenCalled();
@@ -80,8 +87,11 @@ describe('map metadata lazy aggregates', () => {
     `);
     expect(result.errors).toBeUndefined();
     expect(result.data?.mapFeaturesMetadata).toMatchObject({
-      availableCategories: ['Furto'], availableRubricas: ['Furto'],
-      availablePeriods: ['À noite'], totalFeatures: 4, otherCount: 4,
+      availableCategories: ['Furto'],
+      availableRubricas: ['Furto'],
+      availablePeriods: ['À noite'],
+      totalFeatures: 4,
+      otherCount: 4,
       categoryStats: [{ name: 'Furto', count: 4 }],
     });
     expect(service.getCategoryPeriodStats).toHaveBeenCalledTimes(1);
@@ -93,17 +103,23 @@ describe('map metadata lazy aggregates', () => {
       service.getDatasetRevision.mockResolvedValue('2');
       return { categories: [], periods: [] };
     });
-    const result = await execute('{ mapFeaturesMetadata { categoryStats { name } } }');
+    const result = await execute(
+      '{ mapFeaturesMetadata { categoryStats { name } } }'
+    );
     expect(result.errors?.[0].message).toContain('Dataset changed');
   });
 
   it('delivers metadata before deferred aggregate scans finish', async () => {
     let finishCount!: (count: number) => void;
-    service.getCount.mockReturnValue(new Promise<number>((resolve) => {
-      finishCount = resolve;
-    }));
+    service.getCount.mockReturnValue(
+      new Promise<number>((resolve) => {
+        finishCount = resolve;
+      })
+    );
     const incrementalSchema = buildSchema(printSchema(schema));
-    const metadataField = incrementalSchema.getQueryType()?.getFields()['mapFeaturesMetadata'];
+    const metadataField = incrementalSchema.getQueryType()?.getFields()[
+      'mapFeaturesMetadata'
+    ];
     if (!metadataField) throw new Error('Missing metadata field');
     metadataField.resolve = () => resolver.getMetadata();
     const options = createGraphqlOptions(false);
@@ -116,14 +132,19 @@ describe('map metadata lazy aggregates', () => {
     });
     const response = await yoga.fetch('http://localhost/api/graphql', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'multipart/mixed' },
-      body: JSON.stringify({ query: `{
+      headers: {
+        'content-type': 'application/json',
+        accept: 'multipart/mixed',
+      },
+      body: JSON.stringify({
+        query: `{
         mapFeaturesMetadata {
           datasetRevision
           dateRange { latest }
           ... @defer(label: "totals") { totalFeatures }
         }
-      }` }),
+      }`,
+      }),
     });
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Missing response body');

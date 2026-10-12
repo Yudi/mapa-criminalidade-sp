@@ -28,8 +28,7 @@ export class CensusService {
   release() {
     return this.graphql
       .request<{ censusRelease: CensusRelease | null }>({
-        query:
-          'query CensusRelease { censusRelease { id year } }',
+        query: 'query CensusRelease { censusRelease { id year } }',
       })
       .pipe(map((data) => data.censusRelease));
   }

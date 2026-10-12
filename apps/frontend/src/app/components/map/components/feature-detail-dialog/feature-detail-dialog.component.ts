@@ -157,10 +157,13 @@ export class FeatureDetailDialogComponent implements OnInit {
         error: (err) => {
           console.error('Error loading feature:', err);
           if (this.feature()) {
-            this.feature.update((feature) => feature && {
-              ...feature,
-              imlUnavailable: true,
-            });
+            this.feature.update(
+              (feature) =>
+                feature && {
+                  ...feature,
+                  imlUnavailable: true,
+                }
+            );
           } else {
             this.error.set('Erro ao carregar dados da ocorrência');
           }

@@ -1,4 +1,7 @@
-import { CensusAreaDetail, CensusRelease } from '../../../../shared/graphql-projections';
+import {
+  CensusAreaDetail,
+  CensusRelease,
+} from '../../../../shared/graphql-projections';
 import {
   MatDialog,
   MatDialogModule,

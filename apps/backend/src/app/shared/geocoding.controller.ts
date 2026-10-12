@@ -177,7 +177,11 @@ export class GeocodingController {
     this.active = true;
     this.nextRequestAt = Date.now() + PROVIDER_INTERVAL_MS;
     try {
-      const value = await this.load(pending.street, pending.city, pending.state);
+      const value = await this.load(
+        pending.street,
+        pending.city,
+        pending.state
+      );
       this.cache.delete(pending.key);
       this.cache.set(pending.key, {
         expires: Date.now() + CACHE_TTL_MS,

@@ -76,9 +76,7 @@ export class MapFeaturesResolver {
     return this.loadMetadata();
   }
 
-  private async loadMetadata(
-    retried = false
-  ): Promise<MetadataResult> {
+  private async loadMetadata(retried = false): Promise<MetadataResult> {
     const datasetRevision = await this.queryService.getDatasetRevision();
     const dateRange = await this.queryService.getDateRange();
     if (datasetRevision !== (await this.queryService.getDatasetRevision())) {
@@ -92,13 +90,19 @@ export class MapFeaturesResolver {
     // aggregate fields, including aliases and fragments in legacy queries.
     const verifyRevision = async <T>(value: T): Promise<T> => {
       if (datasetRevision !== (await this.queryService.getDatasetRevision())) {
-        throw new Error('Dataset changed during metadata loading; retry the request');
+        throw new Error(
+          'Dataset changed during metadata loading; retry the request'
+        );
       }
       return value;
     };
-    let stats: ReturnType<MapFeaturesQueryService['getCategoryPeriodStats']> | undefined;
+    let stats:
+      | ReturnType<MapFeaturesQueryService['getCategoryPeriodStats']>
+      | undefined;
     const loadStats = () =>
-      (stats ??= this.queryService.getCategoryPeriodStats().then(verifyRevision));
+      (stats ??= this.queryService
+        .getCategoryPeriodStats()
+        .then(verifyRevision));
     let count: Promise<number> | undefined;
     const queryService = this.queryService;
 
@@ -109,13 +113,19 @@ export class MapFeaturesResolver {
       maxZoom: MAX_CRIME_TILE_ZOOM,
       layers: ['occurrences'],
       get availableCategories() {
-        return loadStats().then(({ categories }) => categories.map(({ name }) => name));
+        return loadStats().then(({ categories }) =>
+          categories.map(({ name }) => name)
+        );
       },
       get availableRubricas() {
-        return loadStats().then(({ categories }) => categories.map(({ name }) => name));
+        return loadStats().then(({ categories }) =>
+          categories.map(({ name }) => name)
+        );
       },
       get availablePeriods() {
-        return loadStats().then(({ periods }) => periods.map(({ name }) => name));
+        return loadStats().then(({ periods }) =>
+          periods.map(({ name }) => name)
+        );
       },
       get categoryStats() {
         return loadStats().then(({ categories }) => categories);

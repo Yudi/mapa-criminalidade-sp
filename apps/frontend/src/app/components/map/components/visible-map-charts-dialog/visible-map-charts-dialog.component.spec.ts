@@ -115,11 +115,14 @@ describe('chart drilldown', () => {
       weekdays: [1, 2],
       phoneBrandModels: ['Samsung - Galaxy'],
     });
-    expect(getChartsForBounds).toHaveBeenCalledWith({
-      ...filter,
-      weekdays: undefined,
-      phoneBrandModels: ['Samsung - Galaxy'],
-    }, 'weekdays');
+    expect(getChartsForBounds).toHaveBeenCalledWith(
+      {
+        ...filter,
+        weekdays: undefined,
+        phoneBrandModels: ['Samsung - Galaxy'],
+      },
+      'weekdays'
+    );
 
     component.selectBucket({ key: 'weekdays', value: 1 });
     expect(component.filter().weekdays).toEqual([2]);

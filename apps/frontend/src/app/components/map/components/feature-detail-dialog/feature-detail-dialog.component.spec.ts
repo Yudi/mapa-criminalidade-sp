@@ -63,7 +63,12 @@ describe('FeatureDetailDialogComponent', () => {
     component.ngOnInit();
     const feature = {
       dataOcorrencia: '2026-09-28',
-      featureData: { location: {}, occurrence: {}, all_rubricas: [], records: [] },
+      featureData: {
+        location: {},
+        occurrence: {},
+        all_rubricas: [],
+        records: [],
+      },
       imlRecords: [],
     } as unknown as FeatureDetailProgress['feature'];
     progress.next({ feature, complete: false, imlError: false });
