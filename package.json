@@ -6,7 +6,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prepare": "node .husky/install.mjs",
+    "prepare": "node -e \"if (require('node:fs').existsSync('.git')) import('./.husky/install.mjs')\"",
     "format:staged": "node node_modules/lint-staged/bin/lint-staged.js"
   },
   "private": true,
