@@ -15,7 +15,10 @@ import View from 'ol/View';
 import { Pixel } from 'ol/pixel';
 import { MapMarkersService } from '../../../shared/map-markers.service';
 import type { FeatureDetailDialogData } from '../components/feature-detail-dialog/feature-detail-dialog.component';
-import { getFeatureCoordinate } from '../utils/map-cluster.utils';
+import {
+  getClusterFeatureKey,
+  getFeatureCoordinate,
+} from '../utils/map-cluster.utils';
 import { preloadNextZoomTiles } from '../utils/map-cluster-preload.utils';
 import { MAP_INTERACTIVE_LAYER_PROPERTY } from '../utils/map-layer.constants';
 import {
@@ -28,7 +31,6 @@ const DEFAULT_COORDINATES: [number, number] = [-46.63394714, -23.5503953];
 const DEFAULT_ZOOM = 16;
 const MAX_ZOOM = 19;
 const HIT_TOLERANCE = 4;
-const SUPPRESSED_CLUSTER_MEMBER_PROPERTY = 'suppressedClusterMember';
 const CLUSTER_FEATURES_PROPERTY = 'features';
 const SERVER_CLUSTER_COUNT_PROPERTY = 'cluster_count';
 
@@ -43,7 +45,7 @@ export class VectorTileMapSetupService {
   private cursorAnimationFrame: number | null = null;
   private pendingCursorPixel: Pixel | null = null;
   private lastCursorState: boolean | null = null;
-  private suppressedClusterMembers: Feature[] = [];
+  private readonly suppressedClusterMemberKeys = new Set<string>();
 
   setupMap(document: Document): Map {
     const rasterLayer = new TileLayer({
@@ -121,7 +123,6 @@ export class VectorTileMapSetupService {
     });
 
     olMap.on('movestart', () => {
-      this.restoreSuppressedClusterMembers();
       this.clearSpreadLayer(olMap);
     });
 
@@ -162,7 +163,6 @@ export class VectorTileMapSetupService {
     this.pendingCursorPixel = null;
     this.lastCursorState = null;
     this.clearSpreadLayer(olMap);
-    this.restoreSuppressedClusterMembers();
   }
 
   private hasFeatureAtPixelSafely(olMap: Map, pixel: Pixel): boolean {
@@ -219,14 +219,8 @@ export class VectorTileMapSetupService {
       return;
     }
 
-    if (this.canZoomIn(olMap)) {
-      this.clearSpreadLayer(olMap);
-      this.zoomIntoCluster(olMap, clusterCoordinate);
-      return;
-    }
-
     this.clearSpreadLayer(olMap);
-    this.suppressClusterMembers(clusteredFeatures);
+    this.suppressClusterMembers(olMap, clusteredFeatures);
     this.spreadFeatures(
       olMap,
       clickableFeatures,
@@ -466,27 +460,42 @@ export class VectorTileMapSetupService {
     return getFeatureCoordinate(feature);
   }
 
-  private suppressClusterMembers(features: FeatureLike[]): void {
-    this.restoreSuppressedClusterMembers();
-
-    this.suppressedClusterMembers = features.filter(
-      (feature): feature is Feature => feature instanceof Feature
+  isClusterMemberSuppressed(feature: FeatureLike): boolean {
+    const coordinate = getFeatureCoordinate(feature);
+    return (
+      coordinate !== null &&
+      this.suppressedClusterMemberKeys.has(
+        getClusterFeatureKey(feature, coordinate)
+      )
     );
-
-    this.suppressedClusterMembers.forEach((feature) => {
-      feature.set(SUPPRESSED_CLUSTER_MEMBER_PROPERTY, true);
-      feature.changed();
-    });
   }
 
-  private restoreSuppressedClusterMembers(): void {
-    if (this.suppressedClusterMembers.length === 0) return;
-
-    this.suppressedClusterMembers.forEach((feature) => {
-      feature.set(SUPPRESSED_CLUSTER_MEMBER_PROPERTY, false);
-      feature.changed();
+  private suppressClusterMembers(olMap: Map, features: FeatureLike[]): void {
+    features.forEach((feature) => {
+      const coordinate = getFeatureCoordinate(feature);
+      if (coordinate) {
+        this.suppressedClusterMemberKeys.add(
+          getClusterFeatureKey(feature, coordinate)
+        );
+      }
     });
-    this.suppressedClusterMembers = [];
+    this.refreshClusterRendering(olMap);
+  }
+
+  private restoreSuppressedClusterMembers(olMap: Map): void {
+    if (this.suppressedClusterMemberKeys.size === 0) return;
+
+    this.suppressedClusterMemberKeys.clear();
+    this.refreshClusterRendering(olMap);
+  }
+
+  private refreshClusterRendering(olMap: Map): void {
+    olMap.getLayers().forEach((layer) => {
+      if (layer.get(MAP_INTERACTIVE_LAYER_PROPERTY) === true) {
+        layer.changed();
+      }
+    });
+    olMap.render();
   }
 
   private clearSpreadLayer(olMap: Map): void {
@@ -497,7 +506,7 @@ export class VectorTileMapSetupService {
 
     const spreadLayer = this.spreadLayer;
     this.spreadLayer = null;
-    this.restoreSuppressedClusterMembers();
+    this.restoreSuppressedClusterMembers(olMap);
 
     if (!spreadLayer) return;
 

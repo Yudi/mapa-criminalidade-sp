@@ -5,6 +5,9 @@ import {
 } from '@angular/common/http';
 import { NEVER, of, throwError, Subject } from 'rxjs';
 import TileState from 'ol/TileState';
+import Feature from 'ol/Feature';
+import RenderFeature from 'ol/render/Feature';
+import { SOURCE_TILE_ZOOM_PROPERTY } from './map-layer.constants';
 import {
   createVectorTileLoadFunction,
   TileCompleteness,
@@ -18,6 +21,7 @@ describe('createVectorTileLoadFunction', () => {
     const setState = vi.fn();
     const getFormat = vi.fn(() => ({ readFeatures: vi.fn(() => []) }));
     const tile = {
+      tileCoord: [16, 1, 2],
       setLoader,
       setFeatures,
       setState,
@@ -144,11 +148,7 @@ describe('createVectorTileLoadFunction', () => {
 
   it('exposes truncation metadata carried by MVT feature properties', async () => {
     const { tile, setLoader, getFormat } = createTile();
-    const feature = {
-      get: vi.fn((name: string) =>
-        name === 'tile_total' ? 50_001 : name === 'truncated' ? 1 : undefined
-      ),
-    };
+    const feature = new Feature({ tile_total: 50_001, truncated: 1 });
     getFormat.mockReturnValue({
       readFeatures: vi.fn(() => [feature]),
     } as never);
@@ -186,7 +186,7 @@ describe('createVectorTileLoadFunction', () => {
 
   it('uses the returned feature count when completeness metadata is absent', async () => {
     const { tile, setLoader, getFormat } = createTile();
-    const feature = { get: vi.fn(() => undefined) };
+    const feature = new Feature();
     getFormat.mockReturnValue({
       readFeatures: vi.fn(() => [feature]),
     } as never);
@@ -212,4 +212,43 @@ describe('createVectorTileLoadFunction', () => {
       { totalFeatures: 1, returnedFeatures: 1, truncated: false },
     ]);
   });
+
+  it.each([15, 16, 19])(
+    'records source zoom %i on decoded tile points',
+    async (zoom) => {
+      const { tile, setLoader, getFormat } = createTile();
+      tile.tileCoord[0] = zoom;
+      const features = [
+        new Feature({ server_singleton: 1 }),
+        new RenderFeature(
+          'Point',
+          [1, 2],
+          [],
+          2,
+          { server_singleton: 1 },
+          'point'
+        ),
+      ];
+      getFormat.mockReturnValue({
+        readFeatures: vi.fn(() => features),
+      } as never);
+      createVectorTileLoadFunction({
+        http: {
+          get: () =>
+            of(new HttpResponse({ status: 200, body: new ArrayBuffer(2) })),
+        } as never,
+        tileLayerVersion: 1,
+        cancellation$: new Subject<void>(),
+        onTimeout: vi.fn(),
+        shouldMarkTileError: () => true,
+      })(tile as never, '/tile');
+
+      await setLoader.mock.calls[0][0]([], 1, {} as never);
+
+      for (const feature of features) {
+        expect(feature.get(SOURCE_TILE_ZOOM_PROPERTY)).toBe(zoom);
+        expect(feature.get('server_singleton')).toBe(1);
+      }
+    }
+  );
 });

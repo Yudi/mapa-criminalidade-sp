@@ -2,10 +2,7 @@ import Feature, { FeatureLike } from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import RenderFeature from 'ol/render/Feature';
 
-import {
-  SERVER_CLUSTER_PROPERTY,
-  SERVER_SINGLETON_PROPERTY,
-} from './map-style.utils';
+import { isClientClusterPoint } from './map-style.utils';
 
 export function shouldIncludeClientClusterFeature(
   feature: FeatureLike,
@@ -14,10 +11,7 @@ export function shouldIncludeClientClusterFeature(
   const category = feature.get('category') as string | undefined;
 
   return Boolean(
-    category &&
-      activeCategories.has(category) &&
-      Number(feature.get(SERVER_CLUSTER_PROPERTY) ?? 0) !== 1 &&
-      Number(feature.get(SERVER_SINGLETON_PROPERTY) ?? 0) !== 1
+    category && activeCategories.has(category) && isClientClusterPoint(feature)
   );
 }
 

@@ -1,9 +1,10 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
-import { FeatureLike } from 'ol/Feature';
+import Feature, { FeatureLike } from 'ol/Feature';
 import type { LoadFunction } from 'ol/Tile';
 import TileState from 'ol/TileState';
 import type OlVectorTile from 'ol/VectorTile';
+import { SOURCE_TILE_ZOOM_PROPERTY } from './map-layer.constants';
 
 const TILE_STATUS_HEADER = 'X-Map-Tile-Status';
 const TILE_TOTAL_HEADER = 'X-Map-Tile-Total';
@@ -107,6 +108,17 @@ export function createVectorTileLoadFunction({
           extent,
           featureProjection: projection,
         });
+        // The singleton flag is also present on raw high-zoom points. Keep
+        // their source zoom so clustering can distinguish them from low-zoom
+        // server singletons, including while older tiles remain on screen.
+        const sourceZoom = vectorTile.tileCoord[0];
+        for (const feature of features) {
+          if (feature instanceof Feature) {
+            feature.set(SOURCE_TILE_ZOOM_PROPERTY, sourceZoom, true);
+          } else {
+            feature.getProperties()[SOURCE_TILE_ZOOM_PROPERTY] = sourceZoom;
+          }
+        }
         vectorTile.setFeatures(features);
         onCompleteness?.(
           tileLayerVersion,

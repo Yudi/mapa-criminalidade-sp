@@ -5,16 +5,29 @@ import CircleStyle from 'ol/style/Circle';
 import Fill from 'ol/style/Fill';
 import Stroke from 'ol/style/Stroke';
 import Text from 'ol/style/Text';
+import {
+  CLIENT_CLUSTER_MIN_ZOOM,
+  SOURCE_TILE_ZOOM_PROPERTY,
+} from './map-layer.constants';
 
-export const SUPPRESSED_CLUSTER_MEMBER_PROPERTY = 'suppressedClusterMember';
 export const SERVER_CLUSTER_PROPERTY = 'server_cluster';
 export const SERVER_SINGLETON_PROPERTY = 'server_singleton';
+
+export function isClientClusterPoint(feature: FeatureLike): boolean {
+  return (
+    Number(feature.get(SERVER_CLUSTER_PROPERTY) ?? 0) !== 1 &&
+    (Number(feature.get(SERVER_SINGLETON_PROPERTY) ?? 0) !== 1 ||
+      Number(feature.get(SOURCE_TILE_ZOOM_PROPERTY) ?? 0) >=
+        CLIENT_CLUSTER_MIN_ZOOM)
+  );
+}
 
 type MarkerChooser = (category: string) => string;
 
 export function createOccurrenceStyleFunction(
   activeCategories: string[],
-  markerChooser: MarkerChooser
+  markerChooser: MarkerChooser,
+  clusterRawPoints = false
 ): (feature: FeatureLike) => Style | Style[] {
   const iconStyle = createIconStyleFunction(activeCategories, markerChooser);
   const clusterStyleCache = new Map<number, Style>();
@@ -35,6 +48,10 @@ export function createOccurrenceStyleFunction(
       return hiddenStyle;
     }
 
+    if (clusterRawPoints && isClientClusterPoint(feature)) {
+      return hiddenStyle;
+    }
+
     if (Number(feature.get(SERVER_SINGLETON_PROPERTY) ?? 0) !== 1) {
       return hiddenStyle;
     }
@@ -45,7 +62,8 @@ export function createOccurrenceStyleFunction(
 
 export function createClusterStyleFunction(
   activeCategories: string[],
-  markerChooser: MarkerChooser
+  markerChooser: MarkerChooser,
+  isMemberSuppressed: (feature: FeatureLike) => boolean = () => false
 ): (feature: FeatureLike) => Style | Style[] {
   const singleFeatureStyle = createIconStyleFunction(
     activeCategories,
@@ -64,8 +82,7 @@ export function createClusterStyleFunction(
     }
 
     const visibleFeatures = clusteredFeatures.filter(
-      (clusteredFeature) =>
-        clusteredFeature.get(SUPPRESSED_CLUSTER_MEMBER_PROPERTY) !== true
+      (clusteredFeature) => !isMemberSuppressed(clusteredFeature)
     );
 
     if (visibleFeatures.length === 0) {

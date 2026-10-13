@@ -3,6 +3,13 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
+import Style from 'ol/style/Style';
+import { createClientClusterFeature } from '../utils/map-cluster.utils';
+import { createClusterStyleFunction } from '../utils/map-style.utils';
+import {
+  MAP_INTERACTIVE_LAYER_PROPERTY,
+  SOURCE_TILE_ZOOM_PROPERTY,
+} from '../utils/map-layer.constants';
 
 import { VectorTileMapSetupService } from './vector-tile-map-setup.service';
 
@@ -59,6 +66,83 @@ describe('VectorTileMapSetupService', () => {
     expect(olMap.renderSync).not.toHaveBeenCalled();
     expect(testableService.spreadLayer).toBeNull();
   });
+
+  it.each([16, 19])(
+    'expands a cluster at zoom %i and restores it on collapse',
+    async (zoom) => {
+      const members = ['first', 'second'].map(
+        (featureId) =>
+          new Feature({
+            geometry: new Point([100, 200]),
+            feature_id: featureId,
+            category: 'Roubo',
+            server_singleton: 1,
+            [SOURCE_TILE_ZOOM_PROPERTY]: zoom,
+          })
+      );
+      const cluster = new Feature({
+        geometry: new Point([100, 200]),
+        features: members,
+      });
+      const clusterLayer = {
+        get: vi.fn((key: string) => key === MAP_INTERACTIVE_LAYER_PROPERTY),
+        changed: vi.fn(),
+      };
+      const olMap = {
+        getView: () => ({ getZoom: () => zoom, getMaxZoom: () => 19 }),
+        getLayers: () => [clusterLayer],
+        getPixelFromCoordinate: () => [100, 200],
+        render: vi.fn(),
+      };
+      const testableService = service as unknown as {
+        handleClusterFeatureClick(
+          olMap: unknown,
+          feature: Feature<Point>
+        ): Promise<void>;
+        spreadFeatures(
+          olMap: unknown,
+          features: Feature<Point>[],
+          pixel: number[],
+          clear: boolean
+        ): void;
+        clearSpreadLayer(olMap: unknown): void;
+      };
+      const spread = vi
+        .spyOn(testableService, 'spreadFeatures')
+        .mockImplementation(() => undefined);
+      const styleFunction = createClusterStyleFunction(
+        ['Roubo'],
+        () => '/marker.png',
+        (feature) => service.isClusterMemberSuppressed(feature)
+      );
+
+      expect((styleFunction(cluster) as Style).getText()?.getText()).toBe('2');
+      await testableService.handleClusterFeatureClick(olMap, cluster);
+      expect(spread).toHaveBeenCalledWith(olMap, members, [100, 200], false);
+      expect((styleFunction(cluster) as Style).getImage()).toBeNull();
+      expect(clusterLayer.changed).toHaveBeenCalledTimes(1);
+
+      // Tile refreshes replace the source members with new feature instances.
+      const refreshedCluster = new Feature({
+        features: members.map((member) =>
+          createClientClusterFeature(member, [100, 200])
+        ),
+      });
+      expect((styleFunction(refreshedCluster) as Style).getImage()).toBeNull();
+      const unrelatedFeature = new Feature({
+        geometry: new Point([100, 200]),
+        feature_id: 'unrelated',
+      });
+      expect(service.isClusterMemberSuppressed(unrelatedFeature)).toBe(false);
+
+      testableService.clearSpreadLayer(olMap);
+      expect(
+        (styleFunction(refreshedCluster) as Style).getText()?.getText()
+      ).toBe('2');
+      expect(clusterLayer.changed).toHaveBeenCalledTimes(2);
+      spread.mockRestore();
+    }
+  );
 
   it('zooms into server-generated clusters without copying their members', async () => {
     const animate = vi.fn();

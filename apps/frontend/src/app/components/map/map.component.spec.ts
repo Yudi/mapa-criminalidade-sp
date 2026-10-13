@@ -8,7 +8,10 @@ import OlMap from 'ol/Map';
 import View from 'ol/View';
 import VectorTileLayer from 'ol/layer/VectorTile';
 import Heatmap from 'ol/layer/Heatmap';
-import { MAP_INTERACTIVE_LAYER_PROPERTY } from './utils/map-layer.constants';
+import {
+  MAP_INTERACTIVE_LAYER_PROPERTY,
+  SOURCE_TILE_ZOOM_PROPERTY,
+} from './utils/map-layer.constants';
 import VectorSource from 'ol/source/Vector';
 import CircleStyle from 'ol/style/Circle';
 import Icon from 'ol/style/Icon';
@@ -41,6 +44,7 @@ describe('MapComponent', () => {
           useValue: {
             setupMap: vi.fn(() => null),
             disposeMapState: vi.fn(),
+            isClusterMemberSuppressed: vi.fn(() => false),
           },
         },
       ],
@@ -225,7 +229,51 @@ describe('MapComponent', () => {
     ).toBe('2');
   });
 
-  it('copies only high-zoom raw points into the client cluster source', () => {
+  it.each([16, 19])(
+    'renders raw singleton points from zoom %i as numbered blue clusters',
+    (zoom) => {
+      const members = ['first', 'second'].map(
+        (featureId) =>
+          new Feature({
+            geometry: new Point([1, 2]),
+            feature_id: featureId,
+            category: 'Roubo',
+            server_singleton: 1,
+            [SOURCE_TILE_ZOOM_PROPERTY]: zoom,
+          })
+      );
+      const markerChooser = () => '/marker.png';
+      const tileStyle = createOccurrenceStyleFunction(
+        ['Roubo'],
+        markerChooser,
+        true
+      );
+      const markerStyle = createOccurrenceStyleFunction(
+        ['Roubo'],
+        markerChooser
+      );
+      const clusterStyle = createClusterStyleFunction(
+        ['Roubo'],
+        markerChooser
+      )(new Feature({ features: members })) as Style;
+      const lowZoomStyle = createOccurrenceStyleFunction(
+        ['Roubo'],
+        markerChooser
+      )(new Feature({ server_cluster: 1, cluster_count: 2 })) as Style;
+
+      for (const member of members) {
+        expect((tileStyle(member) as Style).getImage()).toBeNull();
+        expect((markerStyle(member) as Style).getImage()).toBeInstanceOf(Icon);
+      }
+      expect(clusterStyle.getText()?.getText()).toBe('2');
+      expect(clusterStyle.getImage()).toBeInstanceOf(CircleStyle);
+      expect(
+        (clusterStyle.getImage() as CircleStyle).getFill()?.getColor()
+      ).toBe((lowZoomStyle.getImage() as CircleStyle).getFill()?.getColor());
+    }
+  );
+
+  it('clusters high-zoom server singletons while keeping low-zoom singletons in the tile layer', () => {
     const source = new VectorSource<Feature<Point>>();
     const rawFeature = new Feature({
       geometry: new Point([1, 2]),
@@ -234,12 +282,15 @@ describe('MapComponent', () => {
       feature_id: 'feature-1',
       num_bo: '123',
       ano_bo: 2024,
+      server_singleton: 1,
+      [SOURCE_TILE_ZOOM_PROPERTY]: 19,
     });
     const serverSingleton = new Feature({
       geometry: new Point([3, 4]),
       category: 'Roubo',
       feature_id: 'feature-2',
       server_singleton: 1,
+      [SOURCE_TILE_ZOOM_PROPERTY]: 15,
     });
     const testableComponent = component as unknown as {
       clusterFeatureSource: VectorSource<Feature<Point>>;
@@ -264,6 +315,13 @@ describe('MapComponent', () => {
     );
     expect(addFeaturesSpy).toHaveBeenCalledTimes(1);
     expect(addFeatureSpy).not.toHaveBeenCalled();
+    const style = createOccurrenceStyleFunction(
+      ['Roubo'],
+      () => '/marker.png',
+      true
+    );
+    expect((style(rawFeature) as Style).getImage()).toBeNull();
+    expect((style(serverSingleton) as Style).getImage()).toBeInstanceOf(Icon);
   });
 
   it('debounces consecutive tile-layer refreshes', () => {

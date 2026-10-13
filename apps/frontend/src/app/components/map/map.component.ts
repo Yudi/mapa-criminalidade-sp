@@ -75,7 +75,10 @@ import {
   ExtendedTileFilterParams,
 } from '../../shared/vector-tile.service';
 import { VectorTileMapSetupService } from './services/vector-tile-map-setup.service';
-import { MAP_INTERACTIVE_LAYER_PROPERTY } from './utils/map-layer.constants';
+import {
+  CLIENT_CLUSTER_MIN_ZOOM,
+  MAP_INTERACTIVE_LAYER_PROPERTY,
+} from './utils/map-layer.constants';
 import { DateService } from '../../shared/date.service';
 import {
   MAX_CRIME_TILE_ZOOM,
@@ -99,7 +102,6 @@ import {
 const DEFAULT_ZOOM = 16;
 const MAP_MAX_ZOOM = 19;
 const LAYER_MAX_ZOOM = MAP_MAX_ZOOM + 1;
-const CLIENT_CLUSTER_MIN_ZOOM = 16;
 // OpenLayers treats minZoom as exclusive. The tile SQL switches from server
 // clusters to raw points at z=16. The tiny adjustment keeps the layer eligible
 // at the exact integer boundary without requesting tiles below z=10.
@@ -617,8 +619,10 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
       ? new Style({})
       : density
       ? createDensityStyleFunction()
-      : createOccurrenceStyleFunction(this.activeCategories(), (category) =>
-          this.markersService.markerChooser(category)
+      : createOccurrenceStyleFunction(
+          this.activeCategories(),
+          (category) => this.markersService.markerChooser(category),
+          this.displayMode() === 'auto'
         );
 
     // Don't show layer if no categories are selected
@@ -820,8 +824,10 @@ export class MapComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const clusterLayer = new VectorLayer({
       source: clusterSource,
-      style: createClusterStyleFunction(activeCategories, (category) =>
-        this.markersService.markerChooser(category)
+      style: createClusterStyleFunction(
+        activeCategories,
+        (category) => this.markersService.markerChooser(category),
+        (feature) => this.mapSetupService.isClusterMemberSuppressed(feature)
       ),
       declutter: true,
       zIndex: 100,
