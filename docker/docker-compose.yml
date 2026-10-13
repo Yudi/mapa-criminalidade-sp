@@ -63,6 +63,12 @@ services:
       - 'traefik.http.routers.criminalidade-frontend-root.middlewares=criminalidade-frontend-redirect-root'
       - 'traefik.http.routers.criminalidade-frontend-root.tls=true'
       - 'traefik.http.routers.criminalidade-frontend-root.tls.certResolver=letsencrypt'
+      - 'traefik.http.routers.criminalidade-frontend-seo.rule=Host(`criminalidade.yudi.com.br`) && (Path(`/robots.txt`) || Path(`/sitemap.xml`))'
+      - 'traefik.http.routers.criminalidade-frontend-seo.priority=100'
+      - 'traefik.http.routers.criminalidade-frontend-seo.entrypoints=web, websecure'
+      - 'traefik.http.routers.criminalidade-frontend-seo.service=criminalidade-frontend-svc'
+      - 'traefik.http.routers.criminalidade-frontend-seo.tls=true'
+      - 'traefik.http.routers.criminalidade-frontend-seo.tls.certResolver=letsencrypt'
     depends_on:
       backend:
         condition: service_healthy

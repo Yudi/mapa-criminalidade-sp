@@ -107,7 +107,7 @@
                       >@if (row.percent !== null) {
                       {{ row.percent > 0 ? '+' : ''
                       }}{{ row.percent | number : '1.0-1' }}% } @else {
-                      <span aria-label="Sem base percentual">—</span> }</span
+                      <span aria-label="Sem base percentual">-</span> }</span
                     >
                   </td>
                 </tr>
@@ -211,7 +211,7 @@
                   <tr [class.active]="activeIndex() === i">
                     <th scope="row">{{ frame.label }}</th>
                     <td>
-                      {{ frame.count === null ? '—' : (frame.count | number) }}
+                      {{ frame.count === null ? '-' : (frame.count | number) }}
                     </td>
                     <td>
                       {{
@@ -247,7 +247,7 @@
     </p>
     <p>
       Uma ocorrência pode ter várias categorias. Percentual sem referência
-      aparece como —.
+      aparece como -.
     </p>
   </details>
 </section>

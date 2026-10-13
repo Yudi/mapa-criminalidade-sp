@@ -48,6 +48,11 @@
     aria-label="Filtros de pesquisa"
     [attr.aria-busy]="metadataLoading()"
   >
+    <p class="site-description">
+      Explore ocorrências de criminalidade no estado de São Paulo com dados da
+      <a href="https://www.ssp.sp.gov.br/estatistica/consultas">SSP-SP</a>.
+      Filtre por local, tipo de crime e período no mapa interativo.
+    </p>
     @if (metadataLoadError()) {
     <div class="metadata-status" role="alert">
       <span>Não foi possível carregar os dados do mapa.</span>

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /app/
+Disallow: /api/
+
+Sitemap: https://criminalidade.yudi.com.br/sitemap.xml

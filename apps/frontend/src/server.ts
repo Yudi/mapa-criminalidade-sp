@@ -18,6 +18,15 @@ const angularApp = new AngularNodeAppEngine({
   allowedHosts: ['criminalidade.yudi.com.br'],
 });
 
+// Crawlers request these at the domain root, outside the /app asset mount.
+app.get(['/robots.txt', '/app/robots.txt'], (_req, res) => {
+  res.sendFile(resolve(browserDistFolder, 'robots.txt'), { maxAge: '1h' });
+});
+
+app.get(['/sitemap.xml', '/app/sitemap.xml'], (_req, res) => {
+  res.sendFile(resolve(browserDistFolder, 'sitemap.xml'), { maxAge: '1h' });
+});
+
 app.get('/app/3rdpartylicenses.txt', (_req, res) => {
   res.sendFile(resolve(appDistFolder, '3rdpartylicenses.txt'));
 });
@@ -37,7 +46,18 @@ app.use(
 /**
  * Handle all other requests by rendering the Angular application.
  */
-app.use('/{*splat}', (req, res, next) => {
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path === '/app') {
+    res.redirect(308, `/app/${req.url.slice(req.path.length)}`);
+    return;
+  }
+
+  // The application has one page. Unknown URLs must not become soft 404s.
+  if (req.path !== '/app/') {
+    res.status(404).type('text/plain').send('Página não encontrada.');
+    return;
+  }
+
   angularApp
     .handle(req)
     .then((response) =>
