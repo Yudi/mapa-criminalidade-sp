@@ -16,6 +16,10 @@ import {
   getErrorStringProperty,
 } from '../../shared/error.utils';
 import {
+  IML_KNOWN_BO_PREDICATE,
+  modernBoExpression,
+} from '../../shared/bo-identity.utils';
+import {
   applyColumnTypeOverrides,
   buildRawSourceColumns,
   createTextTypeMap,
@@ -131,9 +135,21 @@ export class DatabaseService {
         ${quoteIdentifier('ANO_BO')},
         ${quoteIdentifier('DELEGACIA_REGISTRO_NORMALIZED')}
       )
-      WHERE ${quoteIdentifier('NUM_BO_NORMALIZED')} <> ''
-        AND ${quoteIdentifier('ANO_BO')} <> ''
-        AND ${quoteIdentifier('DELEGACIA_REGISTRO_NORMALIZED')} <> ''
+      WHERE ${IML_KNOWN_BO_PREDICATE}
+    `);
+
+    const modernBo = modernBoExpression('NUM_BO');
+    await this.prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS ${quoteIdentifier(
+        `idx_${tableName}_modern_bo_lookup`
+      )}
+      ON ${this.rawTable(tableName)} (
+        (${modernBo}),
+        ${quoteIdentifier('ANO_BO')},
+        ${quoteIdentifier('DELEGACIA_REGISTRO_NORMALIZED')}
+      )
+      WHERE ${IML_KNOWN_BO_PREDICATE}
+        AND ${modernBo} IS NOT NULL
     `);
   }
   async getImlImportedMonths(tableName: string): Promise<Set<number>> {

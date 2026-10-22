@@ -5,9 +5,32 @@ import {
   quoteIdentifier,
   quoteLiteral,
 } from '../../../prisma/sql.utils';
+import {
+  getModernBoNumber,
+  IML_KNOWN_BO_PREDICATE,
+  modernBoExpression,
+} from '../../../shared/bo-identity.utils';
 import { ImlRecord } from '../../types/map-features.types';
 import { parseSourceDate } from '../../utils/source-value.utils';
 import { normalizeImlLookupValue } from './map-features-query-sql';
+
+interface ImlQueryRow {
+  source_id: number;
+  source_table: string;
+  data_entrada_iml: string | null;
+  ano_bo: string | null;
+  num_bo: string | null;
+  delegacia_registro: string | null;
+  delegacia_registro_normalized: string;
+  numero_laudo: string | null;
+  ano_laudo: string | null;
+  idade_vitima: string | null;
+  tipo_idade: string | null;
+  conclusao: string | null;
+  declaracao_obito: string | null;
+  causa_mortis: string | null;
+  map_delegacias?: Array<string | null>;
+}
 
 export async function getImlRecordsByBo(
   prisma: PrismaService,
@@ -15,9 +38,15 @@ export async function getImlRecordsByBo(
   anoBo: number,
   delegacia: string | null
 ): Promise<ImlRecord[]> {
-  if (!delegacia) {
+  const normalizedBo = normalizeImlLookupValue(numBo);
+  const normalizedUnit = normalizeImlLookupValue(delegacia ?? '');
+  if (!normalizedBo || !normalizedUnit) {
     return [];
   }
+
+  // Numeric BOs remain unit-scoped even in later exports.
+  const modernBo = getModernBoNumber(numBo, anoBo);
+  const allowModernFallback = modernBo !== null;
 
   const tables = await prisma.$queryRaw<{ table_name: string }[]>(
     Prisma.sql`
@@ -36,6 +65,14 @@ export async function getImlRecordsByBo(
     return [];
   }
 
+  const rawBoExpression = modernBoExpression('NUM_BO');
+  const mapBoExpression = modernBoExpression('num_bo');
+  const boPredicate = allowModernFallback
+    ? `${rawBoExpression} = $1 AND ${rawBoExpression} IS NOT NULL`
+    : `${quoteIdentifier('NUM_BO_NORMALIZED')} = $1`;
+  const unitPredicate = allowModernFallback
+    ? ''
+    : `AND ${quoteIdentifier('DELEGACIA_REGISTRO_NORMALIZED')} = $3`;
   const selects = tableNames.map(
     (tableName) => `
       SELECT
@@ -45,6 +82,9 @@ export async function getImlRecordsByBo(
         ${quoteIdentifier('ANO_BO')} AS ano_bo,
         ${quoteIdentifier('NUM_BO')} AS num_bo,
         ${quoteIdentifier('DELEGACIA_REGISTRO')} AS delegacia_registro,
+        ${quoteIdentifier(
+          'DELEGACIA_REGISTRO_NORMALIZED'
+        )} AS delegacia_registro_normalized,
         ${quoteIdentifier('NUMERO_LAUDO')} AS numero_laudo,
         ${quoteIdentifier('ANO_LAUDO')} AS ano_laudo,
         ${quoteIdentifier('IDADE_VITIMA')} AS idade_vitima,
@@ -53,35 +93,37 @@ export async function getImlRecordsByBo(
         ${quoteIdentifier('DECLARACAO_OBITO')} AS declaracao_obito,
         ${quoteIdentifier('CAUSA_MORTIS')} AS causa_mortis
       FROM ${qualifiedTableName(tableName)}
-      WHERE ${quoteIdentifier('NUM_BO_NORMALIZED')} = $1
+      WHERE ${boPredicate}
         AND ${quoteIdentifier('ANO_BO')} = $2
-        AND ${quoteIdentifier('DELEGACIA_REGISTRO_NORMALIZED')} = $3
+        AND ${IML_KNOWN_BO_PREDICATE}
+        ${unitPredicate}
     `
   );
-  const rows = await prisma.$queryRawUnsafe<
-    Array<{
-      source_id: number;
-      source_table: string;
-      data_entrada_iml: string | null;
-      ano_bo: string | null;
-      num_bo: string | null;
-      delegacia_registro: string | null;
-      numero_laudo: string | null;
-      ano_laudo: string | null;
-      idade_vitima: string | null;
-      tipo_idade: string | null;
-      conclusao: string | null;
-      declaracao_obito: string | null;
-      causa_mortis: string | null;
-    }>
-  >(
-    `SELECT * FROM (${selects.join(' UNION ALL ')}) AS iml_records
+  // Check all map locations and editions with the canonical BO index. Read this
+  // in the same statement as the IML candidates so both guards share a snapshot.
+  const mapUnitsProjection = allowModernFallback
+    ? `,
+      ARRAY(
+        SELECT DISTINCT delegacia
+        FROM public.map_features
+        WHERE ${mapBoExpression} = $1
+          AND ${mapBoExpression} IS NOT NULL
+          AND ano_bo = $2::integer
+      ) AS map_delegacias`
+    : '';
+  const parameters = [modernBo ?? normalizedBo, String(anoBo)];
+  if (!allowModernFallback) parameters.push(normalizedUnit);
+
+  const candidates = await prisma.$queryRawUnsafe<ImlQueryRow[]>(
+    `SELECT iml_records.*${mapUnitsProjection}
+    FROM (${selects.join(' UNION ALL ')}) AS iml_records
     ORDER BY source_table,
       source_id`,
-    normalizeImlLookupValue(numBo),
-    String(anoBo),
-    normalizeImlLookupValue(delegacia)
+    ...parameters
   );
+  const rows = allowModernFallback
+    ? selectModernImlRecords(candidates, normalizedUnit)
+    : candidates;
 
   // The raw date is dirty text. Never cast it inside an otherwise valid detail query.
   rows.sort(
@@ -103,6 +145,40 @@ export async function getImlRecordsByBo(
     declaracaoObito: row.declaracao_obito,
     causaMortis: row.causa_mortis,
   }));
+}
+
+function selectModernImlRecords(
+  candidates: ImlQueryRow[],
+  normalizedUnit: string
+): ImlQueryRow[] {
+  const exactMatches = candidates.filter(
+    (row) => row.delegacia_registro_normalized === normalizedUnit
+  );
+  if (exactMatches.length > 0) return exactMatches;
+  if (candidates.length === 0) return [];
+
+  const imlUnits = new Set(
+    candidates.map((row) =>
+      normalizeImlLookupValue(row.delegacia_registro_normalized)
+    )
+  );
+  const mapUnits = new Set(
+    (candidates[0].map_delegacias ?? []).map((unit) =>
+      normalizeImlLookupValue(unit ?? '')
+    )
+  );
+
+  // One BO may have several victims, reports or locations. Require one known
+  // unit on each side, rather than one row, and verify the requested map unit.
+  if (
+    imlUnits.size !== 1 ||
+    imlUnits.has('') ||
+    mapUnits.size !== 1 ||
+    !mapUnits.has(normalizedUnit)
+  ) {
+    return [];
+  }
+  return candidates;
 }
 
 function imlDateOrder(value: string | null): number {
